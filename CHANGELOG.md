@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added versioned imported-code allocation with shared pool eligibility, private code selection, and reviewed purchase and stock flows.
+
 - Added a versioned conditional ticket strategy for pity and duplicate rules, with reviewed purchase and stock flows, private eligibility snapshots, and compatible Node provider endpoints.
 
 - Added weighted-deck allocation for external pack payments, with asynchronous fulfillment, durable payment recovery, shared allocation retry protection, reserved refund capacity, and an external endpoint in the Node provider example.

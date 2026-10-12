@@ -45,7 +45,7 @@ export function projection(collection, key, value) {
   // Only queried domain entities contribute plaintext operational indexes. Identity,
   // arbitrary extension records and private metadata remain inside their payloads.
   const row = ['copies','packs','codes','externalPurchases','notifications','_codeStock','_raffleDue'].includes(collection) && value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const name = collection === 'copies' ? row.definition?.name ?? '' : '';
+  const name = collection === 'copies' ? row.definition?.name ?? '' : collection==='_codeStock'&&Number.isSafeInteger(row.importOrdinal)?String(row.importOrdinal).padStart(16,'0'):'';
   return {
     key, ownerId: (collection==='notifications'?row.userId:row.ownerId) ?? null, holderId: row.holderId ?? null,
     state: row.state ?? null,
@@ -88,6 +88,7 @@ export function memoryQueries(state) {
   };
   return {
     get,
+    importedCodePrefix(poolId,limit,at){return importedCodePrefix(state,poolId,limit,at);},
     ownedCardPresence(ownerId,cardIds){
       const ids=ownedCardIds(ownerId,cardIds),wanted=new Set(ids),present=new Set();for(const row of Object.values(state.copies??{}))if(row.ownerId===ownerId&&['owned','sealed'].includes(row.state)&&wanted.has(row.cardId))present.add(row.cardId);return ids.map(cardId=>({cardId,owned:present.has(cardId)}));
     },
@@ -136,3 +137,7 @@ export function memoryQueries(state) {
 }
 
 export function ownedCardIds(ownerId,cardIds){check(typeof ownerId==='string'&&ownerId.length<=2048&&Array.isArray(cardIds)&&cardIds.length<=2000&&cardIds.every(id=>typeof id==='string'&&id.length<=2048),'INVALID_INPUT','Invalid owned card query');return [...new Set(cardIds)];}
+
+export function importedCodeBounds(poolId,limit,at){check(typeof poolId==='string'&&poolId.length<=100&&Number.isSafeInteger(limit)&&limit>=1&&limit<=2000&&typeof at==='string'&&Number.isFinite(Date.parse(at)),'ALLOCATION_LIMIT','Invalid imported code scope',502);}
+export function compareImportedCodes(a,b){return (a.row.expiresAt===null?Infinity:Date.parse(a.row.expiresAt))-(b.row.expiresAt===null?Infinity:Date.parse(b.row.expiresAt))||a.ordinal-b.ordinal||(a.row.id<b.row.id?-1:a.row.id>b.row.id?1:0);}
+export function importedCodePrefix(state,poolId,limit,at){importedCodeBounds(poolId,limit,at);check(state._codeImportOrderReady===true,'RECORD_MIGRATION_REQUIRED','Prepare imported code ordering',503);return Object.values(state.codes??{}).map(row=>({row,ordinal:state._codeImportOrder[row.id]})).filter(e=>e.row.poolId===poolId&&e.row.status==='available'&&(e.row.expiresAt===null||Date.parse(e.row.expiresAt)>Date.parse(at))).sort(compareImportedCodes).slice(0,limit).map(e=>structuredClone(e));}

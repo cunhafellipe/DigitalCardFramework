@@ -3,9 +3,9 @@
 // Plans are deterministic and read-only. The framework owns inventory and settlement.
 import {timingSafeEqual} from 'node:crypto';
 import {createServer} from 'node:http';
-import {allocationStrategyProtocol,allocationStrategyV2Protocol,validateAllocationStrategyRequest,validateAllocationStrategyResponse,validateAllocationStrategyV2Request,validateAllocationStrategyV2Response} from '../../src/allocation-strategy-contracts.js';
-import {stockAllocationStrategyProtocol,stockAllocationStrategyV2Protocol,validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse,validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response} from '../../src/stock-allocation-strategy-contracts.js';
-import {externalAllocationStrategyProtocol,externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse,validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response} from '../../src/external-allocation-strategy-contracts.js';
+import {allocationStrategyProtocol,allocationStrategyV2Protocol,allocationStrategyV3Protocol,validateAllocationStrategyRequest,validateAllocationStrategyResponse,validateAllocationStrategyV2Request,validateAllocationStrategyV2Response,validateAllocationStrategyV3Request,validateAllocationStrategyV3Response} from '../../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyProtocol,stockAllocationStrategyV2Protocol,stockAllocationStrategyV3Protocol,validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse,validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response,validateStockAllocationStrategyV3Request,validateStockAllocationStrategyV3Response} from '../../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyProtocol,externalAllocationStrategyV2Protocol,externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse,validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response,validateExternalAllocationStrategyV3Request,validateExternalAllocationStrategyV3Response} from '../../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../../src/allocation-planner.js';
 
 const token=process.env.ALLOCATION_PROVIDER_TOKEN,providerId=process.env.ALLOCATION_PROVIDER_ID??'example.allocation';
@@ -15,9 +15,9 @@ const port=process.argv[2]??'0';
 if(process.argv.length>3||!/^\d+(?![\s\S])/.test(port)||!Number.isInteger(Number(port))||Number(port)>65535)throw Error('Invalid loopback port');
 const credential=Buffer.from('Bearer '+token),maxBody=1048576,maxResponse=262144;
 const routes=new Map([
-  ['/allocate-packs',new Map([[allocationStrategyProtocol,[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],[allocationStrategyV2Protocol,[validateAllocationStrategyV2Request,validateAllocationStrategyV2Response]]])],
-  ['/allocate-stock',new Map([[stockAllocationStrategyProtocol,[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],[stockAllocationStrategyV2Protocol,[validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response]]])],
-  ['/allocate-external',new Map([[externalAllocationStrategyProtocol,[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse]],[externalAllocationStrategyV2Protocol,[validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response]]])],
+  ['/allocate-packs',new Map([[allocationStrategyProtocol,[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],[allocationStrategyV2Protocol,[validateAllocationStrategyV2Request,validateAllocationStrategyV2Response]],[allocationStrategyV3Protocol,[validateAllocationStrategyV3Request,validateAllocationStrategyV3Response]]])],
+  ['/allocate-stock',new Map([[stockAllocationStrategyProtocol,[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],[stockAllocationStrategyV2Protocol,[validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response]],[stockAllocationStrategyV3Protocol,[validateStockAllocationStrategyV3Request,validateStockAllocationStrategyV3Response]]])],
+  ['/allocate-external',new Map([[externalAllocationStrategyProtocol,[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse]],[externalAllocationStrategyV2Protocol,[validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response]],[externalAllocationStrategyV3Protocol,[validateExternalAllocationStrategyV3Request,validateExternalAllocationStrategyV3Response]]])],
 ]);
 function decode(raw){
   const text=new TextDecoder('utf-8',{fatal:true}).decode(raw);let at=0,nodes=0;

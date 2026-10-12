@@ -1,8 +1,8 @@
-import {ownedCardIds} from './storage-query.js';
+import {ownedCardIds,importedCodeBounds} from './storage-query.js';
 import {check} from './catalog.js';
 import {projection, queryOptions} from './storage-query.js';
 
-export const STORAGE_SCHEMA = 7;
+export const STORAGE_SCHEMA = 8;
 export const schemaSqlV2 = `
 CREATE TABLE framework_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL,codec_check TEXT NOT NULL) STRICT;
 CREATE TABLE framework_fields(name TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('object','array','scalar')),payload TEXT) STRICT;
@@ -48,7 +48,9 @@ CREATE INDEX framework_expiration_due ON framework_expiration_work(collection,du
 `;
 export const schemaSqlV6 = schemaSqlV5 + expirationSchemaSql;
 export const ownedCardSchemaSql = 'CREATE INDEX framework_owner_card_state ON framework_entities(collection,owner_id,card_id,state);';
-export const schemaSql = schemaSqlV6 + ownedCardSchemaSql;
+export const schemaSqlV7 = schemaSqlV6 + ownedCardSchemaSql;
+export const importedCodeSchemaSql = "CREATE INDEX framework_code_prefix_expiry ON framework_entities(collection,pool_id,status,created_at,name_sort,entity_key,variant_id); CREATE UNIQUE INDEX framework_code_order_unique ON framework_entities(name_sort) WHERE collection='_codeStock' AND name_sort!='';";
+export const schemaSql = schemaSqlV7 + importedCodeSchemaSql;
 
 const fieldName = value => {
   check(typeof value === 'string' && value.length <= 200 && !['__proto__','constructor','prototype'].includes(value), 'INVALID_STATE', 'Invalid state field', 500);
@@ -216,6 +218,7 @@ export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {
   };
   const count=(collection,column,id,extra='')=>db.prepare(`SELECT COUNT(*) AS count FROM framework_entities WHERE collection=? AND ${column}=?${extra}`).get(collection,id).count;
   return {get,value,
+    importedCodePrefix(poolId,limit,at){check(value('_codeImportOrderReady')===true,'RECORD_MIGRATION_REQUIRED','Prepare imported code ordering',503);return sqliteImportedCodeRows(db,poolId,limit,at).map(item=>{const row=get('codes',item.codeId);verifyCodeProjection(row,item,at);check(get('_codeImportOrder',row.id)===item.ordinal,'CODE_INTEGRITY','Imported code ordering cannot be verified',500);return {row,ordinal:item.ordinal};});},
     ownedCardPresence(ownerId,cardIds){const ids=ownedCardIds(ownerId,cardIds),counts=sqliteOwnedCardCounts(db,ownerId,ids);return ids.map(cardId=>({cardId,owned:(counts.get(cardId)??0)>0}));},
     availableCodeStock(poolId,limit,at){
       check(typeof poolId==='string'&&Number.isSafeInteger(limit)&&limit>=1&&limit<=1000&&Number.isFinite(Date.parse(at)),'RECORD_PATH_UNAVAILABLE','Code stock scope requires bounded allocation',409);
@@ -257,3 +260,11 @@ export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {
 }
 
 export function sqliteOwnedCardCounts(db,ownerId,ids){check(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='framework_owner_card_state'").get(),'RECORD_MIGRATION_REQUIRED','Owned card queries require writable storage migration',503);const counts=new Map();for(let start=0;start<ids.length;start+=500){const chunk=ids.slice(start,start+500);for(const row of db.prepare("SELECT card_id AS cardId,COUNT(*) AS n FROM framework_entities INDEXED BY framework_owner_card_state WHERE collection='copies' AND owner_id=? AND state IN ('owned','sealed') AND card_id IN ("+chunk.map(()=>'?').join(',')+") GROUP BY card_id").all(ownerId,...chunk))counts.set(row.cardId,row.n);}return counts;}
+
+export function sqliteImportedCodeRows(db,poolId,limit,at){
+  importedCodeBounds(poolId,limit,at);check(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='framework_code_prefix_expiry'").get(),'RECORD_MIGRATION_REQUIRED','Imported code queries require writable storage migration',503);
+  const select="SELECT variant_id AS codeId,name_sort AS importOrder,created_at AS expiry,pool_id AS poolId FROM framework_entities INDEXED BY framework_code_prefix_expiry WHERE collection='_codeStock' AND pool_id=? AND status='available' AND ";
+  const future=db.prepare(select+"created_at>? ORDER BY created_at,name_sort,entity_key LIMIT ?").all(poolId,new Date(at).toISOString(),limit);
+  if(future.length<limit)future.push(...db.prepare(select+"created_at='' ORDER BY name_sort,entity_key LIMIT ?").all(poolId,limit-future.length));return future.map(e=>({...e,ordinal:Number(e.importOrder)}));
+}
+export function verifyCodeProjection(row,item,at){check(row&&row.id===item.codeId&&row.poolId===item.poolId&&row.status==='available'&&(row.expiresAt===null?'':new Date(row.expiresAt).toISOString())===item.expiry&&(row.expiresAt===null||Date.parse(row.expiresAt)>Date.parse(at)),'CODE_INTEGRITY','Imported code stock cannot be verified',500);}

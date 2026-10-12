@@ -66,7 +66,7 @@ An exception or timeout is never permission to refund. The framework transaction
 
 ## Use a remote allocation strategy
 
-For a product declaring `weighted-deck@1`, preserve the `allocationDigest` returned by the ordinary beneficiary quote. Configure `remoteExternalAllocation` with algorithm `weighted-deck@1`, scope `external-fulfillment`, and the provider ID, URL and credential. The Node allocation provider example serves this protocol at `/allocate-external`; see the [external allocation schema](external-allocation-strategy.schema.json).
+For a product declaring an allocation strategy, preserve the `allocationDigest` returned by the ordinary beneficiary quote. Configure `remoteExternalAllocation` with the matching algorithm, scope `external-fulfillment`, and the provider ID, URL and credential. The Node allocation provider example serves versioned protocols at `/allocate-external`. Version 1 provides ticket allocation; version 2 adds pity and duplicate rules; version 3 supports imported-code attachments. See the [strategy rules and protocol references](production.md#conditional-tickets-duplicate-rules-and-pity).
 
 After the confirmed debit, use `await framework.commitExternalPurchaseAsync(provider,{preparationId,fingerprint,debitReceipt},{signal})`. The synchronous commit method does not start remote allocation. Preparation captures the terms and claims the beneficiary's shared product allocation attempt before payment. Wallet purchases, shop stock creation and other external transactions cannot bypass that active attempt by changing keys or providers.
 

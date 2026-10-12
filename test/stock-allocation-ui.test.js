@@ -27,7 +27,7 @@ function setup({version=1}={}){
   return {window,model,client,calls,get root(){return root;},setField,setPrincipal(value){principal=value;},setDigest(value){digest=value;},setAttempt(value){attempt=value;},async mount(){view=renderMarketplace(model,{client});root=view.node;document.body.append(root);await view.ready;setField('Stock source','mint-pack');setField('Stock item','common');setField('Listing title','Sealed stock');setField('Unit price','10');return view;},close(){view?.dispose();x.core.close();window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}};
 }
 
-for(const version of [1,2])test('strategy v'+version+' stock requires a quote review and sends the digest at listing level',async()=>{
+for(const version of [1,2,3])test('strategy v'+version+' stock requires a quote review and sends the digest at listing level',async()=>{
   const x=setup({version});try{await x.mount();assert(find(x.root,'Reserve stock and publish listing').disabled);assert.match(x.root.textContent,/stock batch without replacement/);click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,0);assert.deepEqual(x.calls.quotes,[{shopId,productId:'common',quantity:1}]);assert.match(x.root.textContent,/Review 1 sealed pack for First shop/);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,1);assert.equal(x.calls.listings[0].allocationDigest,'a'.repeat(64));assert.deepEqual(x.calls.listings[0].items,{kind:'mint-pack',productId:'common',quantity:1});assert.equal(x.calls.listings[0].title,'Sealed stock');assert.deepEqual(x.calls.listings[0].price,{currencyId:'credits',amount:10});
   }finally{x.close();}
 });
@@ -54,13 +54,18 @@ test('other-shop attempts are identified and explicit retry preserves the origin
   }finally{x.close();}
 });
 
-for(const version of [1,2])test('same-shop stale v'+version+' acknowledgement does not create stock and requires a fresh review',async()=>{
+for(const version of [1,2,3])test('same-shop stale v'+version+' acknowledgement does not create stock and requires a fresh review',async()=>{
   const x=setup({version});try{let fail=true;const create=x.client.createListing;x.client.createListing=async input=>{if(fail){x.calls.listings.push(input);x.setAttempt({state:'stale',attemptId:'attempt',command:'createListing',attemptShopId:shopId,errorCode:'ALLOCATION_STALE'});throw new ApiError('ALLOCATION_STALE','Stock allocation changed',409);}return create(input);};await x.mount();click(x.root,'Review stock allocation');await settle();click(x.root,'Reserve stock and publish listing');await settle();click(x.root,'Check stock allocation attempt');await settle();assert.match(x.root.textContent,/stock allocation is stale/);click(x.root,'Acknowledge stock allocation attempt');await settle();assert.equal(x.calls.acknowledgements.length,1);assert.equal(x.calls.listings.length,1);assert.equal(x.calls.quotes.length,1);assert(find(x.root,'Reserve stock and publish listing').disabled);fail=false;x.setDigest('b'.repeat(64));click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,1);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,2);assert.equal(x.calls.listings[1].allocationDigest,'b'.repeat(64));
   }finally{x.close();}
 });
 
-for(const fallback of ['allow','reject'])test('v2 stock explains nonpersonalized within-pack protection with '+fallback+' fallback',async()=>{
-  const x=setup({version:2});try{const product=x.model.catalog.products.find(product=>product.id==='common');product.duplicatePolicy={scope:'inventory',fallback};product.pity={rarityId:'rare',after:5};await x.mount();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.match(x.root.textContent,/card identities within each pack/);assert.match(x.root.textContent,/special inserts bypass this check/);assert.match(x.root.textContent,fallback==='allow'?/fallback allows a repeat/:/Stock creation fails/);click(x.root,'Review stock allocation');await settle();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.equal(x.calls.listings.length,0);
+for(const version of [2,3])for(const fallback of ['allow','reject'])test('v'+version+' stock explains nonpersonalized within-pack protection with '+fallback+' fallback',async()=>{
+  const x=setup({version});try{const product=x.model.catalog.products.find(product=>product.id==='common');product.duplicatePolicy={scope:'inventory',fallback};product.pity={rarityId:'rare',after:5};await x.mount();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.match(x.root.textContent,/card identities within each pack/);assert.match(x.root.textContent,/special inserts bypass this check/);assert.match(x.root.textContent,fallback==='allow'?/fallback allows a repeat/:/Stock creation fails/);click(x.root,'Review stock allocation');await settle();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.equal(x.calls.listings.length,0);
+  }finally{x.close();}
+});
+
+test('v3 stock review explains imported-code supply without exposing code data',async()=>{
+  const x=setup({version:3});try{const product=x.model.catalog.products.find(product=>product.id==='common');product.metadata={poolId:'internal-pool',privatePrefix:'internal-prefix',codeMaterial:'sample-code-material'};await x.mount();assert.match(x.root.textContent,/Imported-code supply also limits eligible stock/);assert.match(x.root.textContent,/Shared code pools may change before stock is reserved/);click(x.root,'Review stock allocation');await settle();assert.match(x.root.textContent,/Availability depends on current imported-code supply/);for(const hidden of Object.values(product.metadata))assert(!x.root.textContent.includes(hidden));assert.equal(x.calls.listings.length,0);
   }finally{x.close();}
 });
 

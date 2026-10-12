@@ -1,7 +1,9 @@
+import {allocationCodeDemand} from './allocation-planner.js';
+import {initializeCodeImportOrder} from './record-accounting.js';
 import { randomUUID } from 'node:crypto';
 import { types } from 'node:util';
 import {recordContexts} from './record-context.js';
-import { check, text, integer, jsonObject } from './catalog.js';
+import { FrameworkError,check, text, integer, jsonObject } from './catalog.js';
 import { hasPermission } from './access.js';
 import { safeData, page } from './data.js';
 
@@ -82,12 +84,12 @@ export function codeStockAvailable(s, specs, at) {
   }
   return true;
 }
-export function allocateCodes(s, copy, specs, at, generate, emit = event) {
+export function allocateCodes(s, copy, specs, at, generate, emit = event,selectImported) {
   copy.codeIds = [];
   for (const spec of specs ?? []) {
     const pool = s.codePools?.[spec.poolId];
     check(pool?.enabled, 'CODE_POOL_UNAVAILABLE', 'Code pool is unavailable', 409);
-    const row = pool.generator ? generate(pool) : Object.values(s.codes ?? {}).find(row => row.poolId === pool.id && row.status === 'available' && !expired(row, at));
+    const row = pool.generator ? generate(pool) : selectImported?selectImported(pool,spec):Object.values(s.codes ?? {}).find(row => row.poolId === pool.id && row.status === 'available' && !expired(row, at));
     check(row, 'CODE_STOCK_EXHAUSTED', 'Code pool is exhausted', 409);
     Object.assign(row, { status: 'allocated', copyId: copy.id, holderId: copy.ownerId,
       attachmentId: spec.id, reveal: spec.reveal, transfer: spec.transfer, title: spec.title ?? pool.name,
@@ -99,7 +101,7 @@ export function allocateCodes(s, copy, specs, at, generate, emit = event) {
 
 /** Uses the same transaction store as pack allocation. No raw codes in projections or retry records. */
 export class CodeService {
-  #store; #vault; #clock; #maxCodes; #maxRequests; #generators; #emit;
+  #allocationCodes=new WeakMap();#store; #vault; #clock; #maxCodes; #maxRequests; #generators; #emit;
   constructor({ store, vault, clock, generators = {}, maxCodes = 50000, maxRequests = 200000, emit = event }) {
     integer(maxCodes, 'code capacity', 1, 1000000); integer(maxRequests, 'code request capacity', 1, 10000000);
     this.#store = store; this.#vault = vault; this.#clock = clock; this.#generators = generators;
@@ -183,9 +185,24 @@ export class CodeService {
       externalId:value.externalId??null,expiresAt:null,metadata:jsonObject(value.metadata??{}),status:'available',
       copyId:null,holderId:null,holderHistory:[],allocatedAt:null,revealedAt:null,revealedBy:null,
       reportedUsed:false,redeemedAt:null,revokedAt:null,history:[]};
-    row.secret=vault.seal(code,context(row));s.codes[row.id]=row;return row;
+    row.secret=vault.seal(code,context(row));s.codes[row.id]=row;if(!recordContexts.has(s))initializeCodeImportOrder(s);return row;
   }
-  allocate(s,copy,specs,at) { return allocateCodes(s,copy,specs,at,(pool)=>this.allocateGenerated(s,pool,copy,at),this.#emit); }
+  allocate(s,copy,specs,at) {const admission=this.#allocationCodes.get(s);return allocateCodes(s,copy,specs,at,(pool)=>this.allocateGenerated(s,pool,copy,at),this.#emit,admission?(pool,spec)=>{const queue=admission.queues.get(pool.id),codeId=queue?.shift(),row=s.codes?.[codeId];check(row&&row.poolId===pool.id&&row.status==='available'&&!expired(row,at),'ALLOCATION_STALE','Imported code allocation changed',409);admission.assignments.push({packIndex:copy.source.packIndex,slotId:copy.source.slotId,ordinal:copy.source.slotOrdinal,attachmentId:spec.id,codeId,copyId:copy.id});return row;}:undefined); }
+  prepareAllocation(s,product,quantity,at,select){
+    const variants=[...new Set(product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>s.catalog.variants.find(v=>v.id===id)),resources=variants.map(v=>({id:v.id,codeDemand:importedVariantDemand(v)})),demand=allocationCodeDemand(product,resources,quantity),pools=[],codePools=[],seenOrders=new Set();let validUntil=null;const cursor=s._codeImportOrder?.['@cursor']??0;
+    if(demand.size){const vault=this.#keys();check(!s.codeIndexCheck||s.codeIndexCheck===vault.fingerprint({purpose:'digital-card-code-index-v1'}),'CODE_KEYS','Code index key does not match stored inventory',503);}
+    for(const [poolId,maximum]of [...demand].sort(([a],[b])=>a<b?-1:a>b?1:0)){
+      const pool=s.codePools?.[poolId];check(pool,'CODE_POOL_UNAVAILABLE','Code pool is unavailable',409);check(!pool.generator,'ALLOCATION_UNSUPPORTED','Generated code allocation requires its strategy extension',409);
+      const entries=pool.enabled&&maximum?select(poolId,maximum,at):[],prefix=[];
+      for(const {row,ordinal}of entries){this.verifyImported(s,pool,row,at);check(Number.isSafeInteger(ordinal)&&ordinal>=0&&ordinal<cursor&&!seenOrders.has(ordinal)&&typeof row.id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\s\S])/.test(row.id),'CODE_INTEGRITY','Imported code stock cannot be verified',500);seenOrders.add(ordinal);prefix.push({codeId:row.id,ordinal,expiresAt:row.expiresAt});if(row.expiresAt!==null&&(validUntil===null||Date.parse(row.expiresAt)<Date.parse(validUntil)))validUntil=new Date(row.expiresAt).toISOString();}
+      const revision=s._codePoolRevisions?.[poolId]??0;check(Number.isSafeInteger(revision)&&revision>=0,'CODE_INTEGRITY','Imported code stock cannot be verified',500);pools.push({poolId,revision,prefix});codePools.push({id:poolId,available:entries.length});
+    }
+    return {codeSnapshot:{pools,validUntil},codePools,resources};
+  }
+  verifyImported(s,pool,row,at){const vault=this.#keys();try{check(row?.poolId===pool.id&&row.providerId===pool.providerId&&row.status==='available'&&(row.expiresAt===null||typeof row.expiresAt==='string'&&Number.isFinite(Date.parse(row.expiresAt))&&Date.parse(row.expiresAt)>Date.parse(at)),'CODE_INTEGRITY','Imported code stock cannot be verified',500);const value=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code:value}),'CODE_INTEGRITY','Imported code stock cannot be verified',500);}catch{throw new FrameworkError('CODE_INTEGRITY','Imported code stock cannot be verified',500);}}
+  admitAllocation(s,snapshot){if(!snapshot)return null;const admission={queues:new Map(snapshot.pools.map(p=>[p.poolId,p.prefix.map(e=>e.codeId)])),assignments:[]};this.#allocationCodes.set(s,admission);return admission;}
+  releaseAllocation(s){this.#allocationCodes.delete(s);}
+
   transfer(s,copy,from,to,tradeId,at) { return transferCodes(s,copy,from,to,tradeId,at,this.#emit); }
   registrationMaterial(actor,codeId) {
     operator(actor,'codes.manage'); identifier(codeId,'code ID');
@@ -216,6 +233,7 @@ export class CodeService {
       check(Object.values(s.codePools).every(pool=>pool.providerId!==clean.providerId||pool.normalization===clean.normalization),'POOL_IDENTITY','Pools for one provider must use the same normalization',409);
       check(!old || old.providerId === clean.providerId && old.normalization === clean.normalization && old.generator === clean.generator, 'POOL_IDENTITY', 'Provider, normalization and generator are immutable', 409);
       check(old || Object.keys(s.codePools).length < 1000, 'INSTALLATION_CAPACITY', 'Too many code pools', 507);
+      s._codePoolRevisions??={};const revision=s._codePoolRevisions[clean.id]??0;check(Number.isSafeInteger(revision)&&revision>=0&&revision<Number.MAX_SAFE_INTEGER,'CODE_POOL_STATE','Code pool revision cannot advance',409);s._codePoolRevisions[clean.id]=revision+1;s._codePoolRevisionsReady=true;
       s.codePools[clean.id] = { ...clean, createdAt: old?.createdAt ?? this.#clock() };
       this.#emit(s, 'code.pool-configured', { poolId: clean.id, actorId: actor.userId ?? null }, this.#clock());
       return s.codePools[clean.id];
@@ -249,6 +267,7 @@ export class CodeService {
           revealedAt: null, revealedBy: null, reportedUsed: false, redeemedAt: null, revokedAt: null, history: [] };
         row.secret = this.#vault.seal(value, context(row)); s.codes[row.id] = row; ids.push(row.id);
       }
+      initializeCodeImportOrder(s);
       this.#emit(s, 'code.batch-imported', { batchId, poolId, count: ids.length, actorId: actor.userId ?? null, metadata: jsonObject(metadata) }, at);
       return { batchId, poolId, count: ids.length, ids, importedAt: at };
     }));
@@ -358,3 +377,5 @@ export class CodeService {
     return this.#store.read(s=>{if(!Object.keys(s.codes??{}).length)return {count:0};const vault=this.#checkVault(s);for(const row of Object.values(s.codes)){const code=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code}),'CODE_INTEGRITY','Code lookup fingerprint does not match its encrypted value',500);}return {count:Object.keys(s.codes).length};});
   }
 }
+
+export function importedVariantDemand(variant){const demand=new Map();for(const spec of variant.codes??[])demand.set(spec.poolId,(demand.get(spec.poolId)??0)+1);return [...demand].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([poolId,count])=>({poolId,count}));}

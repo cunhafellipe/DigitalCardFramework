@@ -1,3 +1,4 @@
+import {recordAccountingField,refreshTradeAccounting,updateRecordAccounting} from './record-accounting.js';
 import {createHash} from 'node:crypto';
 import {check, integer, FrameworkError} from './catalog.js';
 import {hasPermission} from './access.js';
@@ -129,6 +130,14 @@ export class ExternalPurchaseService {
     const reservedBytes = Object.values(s.externalPurchases ?? {}).reduce((total, row) => total + (row.completionBytes ?? 0), 0);
     return {usedBytes, reservedBytes, totalBytes: usedBytes + reservedBytes, limitBytes: Infinity};
   }
+  #consumeReservation(s,row,before,reserve){
+    if(s.allocationAttempts?.[row.allocationAttemptId]?.context.product.strategy.version!==3){row.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));return;}
+    let stable=false;for(let iteration=0;iteration<12;iteration++){
+      const draft=clone(s);if(Object.hasOwn(draft,recordAccountingField)){draft.revision++;refreshTradeAccounting(draft);updateRecordAccounting(draft,value=>this.#measure(value).usedBytes);}
+      const remaining=Math.max(0,reserve-Math.max(0,this.#measure(draft).usedBytes-before.usedBytes));if(remaining>=row.completionBytes){stable=true;break;}row.completionBytes=remaining;
+    }
+    check(stable,'EXTERNAL_PURCHASE_INVARIANT','Completion reservation accounting did not stabilize',500);
+  }
   #fits(s,previousTotal=0) {
     const measured = this.#measure(s);
     check(measured.totalBytes <= measured.limitBytes || measured.totalBytes<=previousTotal, 'STORAGE_CAPACITY', 'External purchase completion exceeds storage capacity', 507);
@@ -151,6 +160,20 @@ export class ExternalPurchaseService {
       draft.externalPurchaseProofs[key]={preparationId:row.preparationId,hash:'f'.repeat(64),kind:'no_debit'};added++;
     }
     let maximumBytes=this.#measure(draft).usedBytes;
+    const attempt=row.allocationAttemptId?s.allocationAttempts[row.allocationAttemptId]:null;
+    if(attempt?.context.product.strategy.version===3){
+      const fulfilled=clone(draft),target=fulfilled.externalPurchases[row.preparationId],completed=fulfilled.allocationAttempts[attempt.id],uuid='ffffffff-ffff-4fff-bfff-ffffffffffff',longest=values=>values.reduce((a,b)=>Buffer.byteLength(JSON.stringify(a))>=Buffer.byteLength(JSON.stringify(b))?a:b,''),product=row.snapshot.product;
+      const packCount=row.terms.quote.quantity,maximumCards=product.slots.reduce((n,slot)=>n+slot.count,0);
+      const purchase={id:uuid,paid:clone(row.terms.quote.price),packs:Array.from({length:packCount},(_,batchIndex)=>({id:uuid,ownerId:row.terms.userId,productId:product.id,productRevision:product.revision,lineId:product.lineId,catalogVersion:row.snapshot.catalog.version,product:clone(product),purchaseId:uuid,batchIndex,metadata:clone(product.metadata??{}),createdAt:'X'.repeat(32),openedAt:null,cardCount:maximumCards}))};
+      completed.state='completed';completed.completedAt='X'.repeat(32);completed.result=clone(purchase);completed.admission={providerId:'X'.repeat(100),grantId:uuid,generation:Number.MAX_SAFE_INTEGER,requestId:uuid};
+      completed.plan=Array.from({length:packCount},(_,packIndex)=>attempt.context.product.slots.map(slot=>({packIndex,slotId:slot.id,variantIds:Array(slot.count).fill(longest(slot.pool.map(e=>e.variantId)))}))).flat();
+      const attachmentId=longest(row.snapshot.catalog.variants.flatMap(v=>v.codes?.map(c=>c.id)??[])),slotId=longest(product.slots.map(slot=>slot.id));completed.codeAssignments=attempt.codeSnapshot.pools.flatMap(pool=>pool.prefix.map(e=>({packIndex:99,slotId,ordinal:99,attachmentId,codeId:e.codeId,copyId:uuid})));
+      check(Buffer.byteLength(JSON.stringify(completed))<=1048576,'ALLOCATION_LIMIT','External allocation result exceeds its journal byte limit',502);
+      target.state='fulfilled';target.fulfilledAt='X'.repeat(32);target.purchase=purchase;
+      // Keeping captured terms and retained head fields avoids offsets from deletions.
+      fulfilled.allocationHeads[attempt.headId]=clone(s.allocationHeads[attempt.headId]);fulfilled.allocationHeads[attempt.headId].cursor++;
+      maximumBytes=Math.max(maximumBytes,this.#measure(fulfilled).usedBytes);
+    }
     if(resolutionCandidate){
       const resolved=clone(s),next=resolved.externalPurchases[row.preparationId];
       next.state='fulfilled';next.fulfilledAt='X'.repeat(32);next.purchase=clone(resolutionCandidate.purchase);next.completionBytes=0;next.completionRequests=0;
@@ -162,7 +185,7 @@ export class ExternalPurchaseService {
     }
     const growth = Math.max(0, maximumBytes - this.#measure(s).usedBytes);
     // Decimal reservation fields can grow by at most sixteen bytes; revision metadata is bounded separately.
-    row.completionBytes = growth + 64;
+    row.completionBytes = growth + (attempt?.context.product.strategy.version===3?1024:64);
     this.#fits(s);
   }
   #new(s, actor, input, legacy = false) {
@@ -228,7 +251,7 @@ export class ExternalPurchaseService {
       const before=this.#measure(s), reserve=row.completionBytes;
       this.#saveProof(s, row, proof); this.#allocate(s, row);
       const current=s.externalPurchases[row.preparationId];
-      if(current.state==='refund_required')current.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));
+      if(current.state==='refund_required')this.#consumeReservation(s,current,before,reserve);
       return this.#projection(s.externalPurchases[row.preparationId], true);
     });
   }
@@ -238,7 +261,7 @@ export class ExternalPurchaseService {
       const {row,provider}=this.#get(s,principal,reviewed),proof=this.#proof(s,row,provider,reviewed.debitReceipt,'debit');
       if(!row.allocationAttemptId)return {native:true};
       if(!['prepared','allocation_pending'].includes(row.state)){check(['fulfilled','refund_required','compensated'].includes(row.state)&&row.proofHashes.debit===proof.hash,'EXTERNAL_PURCHASE_STATE','Purchase cannot accept a debit',409);return {result:this.#projection(row,true)};}
-      if(row.state==='prepared'){const before=this.#measure(s),reserve=row.completionBytes;this.#saveProof(s,row,proof);row.state='allocation_pending';row.allocationPendingAt=this.#now();row.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));this.#fits(s,before.totalBytes);}
+      if(row.state==='prepared'){const before=this.#measure(s),reserve=row.completionBytes;this.#saveProof(s,row,proof);row.state='allocation_pending';row.allocationPendingAt=this.#now();this.#consumeReservation(s,row,before,reserve);this.#fits(s,before.totalBytes);}
       else check(row.proofHashes.debit===proof.hash,'SETTLEMENT_CONFLICT','Debit evidence changed',409);
       return {attempt:clone(s.allocationAttempts[row.allocationAttemptId])};
     });
@@ -258,7 +281,7 @@ export class ExternalPurchaseService {
         try{plan=this.#b.validateAllocation(draft,candidate,evaluation);candidate.purchase=this.#b.allocate(draft,candidate,plan);candidate.state='fulfilled';candidate.fulfilledAt=this.#now();candidate.completionBytes=0;this.#b.completeAllocation(draft,candidate,plan,evaluation);delete candidate.snapshot;this.#b.capacity(draft);}catch(error){if(!(error instanceof FrameworkError))throw error;this.#refund(row,error.code);}
         if(row.state==='allocation_pending'){const measured=this.#measure(draft);if(measured.totalBytes>measured.limitBytes)this.#refund(row,'STORAGE_CAPACITY');else Object.assign(s,draft);}
       }
-      const current=s.externalPurchases[row.preparationId];if(current.state==='refund_required')current.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));this.#fits(s,before.totalBytes);return this.#projection(current,true);
+      const current=s.externalPurchases[row.preparationId];if(current.state==='refund_required')this.#consumeReservation(s,current,before,reserve);this.#fits(s,before.totalBytes);return this.#projection(current,true);
     });
   }
   cancel(actor, input) {
@@ -299,7 +322,7 @@ export class ExternalPurchaseService {
       else if (resolution.failure) this.#refund(row, resolution.failure);
       else { row.snapshot = resolution.snapshot; this.#allocate(s, row); }
       const current=s.externalPurchases[row.preparationId];
-      if(pending(current.state)&&!reservedResolution)current.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));
+      if(pending(current.state)&&!reservedResolution)this.#consumeReservation(s,current,before,reserve);
       return this.#projection(s.externalPurchases[row.preparationId], true);
     });
   }

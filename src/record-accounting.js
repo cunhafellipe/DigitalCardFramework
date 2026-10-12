@@ -74,7 +74,9 @@ export function updateTradeEscrow(state){
  state._shopListingCounts=shops;
  state._raffleDue=Object.fromEntries(Object.values(state.listings??{}).map(listing=>[listing.id,raffleDueRecord(listing)]));state._raffleDueRevision=state.revision;
  const identities=Object.create(null);for(const code of Object.values(state.codes??{})){identities[JSON.stringify(['fingerprint',code.fingerprint])]=code.id;if(code.externalId)identities[JSON.stringify(['external',code.providerId,code.externalId])]=code.id;}
- state._codeIdentities=identities;state._codeStock=Object.fromEntries(Object.values(state.codes??{}).map(row=>[row.id,{id:row.id,variantId:row.id,poolId:row.poolId,status:row.status,createdAt:row.expiresAt?new Date(row.expiresAt).toISOString():''}]));state._listingCreationReady=true;state._listingCreationRevision=state.revision;
+ initializeCodeImportOrder(state);
+ state._codePoolRevisions??={};for(const id of Object.keys(state.codePools??{}))state._codePoolRevisions[id]??=0;state._codePoolRevisionsReady=true;
+ state._codeIdentities=identities;state._codeStock=Object.fromEntries(Object.values(state.codes??{}).map(row=>[row.id,{id:row.id,variantId:row.id,importOrdinal:state._codeImportOrder[row.id],poolId:row.poolId,status:row.status,createdAt:row.expiresAt?new Date(row.expiresAt).toISOString():''}]));state._listingCreationReady=true;state._listingCreationRevision=state.revision;
 }
 
 /** Maintain encrypted creation projections alongside record changes. */
@@ -87,7 +89,7 @@ export function updateListingCreationRecords(tx,plan){
    for(const [shopId,delta]of deltas)if(delta){const count=(tx.get('_shopListingCounts',shopId)??0)+delta;check(Number.isSafeInteger(count)&&count>=0,'INVALID_STATE','Invalid active listing count',500);tx.put('_shopListingCounts',shopId,count);}
   }
   if(row.collection==='codes'&&!row.old){tx.put('_codeIdentities',JSON.stringify(['fingerprint',row.value.fingerprint]),row.key);if(row.value.externalId)tx.put('_codeIdentities',JSON.stringify(['external',row.value.providerId,row.value.externalId]),row.key);}
-  if(row.collection==='codes')tx.put('_codeStock',row.key,{id:row.key,variantId:row.key,poolId:row.value.poolId,status:row.value.status,createdAt:row.value.expiresAt?new Date(row.value.expiresAt).toISOString():''});
+  if(row.collection==='codes'){let order=tx.get('_codeImportOrder',row.key);if(order===undefined){const cursor=tx.get('_codeImportOrder','@cursor')??0;check(Number.isSafeInteger(cursor)&&cursor<Number.MAX_SAFE_INTEGER,'INVALID_STATE','Code import order exhausted',500);order=cursor;tx.put('_codeImportOrder',row.key,order);tx.put('_codeImportOrder','@cursor',cursor+1);}tx.put('_codeStock',row.key,{id:row.key,variantId:row.key,importOrdinal:order,poolId:row.value.poolId,status:row.value.status,createdAt:row.value.expiresAt?new Date(row.value.expiresAt).toISOString():''});}
  }
 }
 
@@ -98,3 +100,5 @@ export function refreshTradeAccounting(state){
  if(version!==3&&state[recordAccountingField]!==recordPreparationMarker){delete state[recordAccountingField];delete state._tradeEscrow;delete state._copyReferences;return false;}
  updateTradeEscrow(state);return true;
 }
+
+export function initializeCodeImportOrder(state){state._codeImportOrder??=Object.create(null);let cursor=state._codeImportOrder['@cursor']??0;check(Number.isSafeInteger(cursor)&&cursor>=0,'INVALID_STATE','Invalid code import order',500);const retained=Object.entries(state._codeImportOrder).filter(([id])=>id!=='@cursor').map(([,order])=>order);check(retained.every(order=>Number.isSafeInteger(order)&&order>=0&&order<cursor)&&new Set(retained).size===retained.length,'CODE_INTEGRITY','Imported code ordering cannot be verified',500);for(const row of Object.values(state.codes??{}))if(state._codeImportOrder[row.id]===undefined){check(row.id!=='@cursor'&&cursor<Number.MAX_SAFE_INTEGER,'CODE_INTEGRITY','Imported code stock cannot be verified',500);Object.defineProperty(state._codeImportOrder,row.id,{value:cursor++,enumerable:true,writable:true,configurable:true});}state._codeImportOrder['@cursor']=cursor;state._codeImportOrderReady=true;}

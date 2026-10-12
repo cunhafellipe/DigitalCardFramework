@@ -8,9 +8,9 @@ import {request as httpRequest} from 'node:http';
 import {createRemoteAllocationStrategy,allocationStrategyProtocol,validateAllocationStrategyResponse} from '../src/remote-allocation-strategy.js';
 import {createRemoteStockAllocationStrategy,stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse} from '../src/remote-stock-allocation-strategy.js';
 import {createRemoteExternalAllocationStrategy,externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse} from '../src/remote-external-allocation-strategy.js';
-import {allocationStrategyV2Protocol,validateAllocationStrategyV2Response} from '../src/allocation-strategy-contracts.js';
-import {stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response} from '../src/stock-allocation-strategy-contracts.js';
-import {externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response} from '../src/external-allocation-strategy-contracts.js';
+import {allocationStrategyV2Protocol,allocationStrategyV3Protocol,validateAllocationStrategyV2Response,validateAllocationStrategyV3Response} from '../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyV2Protocol,stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV2Response,validateStockAllocationStrategyV3Response} from '../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyV2Protocol,externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV2Response,validateExternalAllocationStrategyV3Response} from '../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../src/allocation-planner.js';
 
 const executable=fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url));
@@ -54,7 +54,7 @@ async function post(receiver,value,status=200,options={}){
     request.end(body.length>1048576?undefined:body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
-  if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
+  if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response],[allocationStrategyV3Protocol,validateAllocationStrategyV3Response],[stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV3Response],[externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV3Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
 }
 test('Node allocation provider computes and replays actual plans through framework transport without effects',async()=>{
   const receiver=await start(),remote=createRemoteAllocationStrategy({algorithm:'weighted-deck@1',scope:'catalog-purchase',providerId,url:receiver.url,token,allowLoopbackHttp:true});
@@ -172,5 +172,34 @@ test('Node v2 allocation endpoints preserve deterministic pity and duplicate pla
     for(const mutate of [value=>{delete value.context.mode;},value=>{value.context.mode='unknown';},value=>{delete value.context.ownedCards;},value=>{value.context.pityCount=-1;},value=>{value.context.product.strategy.version=1;},value=>{value.context.product.duplicatePolicy.fallback='unknown';},value=>{delete value.context.variants[0].cardId;},value=>{value.context.authoritativePityCount=0;}]){const invalid=makeV2();mutate(invalid);await post(wallet,invalid,400);}
     const forbiddenCounter={...result,pityCount:0};assert.throws(()=>validateAllocationStrategyV2Response(forbiddenCounter));
     await checkPlan(wallet,pity);
+  }finally{await stop(wallet);}
+});
+test('Node v3 allocation uses shared imported-code counts and returns only selected variants',async()=>{
+  const wallet=await start(),stock={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-stock')},external={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-external')};
+  const makeV3=()=>{
+    const request=make();request.protocol=allocationStrategyV3Protocol;
+    Object.assign(request.context,{mode:'personalized',quantity:1,ownedCards:[],pityCount:0,codePools:[{id:'shared',available:1}]});
+    Object.assign(request.context.product,{strategy:{algorithm:'weighted-deck@3',version:3,deckScope:'purchase-slot'},duplicatePolicy:{scope:'none',fallback:'allow'},pity:null,slots:[
+      {id:'coded',role:'card',count:1,probability:{numerator:1,denominator:1},pool:[{variantId:'blue',weight:1},{variantId:'red',weight:1}]},
+      {id:'fallback',role:'card',count:1,probability:{numerator:1,denominator:1},pool:[{variantId:'blue',weight:1},{variantId:'red',weight:1},{variantId:'free',weight:1}]},
+    ]});
+    request.context.variants=[{id:'blue',cardId:'blue-card',rarityRank:0,remaining:null,codeDemand:[{poolId:'shared',count:1}]},{id:'red',cardId:'red-card',rarityRank:0,remaining:null,codeDemand:[{poolId:'shared',count:1}]},{id:'free',cardId:'free-card',rarityRank:0,remaining:null,codeDemand:[]}];return request;
+  };
+  try{
+    const requests=[[wallet,makeV3(),createRemoteAllocationStrategy],[stock,{...makeV3(),protocol:stockAllocationStrategyV3Protocol,scope:'commerce-stock'},createRemoteStockAllocationStrategy],[external,{...makeV3(),protocol:externalAllocationStrategyV3Protocol,scope:'external-fulfillment'},createRemoteExternalAllocationStrategy]];
+    requests[1][1].context.mode='stock';requests[1][1].context.shop={id:randomUUID(),ownerId:'merchant'};requests[2][1].context.preparationId='ep_'+'e'.repeat(64);
+    for(const [receiver,request,factory] of requests){
+      const remote=factory({algorithm:'weighted-deck@3',scope:request.scope,providerId,url:receiver.url,token,allowLoopbackHttp:true});
+      try{
+        const transported={...request,...remote.grant()},snapshot=structuredClone(transported),expected={...echo(transported),status:'planned',allocations:planAllocation(transported.context)};
+        const result=await remote.evaluate(transported);assert.deepEqual(result,expected);assert.deepEqual(await remote.evaluate(transported),result);assert.deepEqual(transported,snapshot);
+        assert(['blue','red'].includes(result.allocations[0].variantIds[0]));assert.deepEqual(result.allocations[1].variantIds,['free']);
+        for(const field of ['codeIds','codeMaterial','codePools','codeDemand','pityCount'])assert(!Object.hasOwn(result,field));
+      }finally{remote.close();}
+    }
+    const request=makeV3();await post(wallet,{...request,protocol:allocationStrategyV2Protocol},400);await post(wallet,{...make(),protocol:allocationStrategyV3Protocol},400);await post(stock,request,400);await post(external,request,400);
+    for(const [receiver,base] of requests)for(const mutate of [value=>{delete value.context.codePools;},value=>{value.context.codePools=[];},value=>{value.context.codePools.push({id:'unused',available:0});},value=>{value.context.codePools[0].available=1001;},value=>{value.context.codePools[0].available=3;},value=>{value.context.codePools.push(value.context.codePools[0]);},value=>{value.context.codePools[0].codeIds=['synthetic-code-id'];},value=>{value.context.codePools[0].material='synthetic-code-material';},value=>{value.context.variants[0].codeDemand.push(value.context.variants[0].codeDemand[0]);},value=>{value.context.variants[0].codeDemand[0].count=9;},value=>{value.context.variants[0].codeDemand=[{poolId:'shared',count:5},{poolId:'other',count:4}];value.context.codePools.push({id:'other',available:1});},value=>{value.context.variants[0].codeDemand[0].poolId='unknown';},value=>{value.context.variants[0].codeId='synthetic-code-id';}]){const invalid=structuredClone(base);mutate(invalid);await post(receiver,invalid,400);}
+    const valid=await post(wallet,request);assert.throws(()=>validateAllocationStrategyV3Response({...valid,codeIds:['synthetic-code-id']}));
+    const depleted=makeV3();depleted.context.codePools[0].available=0;assert.deepEqual(await post(wallet,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
   }finally{await stop(wallet);}
 });

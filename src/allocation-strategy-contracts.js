@@ -1,3 +1,4 @@
+import {allocationCodeDemand} from './allocation-planner.js';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {FrameworkError} from './catalog.js';
 
@@ -33,3 +34,20 @@ export function validateAllocationEligibility(value){
   if(owned.size!==ownedCards.length||ownedCards.some(v=>!cards.has(v.cardId))||requiresOwned&&(owned.size!==cards.size)||!requiresOwned&&ownedCards.length||mode==='stock'&&pityCount!==0||!pity&&pityCount!==0)throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation eligibility snapshot',400);return value;
 }
 export function validateAllocationStrategyV2Response(value){if(!responseV2(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}
+
+export const allocationStrategyV3Protocol='digital-card-pack-allocation@3';
+export const allocationStrategyV3Schema=structuredClone(allocationStrategyV2Schema);
+allocationStrategyV3Schema.$id='https://digital-card.invalid/pack-allocation/v3';
+for(const schema of [allocationStrategyV3Schema.$defs.request,...allocationStrategyV3Schema.$defs.response.oneOf])schema.properties.protocol.const=allocationStrategyV3Protocol;
+const contextV3=allocationStrategyV3Schema.$defs.request.properties.context;
+contextV3.properties.product.properties.strategy.properties.algorithm.const='weighted-deck@3';contextV3.properties.product.properties.strategy.properties.version.const=3;
+contextV3.properties.codePools=array(object({id,available:number(0,1000)}),64);contextV3.required.push('codePools');
+contextV3.properties.variants.items.properties.codeDemand=array(object({poolId:id,count:number(1,8)}),8);contextV3.properties.variants.items.required.push('codeDemand');
+compiler.addSchema(allocationStrategyV3Schema);const requestV3=compiler.compile({$ref:allocationStrategyV3Schema.$id+'#/$defs/request'}),responseV3=compiler.compile({$ref:allocationStrategyV3Schema.$id+'#/$defs/response'});
+export function validateAllocationStrategyV3Request(value){if(!requestV3(value))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation strategy request',400);return validateAllocationCodeEligibility(value);}
+export function validateAllocationCodeEligibility(value){
+  const {codePools,...context}=value.context;validateAllocationEligibility({...value,protocol:allocationStrategyV2Protocol,context:{...context,product:{...context.product,strategy:{algorithm:'weighted-deck@2',version:2,deckScope:'purchase-slot'}},variants:context.variants.map(({codeDemand,...v})=>v)}});
+  let demand;try{demand=allocationCodeDemand(context.product,context.variants,context.quantity);}catch{throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation resource scope',400);}
+  if(new Set(codePools.map(p=>p.id)).size!==codePools.length||codePools.length!==demand.size||codePools.some(p=>!demand.has(p.id)||p.available>demand.get(p.id))||context.variants.some(v=>new Set(v.codeDemand.map(d=>d.poolId)).size!==v.codeDemand.length||v.codeDemand.reduce((n,d)=>n+d.count,0)>8))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation resource snapshot',400);return value;
+}
+export function validateAllocationStrategyV3Response(value){if(!responseV3(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}

@@ -145,7 +145,7 @@ export function validateCatalog(input) {
     for(const key of ['availableFrom','availableUntil'])if(x[key]!==undefined)check(typeof x[key]==='string'&&Number.isFinite(Date.parse(x[key])),'INVALID_CATALOG','Invalid product availability time');
     if(x.availableFrom&&x.availableUntil)check(Date.parse(x.availableUntil)>Date.parse(x.availableFrom),'INVALID_CATALOG','Product availability must have positive duration');
     integer(x.price.amount,'price',1); integer(x.maxQuantity??=20,'max quantity',1,100);
-    if(x.allocationStrategy!==undefined){const a=x.allocationStrategy;check(a&&typeof a==='object'&&!Array.isArray(a)&&Object.keys(a).length===3&&((a.algorithm==='weighted-deck@1'&&a.version===1)||(a.algorithm==='weighted-deck@2'&&a.version===2))&&a.deckScope==='purchase-slot','INVALID_CATALOG','Invalid allocation strategy selector');}
+    if(x.allocationStrategy!==undefined){const a=x.allocationStrategy;check(a&&typeof a==='object'&&!Array.isArray(a)&&Object.keys(a).length===3&&((a.algorithm==='weighted-deck@1'&&a.version===1)||(a.algorithm==='weighted-deck@2'&&a.version===2)||(a.algorithm==='weighted-deck@3'&&a.version===3))&&a.deckScope==='purchase-slot','INVALID_CATALOG','Invalid allocation strategy selector');}
     x.duplicatePolicy={scope:'none',fallback:'allow',...x.duplicatePolicy};
     check(['none','pack','inventory'].includes(x.duplicatePolicy.scope) && ['allow','reject'].includes(x.duplicatePolicy.fallback),'INVALID_CATALOG','Invalid duplicate policy');
     check(Array.isArray(x.slots) && x.slots.length>0,'INVALID_CATALOG','Pack slots required');

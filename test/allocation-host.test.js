@@ -10,9 +10,9 @@ import {join,resolve,sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {FrameworkWorkerService} from '../src/framework-worker-service.js';
 import {createApiHandler} from '../src/http.js';
-import {allocationStrategyV2Protocol,validateAllocationStrategyRequest,validateAllocationStrategyV2Request} from '../src/allocation-strategy-contracts.js';
-import {stockAllocationStrategyProtocol,stockAllocationStrategyV2Protocol,validateStockAllocationStrategyRequest,validateStockAllocationStrategyV2Request} from '../src/stock-allocation-strategy-contracts.js';
-import {externalAllocationStrategyProtocol,validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyV2Request} from '../src/external-allocation-strategy-contracts.js';
+import {allocationStrategyV2Protocol,allocationStrategyV3Protocol,validateAllocationStrategyRequest,validateAllocationStrategyV2Request,validateAllocationStrategyV3Request} from '../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyProtocol,stockAllocationStrategyV2Protocol,validateStockAllocationStrategyRequest,validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV3Request} from '../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyProtocol,validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV3Request} from '../src/external-allocation-strategy-contracts.js';
 import {externalPurchaseDigest} from '../src/external-purchases.js';
 import {sampleCatalog} from '../examples/catalog.js';
 
@@ -21,7 +21,7 @@ const selector={algorithm:'weighted-deck@1',version:1,deckScope:'purchase-slot'}
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 async function listen(server){await new Promise(done=>server.listen(0,'127.0.0.1',done));return 'http://127.0.0.1:'+server.address().port;}
 async function close(server){server.closeAllConnections();await new Promise(done=>server.close(done));}
-async function harness(t,{operator=false,paid=false,v2=false}={}){
+async function harness(t,{operator=false,paid=false,v2=false,v3=false}={}){
   const child=spawn(process.execPath,[fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url))],{windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,ALLOCATION_PROVIDER_TOKEN:token,ALLOCATION_PROVIDER_ID:'example.allocation'}});child.stderr.resume();
   t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill();await ended;}});
   const port=await new Promise((fulfill,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('Provider readiness timed out')),10000);child.once('error',error=>{clearTimeout(timer);reject(error);});child.once('exit',()=>{clearTimeout(timer);reject(Error('Provider exited before readiness'));});child.stdout.on('data',data=>{output+=data;if(output.includes('\n')){clearTimeout(timer);fulfill(Number(output.trim()));}});});
@@ -31,8 +31,8 @@ async function harness(t,{operator=false,paid=false,v2=false}={}){
   const proxy=createServer(async(request,response)=>{
     try{
       assert(['/allocate-packs','/allocate-stock','/allocate-external'].includes(request.url));assert.equal(request.headers.authorization,'Bearer '+token);
-      const chunks=[];for await(const chunk of request)chunks.push(chunk);const body=Buffer.concat(chunks),parsed=JSON.parse(body),secondVersion=parsed.protocol.endsWith('@2');
-      const validate=request.url==='/allocate-external'?(secondVersion?validateExternalAllocationStrategyV2Request:validateExternalAllocationStrategyRequest):request.url==='/allocate-stock'?(secondVersion?validateStockAllocationStrategyV2Request:validateStockAllocationStrategyRequest):(secondVersion?validateAllocationStrategyV2Request:validateAllocationStrategyRequest);
+      const chunks=[];for await(const chunk of request)chunks.push(chunk);const body=Buffer.concat(chunks),parsed=JSON.parse(body),version=Number(parsed.protocol.split('@').at(-1));
+      const validators=request.url==='/allocate-external'?[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV3Request]:request.url==='/allocate-stock'?[validateStockAllocationStrategyRequest,validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV3Request]:[validateAllocationStrategyRequest,validateAllocationStrategyV2Request,validateAllocationStrategyV3Request],validate=validators[version-1];
       const value=validate(parsed);gateway.calls.push(value);
       const hold=gateway.hold;if(hold){hold.arrived.resolve(value);await hold.release.promise;}if(response.destroyed)return;
       const planned=await fetch(`http://127.0.0.1:${port}${request.url}`,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body,signal:AbortSignal.timeout(10000)});
@@ -51,14 +51,19 @@ verifyProof:({proof})=>proof.providerId==='test.payment'&&proof.externalCurrency
 }}};}
 `);
   }
-  const algorithm=v2?'weighted-deck@2':'weighted-deck@1';
-  const service=new FrameworkWorkerService({...(extensionModule?{extensionModule}:{}),frameworkOptions:{remoteAllocation:{algorithm,scope:'catalog-purchase',providerId:'example.allocation',url:remoteOrigin+'/allocate-packs',token,allowLoopbackHttp:true,timeoutMs:5000},remoteStockAllocation:{algorithm,scope:'commerce-stock',providerId:'example.allocation',url:remoteOrigin+'/allocate-stock',token,allowLoopbackHttp:true,timeoutMs:5000},...(paid?{remoteExternalAllocation:{algorithm,scope:'external-fulfillment',providerId:'example.allocation',url:remoteOrigin+'/allocate-external',token,allowLoopbackHttp:true,timeoutMs:5000}}:{})}});
+  const algorithm=v3?'weighted-deck@3':v2?'weighted-deck@2':'weighted-deck@1';
+  const service=new FrameworkWorkerService({...(extensionModule?{extensionModule}:{}),...(v3?{codeVaultOptions:{activeKeyId:'fixture',keys:{fixture:Buffer.alloc(32,37)},indexKey:Buffer.alloc(32,39)}}:{}),frameworkOptions:{remoteAllocation:{algorithm,scope:'catalog-purchase',providerId:'example.allocation',url:remoteOrigin+'/allocate-packs',token,allowLoopbackHttp:true,timeoutMs:5000},remoteStockAllocation:{algorithm,scope:'commerce-stock',providerId:'example.allocation',url:remoteOrigin+'/allocate-stock',token,allowLoopbackHttp:true,timeoutMs:5000},...(paid?{remoteExternalAllocation:{algorithm,scope:'external-fulfillment',providerId:'example.allocation',url:remoteOrigin+'/allocate-external',token,allowLoopbackHttp:true,timeoutMs:5000}}:{})}});
   t.after(async()=>{try{if(service.status().state==='failed')await service.terminate();else await service.close();}finally{if(directory){if(!resolve(directory).startsWith(temporaryBase+sep))throw Error('Unsafe fixture cleanup target');await rm(directory,{recursive:true,force:true});}}});await service.ready;
   const catalog=structuredClone(sampleCatalog);catalog.version=1;for(const variant of catalog.variants)variant.bindings={};
   catalog.products.push({id:'host',lineId:'sky',name:'Host pack',revision:1,price:{currencyId:'credits',amount:10},allocationStrategy:v2?{algorithm,version:2,deckScope:'purchase-slot'}:selector,...(v2?{duplicatePolicy:{scope:'inventory',fallback:'reject'},pity:{after:1,rarityId:'rare'}}:{}),slots:[{id:'main',count:1,pool:[{variantId:'dawn.standard',weight:2},{variantId:v2?'aurora.holo':'cloud.standard',weight:2}]}]});
+  if(v3){
+    for(const variant of catalog.variants.filter(variant=>['dawn.standard','cloud.standard'].includes(variant.id)))variant.codes=[{id:'reward',poolId:'shared',transfer:'retain',reveal:'scratch'}];
+    const product=catalog.products.at(-1);Object.assign(product,{allocationStrategy:{algorithm,version:3,deckScope:'purchase-slot'},duplicatePolicy:{scope:'none',fallback:'allow'},slots:[{id:'coded',count:1,pool:[{variantId:'dawn.standard',weight:1},{variantId:'cloud.standard',weight:1}]},{id:'fallback',count:1,pool:[{variantId:'dawn.standard',weight:1},{variantId:'cloud.standard',weight:1},{variantId:'aurora.holo',weight:1}]}]});
+  }
   await service.publishCatalog(admin,catalog);
   const actor={userId:(await service.registerUser(admin,{provider:'test',subject:'allocation-host',displayName:'Collector'})).id,...(operator?{role:'admin'}:{})};
   await service.grantCurrency(admin,{userId:actor.userId,currencyId:'credits',amount:100,reason:'Fixture funding',key:'fund'});
+  if(v3){await service.configureCodePool(admin,{key:'shared-pool',pool:{id:'shared',providerId:'example.game',name:'Imported reward'}});await service.importCodes(admin,{key:'shared-code',poolId:'shared',codes:[{code:'SYNTHETIC-CODE-MATERIAL',externalId:'synthetic-import-id'}]});}
   let handler;const server=createServer((request,response)=>handler(request,response)),origin=await listen(server);t.after(()=>close(server));
   handler=createApiHandler({framework:service,resolveIdentity:request=>request.headers.authorization==='test-collector'?actor:null,allowedOrigin:origin});
   const call=async(path,{body,status=200,signal}={})=>{
@@ -153,5 +158,18 @@ test('v2 HTTP-backed worker applies personal eligibility while stock ignores own
   assert.equal(x.gateway.calls.length,2);const stock=x.gateway.calls[1];assert.equal(stock.protocol,stockAllocationStrategyV2Protocol);assert.equal(stock.context.mode,'stock');assert.deepEqual(stock.context.ownedCards,[]);assert.equal(stock.context.pityCount,0);assert.deepEqual(stock.context.product.pity,personal.context.product.pity);
   assert.deepEqual(await x.call('/pity'),pityBefore);assert.equal((await x.call('/wallet')).credits,90);assert.deepEqual(await x.call('/listings',{body:listingInput}),listing);assert.equal(x.gateway.calls.length,2);
   const stockPack=(await x.call('/packs')).find(pack=>pack.lockedBy==='market:'+listing.id);assert(stockPack);privateFieldsAbsent(listing,stock.context.entropy.seed);
+  const audit=await x.service.audit(admin);assert.equal(audit.ok,true,JSON.stringify(audit));
+});
+test('v3 HTTP-backed worker consumes shared imported stock once and keeps code material outside allocation transport',async t=>{
+  const x=await harness(t,{v3:true}),before=(await x.service.codeInventory(admin)).items;assert.equal(before.length,1);assert.equal(before[0].status,'available');
+  const quote=await x.call('/quote',{body:{productId:'host',quantity:1}}),input={...quote,key:'v3-shared-codes'},receipt=await x.call('/purchase',{body:input});assert.equal(receipt.packs.length,1);assert.equal(x.gateway.calls.length,1);
+  const request=x.gateway.calls[0];assert.equal(request.protocol,allocationStrategyV3Protocol);assert.deepEqual(request.context.codePools,[{id:'shared',available:1}]);
+  for(const variant of request.context.variants){assert.deepEqual(variant.codeDemand,variant.id==='aurora.holo'?[]:[{poolId:'shared',count:1}]);}
+  const transmitted=JSON.stringify(request);for(const forbidden of ['SYNTHETIC-CODE-MATERIAL','synthetic-import-id',before[0].id,'"codeIds"','"material"','"externalId"'])assert(!transmitted.includes(forbidden));
+  assert.deepEqual(await x.call('/purchase',{body:input}),receipt);assert.equal(x.gateway.calls.length,1);assert.equal((await x.call('/wallet')).credits,90);
+  const assigned=(await x.service.codeInventory(admin)).items;assert.equal(assigned.length,1);assert.equal(assigned[0].status,'allocated');assert.equal(assigned[0].holderId,x.actor.userId);
+  const opened=await x.call('/open',{body:{key:'open-v3-codes',packId:receipt.packs[0].id}});assert.equal(opened.cards.length,2);assert(['dawn.standard','cloud.standard'].includes(opened.cards[0].variantId));assert.equal(opened.cards[1].variantId,'aurora.holo');
+  assert.equal((await x.service.revealCode(x.actor,{key:'reveal-v3-code',codeId:assigned[0].id})).code,'SYNTHETIC-CODE-MATERIAL');
+  const status=await x.call('/allocations/status?productId=host');assert.equal(status.state,'completed');privateFieldsAbsent(status,request.context.entropy.seed);
   const audit=await x.service.audit(admin);assert.equal(audit.ok,true,JSON.stringify(audit));
 });

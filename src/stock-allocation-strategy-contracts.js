@@ -1,6 +1,6 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import {FrameworkError} from './catalog.js';
-import {allocationStrategySchema,allocationStrategyProtocol,validateAllocationStrategyRequest,allocationStrategyV2Schema,allocationStrategyV2Protocol,validateAllocationStrategyV2Request,validateAllocationEligibility} from './allocation-strategy-contracts.js';
+import {allocationStrategySchema,allocationStrategyProtocol,validateAllocationStrategyRequest,allocationStrategyV2Schema,allocationStrategyV2Protocol,validateAllocationStrategyV2Request,validateAllocationEligibility,allocationStrategyV3Schema,allocationStrategyV3Protocol,validateAllocationCodeEligibility} from './allocation-strategy-contracts.js';
 
 export const stockAllocationStrategyProtocol='digital-card-commerce-stock-allocation@1';
 export const stockAllocationStrategySchema=structuredClone(allocationStrategySchema);
@@ -31,3 +31,13 @@ export function validateStockAllocationStrategyV2Request(value){
   const {shop,...context}=value.context;validateAllocationEligibility({...value,protocol:allocationStrategyV2Protocol,scope:'catalog-purchase',context});return value;
 }
 export function validateStockAllocationStrategyV2Response(value){if(!responseV2(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid stock allocation strategy response',502);return value;}
+
+export const stockAllocationStrategyV3Protocol='digital-card-commerce-stock-allocation@3';
+export const stockAllocationStrategyV3Schema=structuredClone(allocationStrategyV3Schema);
+stockAllocationStrategyV3Schema.$id='https://digital-card.invalid/commerce-stock-allocation/v3';
+for(const schema of [stockAllocationStrategyV3Schema.$defs.request,...stockAllocationStrategyV3Schema.$defs.response.oneOf]){schema.properties.protocol.const=stockAllocationStrategyV3Protocol;schema.properties.scope.const='commerce-stock';}
+const contextV3=stockAllocationStrategyV3Schema.$defs.request.properties.context;
+contextV3.properties.shop=structuredClone(contextV2.properties.shop);contextV3.required.push('shop');contextV3.properties.mode.const='stock';
+compiler.addSchema(stockAllocationStrategyV3Schema);const requestV3=compiler.compile({$ref:stockAllocationStrategyV3Schema.$id+'#/$defs/request'}),responseV3=compiler.compile({$ref:stockAllocationStrategyV3Schema.$id+'#/$defs/response'});
+export function validateStockAllocationStrategyV3Request(value){if(!requestV3(value))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid stock allocation strategy request',400);const {shop,...context}=value.context;validateAllocationCodeEligibility({...value,protocol:allocationStrategyV3Protocol,scope:'catalog-purchase',context});return value;}
+export function validateStockAllocationStrategyV3Response(value){if(!responseV3(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid stock allocation strategy response',502);return value;}

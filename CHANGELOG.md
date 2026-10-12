@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a read-only Python currency provider example and cross-language conformance checks for account ownership, settlement replay and malformed input.
+
 - Added authenticated remote currency account and settlement lookups with strict versioned contracts, trusted conversion mappings, bounded transport and cancellation/disable admission checks.
 
 - Added a validated production host setting for the ordinary storage payload budget, retaining the 64 MiB default and separate completion limits.

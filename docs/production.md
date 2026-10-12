@@ -160,6 +160,21 @@ HTTPS is required; explicit `allowLoopbackHttp: true` permits local development 
 
 SDK hosts can import `createCurrencyProviderRegistry` from `./remote-currency-provider`, pass its `providers` to `createCurrencyGateway`, and call `disable(providerId)` or `close()` to stop remote calls. Disabling is permanent for that registry and aborts outstanding transport requests. The production host closes its registry during shutdown. Cancellation or disabling prevents new settlement admission; it cannot retract a command already admitted by the framework worker. Direct adapters remain supported; duplicate direct and remote provider IDs are rejected.
 
+#### Try the Python currency fixture
+
+The [Python standard-library example](../examples/plugins/python-currency-provider.py) reports synthetic, read-only evidence. Set `CURRENCY_PROVIDER_TOKEN` and optionally `CURRENCY_PROVIDER_ID` (default `example.points`), then run `python examples/plugins/python-currency-provider.py records.json [port]`. It prints the selected loopback port and serves `/currency-settlement`. Configure the host endpoint with the same provider ID and token, explicit `allowLoopbackHttp: true`, and a trusted `POINTS` conversion mapping.
+
+A records file has this form; replace the local user ID with the authenticated framework user you intend to test:
+
+```json
+{
+  "accounts": [{"userId": "local-collector", "account": "external:collector"}],
+  "transactions": [{"transactionId": "fixture-1", "account": "external:collector", "status": "settled", "currency": "POINTS", "amountUnits": "150"}]
+}
+```
+
+Accounts and transaction IDs must be unique; each transaction references a configured account. Only settled records include currency and amount. Pending, refunded and unknown records contain identity and status alone. Missing transactions return unknown; unknown users or accounts and wrong-owner transactions return not-found. Limits are 64 KiB per records file, 100 accounts, 100 transactions and 8192 bytes per request. The fixture binds to loopback, handles requests serially and never modifies the file. It is a protocol example, not a payment service or production account-linking system.
+
 For catalogs with code attachments, configure the separate code-vault key ring and stable index key described in [code-card operations](card-types-and-codes.md#deploy-and-operate). Startup verifies existing envelopes and reconstructs missing legacy provenance from stored evidence. `HOST_MODULE` may export `codeProviders` with authenticated read-only status lookups, or data-only `codeProviderEndpoints` for the framework-owned remote HTTP bridge. Remote providers use the versioned [code-status protocol](card-types-and-codes.md#remote-code-status-providers); shutdown disables their lookups. Configure `codeLimits` for bounded inventory/request capacity. A provider confirmation is distinct from a player marking a code used. Include the vault keys in isolated restore drills; state encryption keys alone cannot recover code secrets.
 
 

@@ -18,7 +18,7 @@ export const readModelDefinitions={
   CardDefinitionView:object({id,lineId:id,name:{type:'string'},type:id,tags:list({type:'string'}),behavior:flags(['collectionDefault','albumDefault','albumEligible','tradable','tradeUp']),metadata:{type:'object'},stats:{type:'object'},presentation:{type:'object'}},['id','lineId','name','type','tags','behavior','metadata'],true),
   CardVariantView:object({id,cardId:id,rarityId:id,enabled:boolean,supplyLimit:{...integer,minimum:1},metadata:{type:'object'},stats:{type:'object'},codes:list(ref('CodeAttachment')),onOpen:list(ref('OpeningAction')),presentation:{type:'object'}},['id','cardId','rarityId','metadata'],true),
   CardBindingView:object({visibility:{enum:['public','owner']},transfer:{enum:['follow','retain','block']},holderId:id,state:{enum:['active','used']},data:{type:'object'},usedAt:time},['visibility','transfer','holderId','state','data']),
-  InventoryCopy:{allOf:[ref('Copy'),object({state:{const:'owned'},version:{...integer,minimum:1},createdAt:time,acquiredAt:time,tradable:boolean,untradableReason:{type:['string','null']}},undefined,true)]},
+  InventoryCopy:{allOf:[ref('Copy'),object({state:{const:'owned'},version:{...integer,minimum:1},createdAt:time,acquiredAt:time,tradable:boolean,remoteReviewRequired:boolean,untradableReason:{type:['string','null']}},['state','version','createdAt','acquiredAt','tradable','untradableReason'],true)]},
   InventoryPage:page(ref('InventoryCopy')),
   TradeInventoryPage:object({items:{...list(ref('InventoryCopy')),maxItems:200},total:integer,next:{type:['string','null']},owner:object({id,name:{type:'string'}})}),
   TradeOffer:tradeOffer,

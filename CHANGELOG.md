@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added remote transfer and trade policies for offers, counteroffers, acceptance, and secondary sales, with batched checks, state revalidation, cancellation, and durable replay. Added a Python provider example for both protocols.
+
+- Added asynchronous trade-draft review with cancellation, expiry feedback, and counteroffer version checks. Custom views using the framework client must call `reviewAsync()` before building an offer.
+
 - Added a read-only Python listing and purchase policy example with authenticated cross-language conformance checks.
 
 - Added remote listing creation policy checks before allocation, with scoped state revalidation, cancellation, durable replay and asynchronous host/worker routing across supported listing kinds.

@@ -24,6 +24,8 @@ export interface Schemas {
   "ImportPreview": { "manifest": Schemas["CatalogManifest"]; "digest": string; "expectedVersion": number; "changes": Array<{ "section": string; "id": string; "action": "add" | "update" | "remove"; [key: string]: unknown; }>; "counts": { [key: string]: unknown; }; "warnings": Array<{ "path": string; "message": string; [key: string]: unknown; }>; "policyRevision": number; [key: string]: unknown; };
   "ImportCommit": { "key": string; "manifest": Schemas["CatalogManifest"]; "digest": string; "expectedVersion": number; "policyRevision"?: number; [key: string]: unknown; };
   "CounterTrade": { "key": string; "toUserId"?: string; "give": { "copyIds": Array<string>; "currencies": Array<{ "currencyId": string; "amount": number; [key: string]: unknown; }>; [key: string]: unknown; }; "receive": { "copyIds": Array<string>; "currencies": Array<{ "currencyId": string; "amount": number; [key: string]: unknown; }>; [key: string]: unknown; }; "expiresInSeconds"?: number; "message"?: string; "versions"?: { [key: string]: number; }; "tradeId": string; "expectedDigest": string; [key: string]: unknown; };
+  "TradeTransferReviewInput": { "toUserId": string; "give": Schemas["TradeOffer"]; "receive": Schemas["TradeOffer"]; "versions"?: { [key: string]: number; }; "expiresInSeconds"?: number; "message"?: string; "parentTradeId"?: string; "expectedDigest"?: string; };
+  "TradeTransferReview": { "status": "allowed"; "inputDigest": string; "snapshotDigest": string; "expiresAt": string; "copyIds": Array<string>; };
   "CardType": { "id": string; "name": string; "defaults"?: { "collectionDefault"?: boolean; "albumDefault"?: boolean; "albumEligible"?: boolean; "tradable"?: boolean; "tradeUp"?: boolean; }; [key: string]: unknown; };
   "CodeAttachment": { "id": string; "poolId": string; "title"?: string; "reveal"?: "open" | "scratch" | "peel"; "transfer"?: "retain" | "follow-unrevealed" | "block"; };
   "CodePool": { "id": string; "providerId": string; "generator"?: string; "name": string; "normalization"?: "exact" | "upper-trim"; "enabled"?: boolean; "metadata"?: { [key: string]: unknown; }; "instructions"?: string; "redeemUrl"?: string | null; };
@@ -115,7 +117,7 @@ export interface Schemas {
   "CardDefinitionView": { "id": string; "lineId": string; "name": string; "type": string; "tags": Array<string>; "behavior": { "collectionDefault": boolean; "albumDefault": boolean; "albumEligible": boolean; "tradable": boolean; "tradeUp": boolean; }; "metadata": { [key: string]: unknown; }; "stats"?: { [key: string]: unknown; }; "presentation"?: { [key: string]: unknown; }; [key: string]: unknown; };
   "CardVariantView": { "id": string; "cardId": string; "rarityId": string; "enabled"?: boolean; "supplyLimit"?: number; "metadata": { [key: string]: unknown; }; "stats"?: { [key: string]: unknown; }; "codes"?: Array<Schemas["CodeAttachment"]>; "onOpen"?: Array<Schemas["OpeningAction"]>; "presentation"?: { [key: string]: unknown; }; [key: string]: unknown; };
   "CardBindingView": { "visibility": "public" | "owner"; "transfer": "follow" | "retain" | "block"; "holderId": string; "state": "active" | "used"; "data": { [key: string]: unknown; }; "usedAt"?: string; };
-  "InventoryCopy": Schemas["Copy"] & { "state": "owned"; "version": number; "createdAt": string; "acquiredAt": string; "tradable": boolean; "untradableReason": string | null; [key: string]: unknown; };
+  "InventoryCopy": Schemas["Copy"] & { "state": "owned"; "version": number; "createdAt": string; "acquiredAt": string; "tradable": boolean; "remoteReviewRequired"?: boolean; "untradableReason": string | null; [key: string]: unknown; };
   "InventoryPage": { "items": Array<Schemas["InventoryCopy"]>; "total": number; "next": string | null; };
   "TradeInventoryPage": { "items": Array<Schemas["InventoryCopy"]>; "total": number; "next": string | null; "owner": { "id": string; "name": string; }; };
   "TradeOffer": { "copyIds": Array<string>; "currencies": Array<Schemas["Money"]>; };
@@ -164,6 +166,7 @@ export interface Operations {
   "inspectCard": { request: undefined; response: { [key: string]: unknown; }; path: { "copyId": string; }; method: "GET" };
   "publicAlbums": { request: undefined; response: Array<{ [key: string]: unknown; }>; path: {  }; method: "GET" };
   "bindings": { request: undefined; response: Array<{ [key: string]: unknown; }>; path: {  }; method: "GET" };
+  "reviewTransfer": { request: Schemas["TradeTransferReviewInput"]; response: Schemas["TradeTransferReview"]; path: {  }; method: "POST" };
   "availability": { request: undefined; response: { [key: string]: unknown; }; path: {  }; method: "GET" };
   "pityProgress": { request: undefined; response: { [key: string]: number; }; path: {  }; method: "GET" };
   "directory": { request: undefined; response: Schemas["Page"]; path: {  }; method: "GET" };

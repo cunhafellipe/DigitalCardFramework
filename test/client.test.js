@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRevealController,createCommandRunner,ApiError} from '../src/client.js';
+import {createClient,createRevealController,createCommandRunner,ApiError} from '../src/client.js';
 const memory=()=>{const map=new Map();return {getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value)};};
+
+test('client sends advisory trade review through checked wire contracts and forwards cancellation',async()=>{
+  const calls=[],result={status:'allowed',inputDigest:'a'.repeat(64),snapshotDigest:'b'.repeat(64),expiresAt:new Date(Date.now()+60000).toISOString(),copyIds:['copy']};
+  const client=createClient({fetch:async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(result),{status:200});}}),controller=new AbortController();
+  const input={toUserId:'partner',give:{copyIds:['copy'],currencies:[]},receive:{copyIds:[],currencies:[]},versions:{copy:3},parentTradeId:'parent',expectedDigest:'c'.repeat(64)};
+  assert.deepEqual(await client.reviewTransfer(input,{signal:controller.signal}),result);assert.equal(calls[0].url,'/api/trades/review-transfer');assert.equal(calls[0].options.method,'POST');assert.equal(calls[0].options.signal,controller.signal);assert.deepEqual(JSON.parse(calls[0].options.body),input);
+  const {expectedDigest,...withoutDigest}=input;await assert.rejects(client.reviewTransfer(withoutDigest),error=>error.code==='INVALID_INPUT');const {parentTradeId,...withoutParent}=input;await assert.rejects(client.reviewTransfer(withoutParent),error=>error.code==='INVALID_INPUT');assert.equal(calls.length,1);
+  result.copyIds=['copy','copy'];await assert.rejects(client.reviewTransfer(input),error=>error.code==='INVALID_WIRE_CONTRACT');
+});
 
 test('headless reveal can skip/replay without another opening or changing result',async()=>{
   let calls=0;

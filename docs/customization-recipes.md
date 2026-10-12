@@ -100,7 +100,7 @@ The bundled `examples/app.js` is an executable public-API composition with colle
 | Customization | Public input/entrypoint | Executable example/evidence |
 | --- | --- | --- |
 | Collection, favorites, wishlist | `renderCollection(model,context)` or complete `views.collection` replacement | Reference app; collection selection/stat-search tests |
-| Visual offers | `renderTrading` and `createTradeDraft({client,userId,catalog,storage,initial,parentTradeId})` | Reference trade desk; controller/privacy/review/counter tests |
+| Visual offers | `renderTrading` and `createTradeDraft({client,userId,catalog,storage,initial,parentTradeId,expectedDigest})` | Reference trade desk; controller/privacy/review/counter tests |
 | Album editor/layout | `renderAlbums`, `albumRenderer`, `layouts[id](model,options)`, arbitrary layout/placement data | Alternate journal layout; private album/round-trip tests |
 | Individual camera | `inspectorRenderer(copy,options)`, public `renderInspector`/`render3DInspector`; `renderTiltInspector` preserves compact legacy interaction | Reference inspector and orbit tests |
 | Shared/card combinations | `comparisonRenderer(copies,options)`; `inspectTogether(copies)` | Horizon pair in `examples/catalog.js`, default shared stage |
@@ -112,7 +112,13 @@ The bundled `examples/app.js` is an executable public-API composition with colle
 | Odds/pity/windows/recipes | Validated product/recipe data, independent feature switches | Nightfall/sample products; pity/exhaustion/rollback tests |
 | Host deployment | Trusted `HOST_MODULE` exports; `createApiHandler({resolveIdentity,...})`, auth/provider/session/store contracts | Production entrypoint and real-entrypoint integration test |
 
-`createTradeDraft` exposes subscribe/getState/load/more/add/remove/setCurrency/setMessage/review/buildOffer/clear/dispose. Edits clear review. Loads ignore obsolete recipients and late completion after disposal. A disposed draft cannot start reads, clear saved drafts, attach listeners or build an offer. Built offers include copy versions. Saved drafts contain IDs/intentions, not card snapshots or binding codes. The authoritative server still validates every transfer.
+`createTradeDraft` exposes subscribe/getState/load/more/add/remove/setCurrency/setMessage/review/reviewAsync/buildOffer/clear/dispose. With the framework client, call `await draft.reviewAsync()` after the user confirms the offer contents, then check `draft.getState().reviewed` before enabling submission. Review failures are reported through state: `reviewPhase` becomes `error` and `error` contains the message. `buildOffer()` rejects an unreviewed or expired offer. Synchronous `review()` remains available for custom clients without `reviewTransfer` when no selected copy requires remote review.
+
+Edits and recipient changes invalidate review and cancel an outstanding check. Late responses cannot approve a changed or disposed draft. Subscribe to `reviewPhase` and `reviewExpiresAt` to show pending checks and request another review when approval expires. Cards marked `remoteReviewRequired` can be selected for review; selection does not authorize their transfer. Currency-only offers also require asynchronous review when the client supports it.
+
+For a counteroffer, pass both `parentTradeId` and the current original offer's `expectedDigest` to `createTradeDraft`. Submit the built offer's selected `versions` with the counter command. The server checks the original escrow and reevaluates policy before replacing it. An advisory review never releases escrow or guarantees that a later submission will succeed.
+
+Loads ignore obsolete recipients and late completion after disposal. A disposed draft cannot start reads, clear saved drafts, attach listeners or build an offer. Built offers include copy versions. Saved drafts contain IDs/intentions, not card snapshots or binding codes. The authoritative server still validates every transfer.
 
 `action(fn,{refreshAfter,message})` serializes UI actions, reports errors and refreshes committed models by default. `mutate(command,input)` uses a persisted idempotency key and coalesces identical in-flight intentions. Mutations fail before dispatch when Web Storage is missing, blocked or corrupt. Recover the original result before beginning a new identical intention; use `mutate.beginNew` for that deliberate new operation. Account change and unmount dispose the runner. Never reroll committed results based on presentation completion.
 

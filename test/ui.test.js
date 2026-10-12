@@ -91,6 +91,40 @@ test('trade desk restores recipient, enforces side and policy, keeps typed money
   }finally{x.close();}
 });
 
+test('trade lounge batches flagged cards, keeps native denial disabled and ignores review after an edit',async()=>{
+  const x=setup();let mounted;try{
+    sessionStorage.setItem('digital-card.trade-draft.v1:'+x.alice.userId,JSON.stringify({toUserId:x.bob.userId}));
+    const own=x.core.tradeInventory(x.alice,x.alice.userId).items,original=x.client.tradeInventory,reviews=[];
+    x.client.tradeInventory=async(id,options)=>{const result=await original(id,options);if(id===x.alice.userId)result.items=result.items.map(copy=>({...copy,tradable:false,...(copy.id===own[0].id?{remoteReviewRequired:true,untradableReason:'Remote review required'}:{untradableReason:'Binding blocks transfer'})}));return result;};
+    x.client.reviewTransfer=(input,{signal})=>new Promise((resolve,reject)=>reviews.push({input,signal,resolve,reject}));
+    mounted=renderTrading(x.model,x.context);const view=x.mount(mounted);await settle();
+    const flagged=view.querySelector('[data-copy-id="'+own[0].id+'"]'),blocked=view.querySelector('[data-copy-id="'+own[1].id+'"]');assert(flagged.draggable);assert(!blocked.draggable);assert(blocked.querySelectorAll('button')[1].disabled);
+    click(flagged,'Add to offer');const confirm=view.querySelector('.dc-review-check input'),send=[...view.querySelectorAll('button')].find(button=>button.textContent==='Send offer');confirm.checked=true;confirm.dispatchEvent(new x.window.Event('change'));
+    assert(confirm.disabled);assert(send.disabled);assert.match(view.querySelector('.dc-error').textContent,/Checking/);assert.deepEqual(reviews[0].input.give.copyIds,[own[0].id]);assert.deepEqual(reviews[0].input.versions,{[own[0].id]:own[0].version});
+    const note=field(view,'Message to the other collector');note.value='Updated offer';note.dispatchEvent(new x.window.Event('input'));assert(reviews[0].signal.aborted);assert(!confirm.disabled);
+    const allow=row=>({status:'allowed',inputDigest:'a'.repeat(64),snapshotDigest:'b'.repeat(64),expiresAt:new Date(Date.now()+60000).toISOString(),copyIds:[...row.input.give.copyIds,...row.input.receive.copyIds]});reviews[0].resolve(allow(reviews[0]));await settle();assert(!confirm.checked);assert(send.disabled);
+    confirm.checked=true;confirm.dispatchEvent(new x.window.Event('change'));reviews[1].reject(new Error('Exchange is blocked'));await settle();assert.match(view.querySelector('.dc-error').textContent,/Exchange is blocked/);assert(send.disabled);assert(!confirm.checked);
+    confirm.checked=true;confirm.dispatchEvent(new x.window.Event('change'));reviews[2].resolve(allow(reviews[2]));await settle();assert(confirm.checked);assert(!send.disabled);click(view,'Send offer');await settle();assert.equal(x.calls[0][0],'proposeTrade');assert.deepEqual(x.calls[0][1].give.copyIds,[own[0].id]);assert.equal(x.calls[0][1].message,'Updated offer');
+  }finally{mounted?.dispose();x.close();}
+});
+
+test('currency-only trade lounge reviews before sending and disposal ignores a pending reply',async()=>{
+  const x=setup();let mounted;try{
+    x.model.catalog.features.cardTrading=false;sessionStorage.setItem('digital-card.trade-draft.v1:'+x.alice.userId,JSON.stringify({toUserId:x.bob.userId}));let review;
+    x.client.reviewTransfer=(input,{signal})=>new Promise(resolve=>review={input,signal,resolve});mounted=renderTrading(x.model,x.context);const view=x.mount(mounted);await settle();const money=field(view,'Offer Credits');money.value='5';money.dispatchEvent(new x.window.Event('input'));const confirm=view.querySelector('.dc-review-check input');confirm.checked=true;confirm.dispatchEvent(new x.window.Event('change'));
+    assert.deepEqual(review.input.give.currencies,[{currencyId:'credits',amount:5}]);assert(confirm.disabled);assert([...view.querySelectorAll('button')].find(button=>button.textContent==='Send offer').disabled);const before=view.textContent;mounted.dispose();assert(review.signal.aborted);review.resolve({status:'allowed',inputDigest:'a'.repeat(64),snapshotDigest:'b'.repeat(64),expiresAt:new Date(Date.now()+60000).toISOString(),copyIds:[]});await settle();assert.equal(view.textContent,before);assert.equal(x.calls.length,0);
+  }finally{mounted?.dispose();x.close();}
+});
+
+test('counteroffer lounge reviews parent escrow and sends both inventory versions',async()=>{
+  const x=setup();let mounted;try{
+    const own=x.core.tradeInventory(x.alice,x.alice.userId).items[0],partner=x.core.tradeInventory(x.alice,x.bob.userId).items[0],digest='c'.repeat(64),trade={id:'parent',digest,status:'pending',fromUserId:x.bob.userId,toUserId:x.alice.userId,fromName:'Bob',toName:'Alice',give:{copyIds:[partner.id],currencies:[]},receive:{copyIds:[own.id],currencies:[]},snapshots:{[own.id]:own,[partner.id]:partner},createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86400000).toISOString()};
+    x.model.trades=[trade];const original=x.client.tradeInventory;let request;x.client.tradeInventory=async(id,options)=>{const page=await original(id,options);if(id===x.bob.userId)page.items=page.items.map(copy=>copy.id===partner.id?{...copy,tradable:false,lockedBy:trade.id,untradableReason:'Reserved by another transaction'}:copy);return page;};
+    x.client.reviewTransfer=async input=>{request=input;return {status:'allowed',inputDigest:'a'.repeat(64),snapshotDigest:'b'.repeat(64),expiresAt:new Date(Date.now()+60000).toISOString(),copyIds:[own.id,partner.id]};};
+    mounted=renderTrading(x.model,x.context);const view=x.mount(mounted);await settle();click(view,'Make counteroffer');await settle();const confirm=view.querySelector('.dc-trade-composer .dc-review-check input');confirm.checked=true;confirm.dispatchEvent(new x.window.Event('change'));await settle();assert.equal(request.parentTradeId,trade.id);assert.equal(request.expectedDigest,digest);assert.equal(request.toUserId,x.bob.userId);assert.deepEqual(request.give.copyIds,[own.id]);assert.deepEqual(request.receive.copyIds,[partner.id]);click(view,'Send counteroffer');await settle();assert.equal(x.calls[0][0],'counterTrade');assert.deepEqual(x.calls[0][1].versions,{[own.id]:own.version,[partner.id]:partner.version});assert.equal(x.calls[0][1].expectedDigest,digest);
+  }finally{mounted?.dispose();x.close();}
+});
+
 test('album layout imports preserve custom placement data, preview CSS is isolated and saves use optimistic versions',async()=>{
   const x=setup();try{const copy=x.model.inventory[0],doc={id:'album-1',version:3,name:'Private scene',visibility:'private',layout:{id:'grid',columns:2,gap:8,css:'.dc-album{padding:9px}',custom:{scene:'alpha'}},placements:[{copyId:copy.id,position:0,data:{crop:'left'}}]};
     x.model.albums=[doc];const view=x.mount(renderAlbums(x.model,x.context)),picker=view.querySelector('[aria-label="Your albums"]');picker.value=doc.id;picker.dispatchEvent(new x.window.Event('change'));

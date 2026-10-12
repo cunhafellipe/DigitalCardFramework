@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/transfer-policy/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "digital-card-transfer-policy@1"
+        },
+        "operation": {
+          "const": "canTransfer"
+        },
+        "scope": {
+          "const": "transfer"
+        },
+        "phase": {
+          "enum": [
+            "review",
+            "propose",
+            "counter",
+            "accept",
+            "list",
+            "quote",
+            "purchase"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+        },
+        "grantId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "commandId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "enum": [
+                "trade",
+                "sale"
+              ]
+            },
+            "legs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "fromUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "toUserId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "copyIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2000,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                    }
+                  },
+                  "versions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2000,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "required": [
+                  "fromUserId",
+                  "toUserId",
+                  "copyIds",
+                  "versions"
+                ]
+              }
+            }
+          },
+          "required": [
+            "channel",
+            "legs"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "operation",
+        "scope",
+        "phase",
+        "requestId",
+        "providerId",
+        "grantId",
+        "generation",
+        "commandId",
+        "inputDigest",
+        "snapshotDigest",
+        "deadline",
+        "context"
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-transfer-policy@1"
+            },
+            "operation": {
+              "const": "canTransfer"
+            },
+            "scope": {
+              "const": "transfer"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "list",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "allowed"
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-transfer-policy@1"
+            },
+            "operation": {
+              "const": "canTransfer"
+            },
+            "scope": {
+              "const": "transfer"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "list",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "denied"
+            },
+            "reasonCode": {
+              "enum": [
+                "ineligible",
+                "restricted",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "reasonCode"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-transfer-policy@1"
+            },
+            "operation": {
+              "const": "canTransfer"
+            },
+            "scope": {
+              "const": "transfer"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "list",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

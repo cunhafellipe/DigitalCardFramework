@@ -67,6 +67,9 @@
               "tradable": {
                 "type": "boolean"
               },
+              "remoteReviewRequired": {
+                "type": "boolean"
+              },
               "untradableReason": {
                 "type": [
                   "string",

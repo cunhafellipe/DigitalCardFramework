@@ -44,7 +44,7 @@ test('read-model negatives reject omitted fields, null scalars, leaked identitie
   }
   const users=x.core.adminUsers(admin),leaked=structuredClone(users);leaked.items[0].subject='provider-subject';assert.throws(()=>validateWireResponse('adminUsers',200,leaked),WireContractError);
   x.open('common');const inventory=x.core.inventoryPage(x.alice,{limit:50});
-  for(const mutate of [value=>delete value.items[0].tradable,value=>value.items[0].version=0,value=>value.items[0].untradableReason=1]){
+  for(const mutate of [value=>delete value.items[0].tradable,value=>value.items[0].version=0,value=>value.items[0].untradableReason=1,value=>value.items[0].remoteReviewRequired='pending']){
     const value=structuredClone(inventory);mutate(value);assert.throws(()=>validateWireResponse('inventory',200,value),WireContractError);
   }
   const trade=x.core.proposeTrade(x.alice,{key:'model-negative-trade',toUserId:x.bob.userId,give:{copyIds:[],currencies:[{currencyId:'credits',amount:1}]},receive:{copyIds:[],currencies:[]}});

@@ -84,7 +84,7 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/operator/trading':'configureTrading','/api/operator/card-lock':'setCardTransferLock','/api/operator/actions/retry':'retryAction','/api/operator/commerce':'configureCommerce','/api/operator/shop-status':'setShopEnabled','/api/operator/raffles/draw':'drawRaffle','/api/shops':'createShop','/api/listings':'createListing','/api/listings/quote':'quoteListing','/api/listings/buy':'buyListing','/api/listings/cancel':'cancelListing','/api/raffles/enter':'enterRaffle','/api/raffles/status':'raffleStatus','/api/cards/open':'openCard',
           '/api/quote':'quote','/api/purchase':'purchase','/api/open':'openPack','/api/convert':'convert',
           '/api/trade-up':'tradeUp','/api/albums':'saveAlbum','/api/trades':'proposeTrade',
-          '/api/trades/accept':'acceptTrade','/api/trades/cancel':'cancelTrade','/api/bindings/use':'consumeBinding'
+          '/api/trades/review-transfer':'reviewTransfer','/api/trades/accept':'acceptTrade','/api/trades/cancel':'cancelTrade','/api/bindings/use':'consumeBinding'
           ,'/api/trades/counter':'counterTrade','/api/preferences':'setPreferences','/api/notifications/read':'readNotifications',
           '/api/codes/reveal':'revealCode','/api/codes/report':'reportCodeUsage','/api/operator/code-pools':'configureCodePool','/api/operator/codes/import':'importCodes','/api/operator/codes/confirm':'confirmCodeStatus',
           '/api/operator/import/preview':'previewImport','/api/operator/import/commit':'commitImport','/api/operator/card-policies/effective':'effectiveCardPolicy','/api/operator/card-policies/save':'saveCardPolicy','/api/operator/card-policies/preview':'previewCardPolicy','/api/operator/card-policies/activate':'activateCardPolicy','/api/operator/card-policies/retire':'retireCardPolicy','/api/operator/card-policies/restore':'restoreCardPolicy','/api/operator/card-resources/save':'saveCardResource','/api/operator/card-resources/retire':'retireCardResource','/api/operator/card-resources/restore':'restoreCardResource','/api/operator/copy-stats':'updateCopyStats'
@@ -97,9 +97,9 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
         else {
         const command=routes[path]; if(!command) throw new FrameworkError('NOT_FOUND','Unknown API route',404);
         if(requireTradeReview&&['acceptTrade','counterTrade'].includes(command)&&typeof input.expectedDigest!=='string')throw new FrameworkError('REVIEW_REQUIRED','Review the immutable trade contents first',409);
-        const asynchronous={purchase:'purchaseAsync',quoteListing:'quoteListingAsync',buyListing:'buyListingAsync',createListing:'createListingAsync'}[command];
+        const asynchronous={purchase:'purchaseAsync',quoteListing:'quoteListingAsync',buyListing:'buyListingAsync',createListing:'createListingAsync',proposeTrade:'proposeTradeAsync',counterTrade:'counterTradeAsync',acceptTrade:'acceptTradeAsync',reviewTransfer:'reviewTransferAsync'}[command];
         const target=asynchronous&&framework[asynchronous]?framework[asynchronous]:framework[command];
-        result=await (['quoteListing','buyListing','createListing'].includes(command)&&target===framework[asynchronous]?target.call(framework,actor,input,{signal:policyController.signal}):target.call(framework,actor,input));
+        result=await (['quoteListing','buyListing','createListing','proposeTrade','counterTrade','acceptTrade','reviewTransfer'].includes(command)&&target===framework[asynchronous]?target.call(framework,actor,input,{signal:policyController.signal}):target.call(framework,actor,input));
         }
       }
       response.end(JSON.stringify(result));

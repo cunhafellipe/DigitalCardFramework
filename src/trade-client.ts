@@ -1,25 +1,29 @@
 export type TradeSide='give'|'receive';
 export interface TradeDraftCopy {
-  id:string;version:number;tradable:boolean;lockedBy?:string;untradableReason?:string|null;
+  id:string;version:number;tradable:boolean;remoteReviewRequired?:boolean;lockedBy?:string;untradableReason?:string|null;
   definition?:{name?:string;[field:string]:unknown};
   [field:string]:unknown;
 }
 export interface TradeOwner {id:string;name?:string;}
 export interface TradeInventory {items:TradeDraftCopy[];owner:TradeOwner|null;next?:string|null;}
 export interface TradeMoney {currencyId:string;amount:number;}
+export interface TradeReviewInput {
+  toUserId:string;give:{copyIds:string[];currencies:TradeMoney[]};receive:{copyIds:string[];currencies:TradeMoney[]};versions?:Record<string,number>;expiresInSeconds?:number;message?:string;parentTradeId?:string;expectedDigest?:string;
+}
+export interface TradeReviewResult {status:'allowed';inputDigest:string;snapshotDigest:string;expiresAt:string;copyIds:string[];}
 export interface TradeSeed {
   toUserId?:string|null;give?:{copyIds?:string[];currencies?:TradeMoney[]};receive?:{copyIds?:string[];currencies?:TradeMoney[]};message?:string;
 }
 export interface TradeDraftOptions {
-  client:{tradeInventory(userId:string,options:{limit:number;after?:string}):Promise<TradeInventory>};
+  client:{tradeInventory(userId:string,options:{limit:number;after?:string}):Promise<TradeInventory>;reviewTransfer?(input:TradeReviewInput,options?:{signal?:AbortSignal}):Promise<TradeReviewResult>};
   userId:string;catalog:{features:{cardTrading?:boolean;currencyTrading?:boolean};currencies:{id:string;tradable?:boolean}[]};
   storage?:{getItem(key:string):string|null|undefined;setItem(key:string,value:string):void;removeItem(key:string):void};
-  namespace?:string;initial?:TradeSeed;parentTradeId?:string|null;
+  namespace?:string;initial?:TradeSeed;parentTradeId?:string|null;expectedDigest?:string;
 }
 export interface TradeDraftState {
   phase:'idle'|'loading'|'ready'|'error';recipientId:string|null;owner:TradeOwner|null;partner:TradeOwner|null;
   inventory:TradeDraftCopy[];partnerInventory:TradeDraftCopy[];give:string[];receive:string[];
-  giveCurrencies:TradeMoney[];receiveCurrencies:TradeMoney[];message:string;reviewed:boolean;error:string|null;
+  giveCurrencies:TradeMoney[];receiveCurrencies:TradeMoney[];message:string;reviewed:boolean;reviewPhase:'idle'|'pending'|'allowed'|'error';reviewExpiresAt:string|null;error:string|null;
   ownNext:string|null;partnerNext:string|null;selectedGive:TradeDraftCopy[];selectedReceive:TradeDraftCopy[];
 }
 export interface TradeDraftOffer {
@@ -30,7 +34,7 @@ export interface TradeDraft {
   load(recipientId:string|null):Promise<void>;more(side:TradeSide):Promise<void>;
   add(side:TradeSide,copyId:string):void;remove(side:TradeSide,copyId:string):void;
   setCurrency(side:TradeSide,currencyId:string,amount:number):void;setMessage(message:string):void;
-  review(value?:boolean):void;buildOffer():TradeDraftOffer;clear():void;dispose():void;
+  review(value?:boolean):void;reviewAsync():Promise<void>;buildOffer():TradeDraftOffer;clear():void;dispose():void;
 }
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
 const message=(error:unknown)=>error instanceof Error?error.message:'Unable to load trade inventory';
@@ -55,7 +59,7 @@ function inventory(value:unknown):TradeInventory {
   if(!record(value)||!Array.isArray(value.items)||value.items.length>200)throw new Error('Invalid trade inventory response');
   const items:TradeDraftCopy[]=[];
   for(const copy of value.items){
-    if(!record(copy)||typeof copy.id!=='string'||!copy.id||typeof copy.version!=='number'||!Number.isSafeInteger(copy.version)||copy.version<1||typeof copy.tradable!=='boolean'||copy.lockedBy!==undefined&&typeof copy.lockedBy!=='string'||copy.untradableReason!==undefined&&copy.untradableReason!==null&&typeof copy.untradableReason!=='string')throw new Error('Invalid trade copy response');
+    if(!record(copy)||typeof copy.id!=='string'||!copy.id||typeof copy.version!=='number'||!Number.isSafeInteger(copy.version)||copy.version<1||typeof copy.tradable!=='boolean'||copy.remoteReviewRequired!==undefined&&typeof copy.remoteReviewRequired!=='boolean'||copy.lockedBy!==undefined&&typeof copy.lockedBy!=='string'||copy.untradableReason!==undefined&&copy.untradableReason!==null&&typeof copy.untradableReason!=='string')throw new Error('Invalid trade copy response');
     if(copy.definition!==undefined&&(!record(copy.definition)||copy.definition.name!==undefined&&typeof copy.definition.name!=='string'))throw new Error('Invalid trade copy definition');
     const definition=record(copy.definition)?{...copy.definition,...(typeof copy.definition.name==='string'?{name:copy.definition.name}:{})}:undefined;
     items.push({...copy,id:copy.id,version:copy.version,tradable:copy.tradable,...(definition?{definition}:{}),...(typeof copy.lockedBy==='string'?{lockedBy:copy.lockedBy}:{}),...(copy.untradableReason===null||typeof copy.untradableReason==='string'?{untradableReason:copy.untradableReason}:{})});
@@ -67,25 +71,52 @@ function inventory(value:unknown):TradeInventory {
 }
 
 /** Headless visual trade draft. State is presentation only; the server owns every transfer. */
-export function createTradeDraft({client,userId,catalog,storage,namespace=userId,initial,parentTradeId=null}:TradeDraftOptions):TradeDraft {
+export function createTradeDraft({client,userId,catalog,storage,namespace=userId,initial,parentTradeId=null,expectedDigest}:TradeDraftOptions):TradeDraft {
   const listeners=new Set<(state:TradeDraftState)=>void>(),storageKey='digital-card.trade-draft.v1:'+namespace;
-  let generation=0,publication=0,disposed=false;
+  let generation=0,publication=0,reviewGeneration=0,disposed=false,reviewAbort:AbortController|null=null,expiryTimer:ReturnType<typeof setTimeout>|undefined;
   let restored=seed(initial);
   try{if(!restored){const raw=storage?.getItem(storageKey);if(typeof raw==='string'&&raw.length<=1048576)restored=seed(JSON.parse(raw) as unknown);}}catch{}
-  let state:Omit<TradeDraftState,'selectedGive'|'selectedReceive'>={phase:'idle',recipientId:restored?.toUserId??null,owner:null,partner:null,inventory:[],partnerInventory:[],give:[],receive:[],giveCurrencies:[],receiveCurrencies:[],message:'',reviewed:false,error:null,ownNext:null,partnerNext:null};
+  let state:Omit<TradeDraftState,'selectedGive'|'selectedReceive'>={phase:'idle',recipientId:restored?.toUserId??null,owner:null,partner:null,inventory:[],partnerInventory:[],give:[],receive:[],giveCurrencies:[],receiveCurrencies:[],message:'',reviewed:false,reviewPhase:'idle',reviewExpiresAt:null,error:null,ownNext:null,partnerNext:null};
   const copyMaps={give:new Map<string,TradeDraftCopy>(),receive:new Map<string,TradeDraftCopy>()};
   const selected=(side:TradeSide)=>state[side].flatMap(id=>{const copy=copyMaps[side].get(id);return copy?[copy]:[];});
   const publicState=():TradeDraftState=>structuredClone({...state,selectedGive:selected('give'),selectedReceive:selected('receive')});
+  function invalidateReview(){reviewGeneration++;reviewAbort?.abort();reviewAbort=null;if(expiryTimer!==undefined)clearTimeout(expiryTimer);expiryTimer=undefined;}
   function publish(change:Partial<typeof state>,edit=false){
-    if(disposed)return;state={...state,...change,...(edit?{reviewed:false}:{})};
+    if(disposed)return;if(edit)invalidateReview();state={...state,...change,...(edit?{reviewed:false,reviewPhase:'idle' as const,reviewExpiresAt:null,error:null}:{})};
     if(edit)try{storage?.setItem(storageKey,JSON.stringify({toUserId:state.recipientId,give:{copyIds:state.give,currencies:state.giveCurrencies},receive:{copyIds:state.receive,currencies:state.receiveCurrencies},message:state.message,parentTradeId}));}catch{}
     const version=++publication,snapshot=publicState();for(const listener of listeners){if(disposed||version!==publication)break;listener(structuredClone(snapshot));}
   }
-  function eligible(copy:TradeDraftCopy|undefined){return !!(catalog.features.cardTrading&&(copy?.tradable||parentTradeId&&copy?.lockedBy===parentTradeId));}
+  function eligible(copy:TradeDraftCopy|undefined){return !!(catalog.features.cardTrading&&(copy?.tradable||copy?.remoteReviewRequired===true||parentTradeId&&copy?.lockedBy===parentTradeId&&copy.untradableReason==='Reserved by another transaction'));}
+  function needsRemoteReview(){return !!client.reviewTransfer||selected('give').some(copy=>copy.remoteReviewRequired)||selected('receive').some(copy=>copy.remoteReviewRequired);}
+  function offer():TradeDraftOffer {
+    if(disposed)throw new Error('Trade draft is disposed');if(state.phase!=='ready')throw new Error('Load both inventories first');if(!state.recipientId)throw new Error('Choose a recipient');if(!state.give.length&&!state.receive.length&&!state.giveCurrencies.length&&!state.receiveCurrencies.length)throw new Error('Add cards or currency');
+    const versions:Array<[string,number]>=[];for(const side of ['give','receive'] as const)for(const id of state[side]){const copy=copyMaps[side].get(id);if(!copy)throw new Error('Reload the selected inventory');if(!eligible(copy))throw new Error(copy.untradableReason??'Card is not available');versions.push([id,copy.version]);}
+    return {toUserId:state.recipientId,give:{copyIds:[...state.give],currencies:structuredClone(state.giveCurrencies)},receive:{copyIds:[...state.receive],currencies:structuredClone(state.receiveCurrencies)},versions:Object.fromEntries(versions),message:state.message};
+  }
+  function expireReview(current:number){
+    if(disposed||current!==reviewGeneration||!state.reviewExpiresAt)return;
+    const remaining=Date.parse(state.reviewExpiresAt)-Date.now();
+    if(remaining>0){expiryTimer=setTimeout(()=>expireReview(current),Math.min(remaining,2147483647));return;}
+    if(expiryTimer!==undefined)clearTimeout(expiryTimer);expiryTimer=undefined;publish({reviewed:false,reviewPhase:'error',reviewExpiresAt:null,error:'Trade review expired. Review the offer again.'});
+  }
+  async function reviewAsync(){
+    if(disposed)return;invalidateReview();const current=reviewGeneration;
+    try{
+      const input=offer();
+      if(!client.reviewTransfer){if(needsRemoteReview())throw new Error('Remote trade review is unavailable');publish({reviewed:true,reviewPhase:'allowed',error:null});return;}
+      if(parentTradeId&&!expectedDigest)throw new Error('Reload the original offer before reviewing a counteroffer');
+      const controller=new AbortController();reviewAbort=controller;publish({reviewed:false,reviewPhase:'pending',reviewExpiresAt:null,error:null});if(disposed||current!==reviewGeneration)return;
+      const result=await client.reviewTransfer({...input,...(parentTradeId?{parentTradeId,expectedDigest}:{})},{signal:controller.signal});if(disposed||current!==reviewGeneration)return;
+      const copyIds=[...new Set([...input.give.copyIds,...input.receive.copyIds])];
+      if(!record(result)||result.status!=='allowed'||typeof result.inputDigest!=='string'||!/^[a-f0-9]{64}$/.test(result.inputDigest)||typeof result.snapshotDigest!=='string'||!/^[a-f0-9]{64}$/.test(result.snapshotDigest)||typeof result.expiresAt!=='string'||!Number.isFinite(Date.parse(result.expiresAt))||!Array.isArray(result.copyIds)||result.copyIds.length!==copyIds.length||new Set(result.copyIds).size!==copyIds.length||!result.copyIds.every(id=>typeof id==='string'&&copyIds.includes(id)))throw new Error('Invalid trade review response');
+      if(Date.parse(result.expiresAt)<=Date.now())throw new Error('Trade review expired. Review the offer again.');
+      reviewAbort=null;publish({reviewed:true,reviewPhase:'allowed',reviewExpiresAt:result.expiresAt,error:null});expireReview(current);
+    }catch(error){if(disposed||current!==reviewGeneration)return;reviewAbort=null;publish({reviewed:false,reviewPhase:'error',reviewExpiresAt:null,error:error instanceof Error?error.message:'Unable to review trade'});}
+  }
   function sideFields(side:TradeSide){if(!['give','receive'].includes(side))throw new Error('Invalid trade side');return side==='give'?{list:'inventory' as const,cursor:'ownNext' as const,owner:userId}:{list:'partnerInventory' as const,cursor:'partnerNext' as const,owner:state.recipientId};}
   function select(side:TradeSide,copyId:string){if(disposed)return;sideFields(side);const copy=copyMaps[side].get(copyId);if(!eligible(copy))throw new Error(copy?.untradableReason??'Card is not available');if(state[side].includes(copyId))return;if(state[side].length>=100)throw new Error('An offer can contain at most 100 cards per side');publish({[side]:[...state[side],copyId]},true);}
   async function load(recipientId:string|null){
-    if(disposed)return;const current=++generation;publish({phase:'loading',recipientId,reviewed:false,error:null});if(disposed||generation!==current)return;
+    if(disposed)return;invalidateReview();const current=++generation;publish({phase:'loading',recipientId,reviewed:false,reviewPhase:'idle',reviewExpiresAt:null,error:null});if(disposed||generation!==current)return;
     try{
       const ownRead=client.tradeInventory(userId,{limit:200});if(disposed||generation!==current){Promise.resolve(ownRead).catch(()=>{});return;}
       const partnerRead=recipientId?client.tradeInventory(recipientId,{limit:200}):Promise.resolve({items:[],owner:null,next:null});
@@ -98,17 +129,15 @@ export function createTradeDraft({client,userId,catalog,storage,namespace=userId
   }
   return {
     getState:publicState,subscribe(listener){if(disposed)return()=>{};listeners.add(listener);listener(publicState());return()=>{listeners.delete(listener);};},load,
-    async more(side){if(disposed)return;const fields=sideFields(side),after=state[fields.cursor],current=generation;if(!after||!fields.owner)return;const value=await client.tradeInventory(fields.owner,{limit:200,after});if(disposed||generation!==current)return;const result=inventory(value);result.items.forEach(copy=>copyMaps[side].set(copy.id,copy));publish({[fields.list]:[...state[fields.list],...result.items],[fields.cursor]:result.next??null});},
+    async more(side){if(disposed)return;const fields=sideFields(side),after=state[fields.cursor],current=generation;if(!after||!fields.owner)return;const value=await client.tradeInventory(fields.owner,{limit:200,after});if(disposed||generation!==current)return;const result=inventory(value);const changed=result.items.some(copy=>state[side].includes(copy.id));result.items.forEach(copy=>copyMaps[side].set(copy.id,copy));publish({[fields.list]:[...state[fields.list],...result.items],[fields.cursor]:result.next??null},changed);},
     add:select,remove(side,copyId){if(disposed)return;sideFields(side);publish({[side]:state[side].filter(id=>id!==copyId)},true);},
     setCurrency(side,currencyId,amount){if(disposed)return;sideFields(side);if(!catalog.features.currencyTrading)throw new Error('Currency trading is disabled');if(!catalog.currencies.some(currency=>currency.id===currencyId&&currency.tradable))throw new Error('Currency is not tradable');if(!Number.isSafeInteger(amount)||amount<0)throw new Error('Use a nonnegative whole amount');const key=side==='give'?'giveCurrencies':'receiveCurrencies',currencies=state[key].filter(currency=>currency.currencyId!==currencyId);if(amount)currencies.push({currencyId,amount});publish({[key]:currencies},true);},
     setMessage(value){if(disposed)return;if(typeof value!=='string'||value.length>500)throw new Error('Message is too long');publish({message:value},true);},
-    review(value=true){if(disposed)return;if(state.phase!=='ready')throw new Error('Load both inventories first');publish({reviewed:!!value});},
+    review(value=true){if(disposed)return;if(state.phase!=='ready')throw new Error('Load both inventories first');invalidateReview();if(value&&needsRemoteReview()){publish({reviewed:false,reviewPhase:'idle',reviewExpiresAt:null});throw new Error('Review this offer with reviewAsync first');}publish({reviewed:!!value,reviewPhase:value?'allowed':'idle',reviewExpiresAt:null,error:null});},reviewAsync,
     buildOffer(){
-      if(disposed)throw new Error('Trade draft is disposed');if(!state.reviewed)throw new Error('Review and confirm the offer contents');if(!state.recipientId)throw new Error('Choose a recipient');if(!state.give.length&&!state.receive.length&&!state.giveCurrencies.length&&!state.receiveCurrencies.length)throw new Error('Add cards or currency');
-      const versions:Array<[string,number]>=[];for(const side of ['give','receive'] as const)for(const id of state[side]){const copy=copyMaps[side].get(id);if(!copy)throw new Error('Reload the selected inventory');versions.push([id,copy.version]);}
-      return {toUserId:state.recipientId,give:{copyIds:[...state.give],currencies:structuredClone(state.giveCurrencies)},receive:{copyIds:[...state.receive],currencies:structuredClone(state.receiveCurrencies)},versions:Object.fromEntries(versions),message:state.message};
+      if(disposed)throw new Error('Trade draft is disposed');if(state.reviewExpiresAt&&Date.parse(state.reviewExpiresAt)<=Date.now()){expireReview(reviewGeneration);throw new Error('Trade review expired. Review the offer again.');}if(!state.reviewed)throw new Error('Review and confirm the offer contents');return offer();
     },
-    clear(){if(disposed)return;try{storage?.removeItem(storageKey);}catch{}publish({give:[],receive:[],giveCurrencies:[],receiveCurrencies:[],message:'',reviewed:false});},
-    dispose(){disposed=true;generation++;listeners.clear();}
+    clear(){if(disposed)return;invalidateReview();try{storage?.removeItem(storageKey);}catch{}publish({give:[],receive:[],giveCurrencies:[],receiveCurrencies:[],message:'',reviewed:false,reviewPhase:'idle',reviewExpiresAt:null,error:null});},
+    dispose(){disposed=true;generation++;invalidateReview();listeners.clear();}
   };
 }

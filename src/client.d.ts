@@ -25,6 +25,9 @@ export interface Client extends DirectMethods, QueryMethods {
     inventory(): Promise<Schemas['InventoryCopy'][]>;
     inventoryPage(options?: QueryOptions): Promise<Schemas['InventoryPage']>;
     tradeInventory(userId: string, options?: QueryOptions): Promise<Schemas['TradeInventoryPage']>;
+    reviewTransfer(input: Operations['reviewTransfer']['request'], options?: {
+        signal?: AbortSignal;
+    }): Promise<Operations['reviewTransfer']['response']>;
     inspectCard(copyId: string): Promise<Operations['inspectCard']['response']>;
     viewAlbum(albumId: string): Promise<Operations['viewAlbum']['response']>;
     preferences(input: Operations['setPreferences']['request']): Promise<Operations['setPreferences']['response']>;

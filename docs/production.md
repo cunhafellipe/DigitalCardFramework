@@ -175,6 +175,31 @@ The [Python standard-library policy example](../examples/plugins/python-listing-
 
 Records contain `actors: [{id, listShopIds, purchaseListingIds}]`. Use framework user IDs and real shop/listing UUIDs. A configured actor may create listings only in its listed shop IDs and purchase only its listed listing IDs. All other actors or targets are denied. This synthetic read-only fixture makes no allocations and changes no records. It accepts at most 100 actors, 100 targets per list, 64 KiB of configuration and 64 KiB per request. Native framework checks still apply after every allow decision.
 
+### Transfer and trade policy protocols
+
+Configure either hook in the trusted host module's `remotePolicies` export:
+
+```js
+export const remotePolicies = {
+  canTransfer: {scope: 'transfer', providerId: 'example.transfer',
+    url: process.env.TRANSFER_POLICY_URL, token: process.env.TRANSFER_POLICY_TOKEN},
+  canTrade: {scope: 'exchange', providerId: 'example.transfer',
+    url: process.env.TRANSFER_POLICY_URL, token: process.env.TRANSFER_POLICY_TOKEN},
+};
+```
+
+Use HTTPS in deployment. The loopback Python fixture requires explicit `allowLoopbackHttp: true`. Embedded callers use `proposeTradeAsync`, `counterTradeAsync`, and `acceptTradeAsync`, with `{signal}` as the final options argument. Use `createListingAsync`, `quoteListingAsync`, and `buyListingAsync` for affected resale operations. Synchronous mutation methods cannot bypass configured remote policies. Committed idempotent retries return the original result after authentication without requesting a new provider decision.
+
+`reviewTransferAsync(actor, input, {signal})` checks an offer without reserving cards or currency. Browser clients expose `reviewTransfer(input, {signal})`; custom trade views should follow the [asynchronous draft review guidance](customization-recipes.md). Review is temporary and submission evaluates policy again. Disable a hook through the trusted SDK with `setRemotePolicyEnabled(actor, {hook: 'canTransfer', enabled: false})` or `hook: 'canTrade'`; this requires `commerce.manage` and invalidates in-flight grants. Cancellation, expiration, and escrow refunds remain available without provider approval.
+
+The [transfer policy schema](transfer-policy.schema.json) describes `digital-card-transfer-policy@1` requests with operation `canTransfer` and scope `transfer`. Each request groups the selected copies by transfer direction, with matching copy IDs and versions. A listing reservation uses a null destination until a buyer is known. The [trade policy schema](trade-policy.schema.json) describes `digital-card-trade-policy@1` requests with operation `canTrade` and scope `exchange`; its context contains both parties and both sides of the card and currency exchange.
+
+Import the schemas and validators from `@digital-card/framework/transfer-policy-contracts` and `@digital-card/framework/trade-policy-contracts`. Transport factories are available from `@digital-card/framework/remote-transfer-policy` and `@digital-card/framework/remote-trade-policy`. These protocols support at most 2,000 copies across a request. Their default and maximum request body size is 256 KiB; the default response limit is 8 KiB. The default timeout is 10 seconds and each transport admits at most eight concurrent evaluations unless configured otherwise.
+
+Providers must echo the request identity fields, including the phase, grant, generation, command and snapshot digests, and deadline. Return `allowed`, `denied` with a documented reason code, or a bounded protocol error. An allow response is advisory: the framework remains responsible for authorization, native restrictions, current ownership, balances, and committing the exchange. Provider credentials belong only in trusted server configuration.
+
+The [Python transfer policy example](../examples/plugins/python-transfer-policy.py) implements both protocols at `/transfer-policy`. Set `TRANSFER_POLICY_TOKEN` and optionally `TRANSFER_POLICY_PROVIDER_ID` (default `example.transfer`), then run `python examples/plugins/python-transfer-policy.py records.json [port]`. It prints its loopback port. Records use `{"actors":[{"id":"alice","recipientIds":["bob"],"allowListingReservation":true}]}`. Each transfer leg must have an authorized sender and destination; null destinations require explicit listing reservation permission. Trade policy checks the exchange sender and recipient. Unconfigured routes are denied. This read-only fixture supports at most 100 actors and 100 recipients per actor within 64 KiB of configuration.
+
 ### Remote currency providers
 
 The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:

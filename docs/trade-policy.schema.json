@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/trade-policy/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "digital-card-trade-policy@1"
+        },
+        "operation": {
+          "const": "canTrade"
+        },
+        "scope": {
+          "const": "exchange"
+        },
+        "phase": {
+          "enum": [
+            "review",
+            "propose",
+            "counter",
+            "accept",
+            "quote",
+            "purchase"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+        },
+        "grantId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "commandId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "enum": [
+                "trade",
+                "sale"
+              ]
+            },
+            "fromUserId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "toUserId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "give": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "copyIds": {
+                  "type": "array",
+                  "maxItems": 2000,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  }
+                },
+                "currencies": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "currencyId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "amount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "currencyId",
+                      "amount"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "copyIds",
+                "currencies"
+              ]
+            },
+            "receive": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "copyIds": {
+                  "type": "array",
+                  "maxItems": 2000,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  }
+                },
+                "currencies": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "currencyId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "amount": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "currencyId",
+                      "amount"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "copyIds",
+                "currencies"
+              ]
+            },
+            "expiresInSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800
+            }
+          },
+          "required": [
+            "channel",
+            "fromUserId",
+            "toUserId",
+            "give",
+            "receive"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "operation",
+        "scope",
+        "phase",
+        "requestId",
+        "providerId",
+        "grantId",
+        "generation",
+        "commandId",
+        "inputDigest",
+        "snapshotDigest",
+        "deadline",
+        "context"
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-trade-policy@1"
+            },
+            "operation": {
+              "const": "canTrade"
+            },
+            "scope": {
+              "const": "exchange"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "allowed"
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-trade-policy@1"
+            },
+            "operation": {
+              "const": "canTrade"
+            },
+            "scope": {
+              "const": "exchange"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "denied"
+            },
+            "reasonCode": {
+              "enum": [
+                "ineligible",
+                "restricted",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "reasonCode"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-trade-policy@1"
+            },
+            "operation": {
+              "const": "canTrade"
+            },
+            "scope": {
+              "const": "exchange"
+            },
+            "phase": {
+              "enum": [
+                "review",
+                "propose",
+                "counter",
+                "accept",
+                "quote",
+                "purchase"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

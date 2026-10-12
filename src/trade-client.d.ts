@@ -3,6 +3,7 @@ export interface TradeDraftCopy {
     id: string;
     version: number;
     tradable: boolean;
+    remoteReviewRequired?: boolean;
     lockedBy?: string;
     untradableReason?: string | null;
     definition?: {
@@ -24,6 +25,29 @@ export interface TradeMoney {
     currencyId: string;
     amount: number;
 }
+export interface TradeReviewInput {
+    toUserId: string;
+    give: {
+        copyIds: string[];
+        currencies: TradeMoney[];
+    };
+    receive: {
+        copyIds: string[];
+        currencies: TradeMoney[];
+    };
+    versions?: Record<string, number>;
+    expiresInSeconds?: number;
+    message?: string;
+    parentTradeId?: string;
+    expectedDigest?: string;
+}
+export interface TradeReviewResult {
+    status: 'allowed';
+    inputDigest: string;
+    snapshotDigest: string;
+    expiresAt: string;
+    copyIds: string[];
+}
 export interface TradeSeed {
     toUserId?: string | null;
     give?: {
@@ -42,6 +66,9 @@ export interface TradeDraftOptions {
             limit: number;
             after?: string;
         }): Promise<TradeInventory>;
+        reviewTransfer?(input: TradeReviewInput, options?: {
+            signal?: AbortSignal;
+        }): Promise<TradeReviewResult>;
     };
     userId: string;
     catalog: {
@@ -62,6 +89,7 @@ export interface TradeDraftOptions {
     namespace?: string;
     initial?: TradeSeed;
     parentTradeId?: string | null;
+    expectedDigest?: string;
 }
 export interface TradeDraftState {
     phase: 'idle' | 'loading' | 'ready' | 'error';
@@ -76,6 +104,8 @@ export interface TradeDraftState {
     receiveCurrencies: TradeMoney[];
     message: string;
     reviewed: boolean;
+    reviewPhase: 'idle' | 'pending' | 'allowed' | 'error';
+    reviewExpiresAt: string | null;
     error: string | null;
     ownNext: string | null;
     partnerNext: string | null;
@@ -105,9 +135,10 @@ export interface TradeDraft {
     setCurrency(side: TradeSide, currencyId: string, amount: number): void;
     setMessage(message: string): void;
     review(value?: boolean): void;
+    reviewAsync(): Promise<void>;
     buildOffer(): TradeDraftOffer;
     clear(): void;
     dispose(): void;
 }
 /** Headless visual trade draft. State is presentation only; the server owns every transfer. */
-export declare function createTradeDraft({ client, userId, catalog, storage, namespace, initial, parentTradeId }: TradeDraftOptions): TradeDraft;
+export declare function createTradeDraft({ client, userId, catalog, storage, namespace, initial, parentTradeId, expectedDigest }: TradeDraftOptions): TradeDraft;

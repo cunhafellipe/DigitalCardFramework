@@ -34,7 +34,7 @@ function inventory(value) {
         throw new Error('Invalid trade inventory response');
     const items = [];
     for (const copy of value.items) {
-        if (!record(copy) || typeof copy.id !== 'string' || !copy.id || typeof copy.version !== 'number' || !Number.isSafeInteger(copy.version) || copy.version < 1 || typeof copy.tradable !== 'boolean' || copy.lockedBy !== undefined && typeof copy.lockedBy !== 'string' || copy.untradableReason !== undefined && copy.untradableReason !== null && typeof copy.untradableReason !== 'string')
+        if (!record(copy) || typeof copy.id !== 'string' || !copy.id || typeof copy.version !== 'number' || !Number.isSafeInteger(copy.version) || copy.version < 1 || typeof copy.tradable !== 'boolean' || copy.remoteReviewRequired !== undefined && typeof copy.remoteReviewRequired !== 'boolean' || copy.lockedBy !== undefined && typeof copy.lockedBy !== 'string' || copy.untradableReason !== undefined && copy.untradableReason !== null && typeof copy.untradableReason !== 'string')
             throw new Error('Invalid trade copy response');
         if (copy.definition !== undefined && (!record(copy.definition) || copy.definition.name !== undefined && typeof copy.definition.name !== 'string'))
             throw new Error('Invalid trade copy definition');
@@ -52,9 +52,9 @@ function inventory(value) {
     return { items, owner, next: typeof value.next === 'string' ? value.next : null };
 }
 /** Headless visual trade draft. State is presentation only; the server owns every transfer. */
-export function createTradeDraft({ client, userId, catalog, storage, namespace = userId, initial, parentTradeId = null }) {
+export function createTradeDraft({ client, userId, catalog, storage, namespace = userId, initial, parentTradeId = null, expectedDigest }) {
     const listeners = new Set(), storageKey = 'digital-card.trade-draft.v1:' + namespace;
-    let generation = 0, publication = 0, disposed = false;
+    let generation = 0, publication = 0, reviewGeneration = 0, disposed = false, reviewAbort = null, expiryTimer;
     let restored = seed(initial);
     try {
         if (!restored) {
@@ -64,14 +64,18 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
         }
     }
     catch { }
-    let state = { phase: 'idle', recipientId: restored?.toUserId ?? null, owner: null, partner: null, inventory: [], partnerInventory: [], give: [], receive: [], giveCurrencies: [], receiveCurrencies: [], message: '', reviewed: false, error: null, ownNext: null, partnerNext: null };
+    let state = { phase: 'idle', recipientId: restored?.toUserId ?? null, owner: null, partner: null, inventory: [], partnerInventory: [], give: [], receive: [], giveCurrencies: [], receiveCurrencies: [], message: '', reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null, ownNext: null, partnerNext: null };
     const copyMaps = { give: new Map(), receive: new Map() };
     const selected = (side) => state[side].flatMap(id => { const copy = copyMaps[side].get(id); return copy ? [copy] : []; });
     const publicState = () => structuredClone({ ...state, selectedGive: selected('give'), selectedReceive: selected('receive') });
+    function invalidateReview() { reviewGeneration++; reviewAbort?.abort(); reviewAbort = null; if (expiryTimer !== undefined)
+        clearTimeout(expiryTimer); expiryTimer = undefined; }
     function publish(change, edit = false) {
         if (disposed)
             return;
-        state = { ...state, ...change, ...(edit ? { reviewed: false } : {}) };
+        if (edit)
+            invalidateReview();
+        state = { ...state, ...change, ...(edit ? { reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null } : {}) };
         if (edit)
             try {
                 storage?.setItem(storageKey, JSON.stringify({ toUserId: state.recipientId, give: { copyIds: state.give, currencies: state.giveCurrencies }, receive: { copyIds: state.receive, currencies: state.receiveCurrencies }, message: state.message, parentTradeId }));
@@ -84,7 +88,81 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
             listener(structuredClone(snapshot));
         }
     }
-    function eligible(copy) { return !!(catalog.features.cardTrading && (copy?.tradable || parentTradeId && copy?.lockedBy === parentTradeId)); }
+    function eligible(copy) { return !!(catalog.features.cardTrading && (copy?.tradable || copy?.remoteReviewRequired === true || parentTradeId && copy?.lockedBy === parentTradeId && copy.untradableReason === 'Reserved by another transaction')); }
+    function needsRemoteReview() { return !!client.reviewTransfer || selected('give').some(copy => copy.remoteReviewRequired) || selected('receive').some(copy => copy.remoteReviewRequired); }
+    function offer() {
+        if (disposed)
+            throw new Error('Trade draft is disposed');
+        if (state.phase !== 'ready')
+            throw new Error('Load both inventories first');
+        if (!state.recipientId)
+            throw new Error('Choose a recipient');
+        if (!state.give.length && !state.receive.length && !state.giveCurrencies.length && !state.receiveCurrencies.length)
+            throw new Error('Add cards or currency');
+        const versions = [];
+        for (const side of ['give', 'receive'])
+            for (const id of state[side]) {
+                const copy = copyMaps[side].get(id);
+                if (!copy)
+                    throw new Error('Reload the selected inventory');
+                if (!eligible(copy))
+                    throw new Error(copy.untradableReason ?? 'Card is not available');
+                versions.push([id, copy.version]);
+            }
+        return { toUserId: state.recipientId, give: { copyIds: [...state.give], currencies: structuredClone(state.giveCurrencies) }, receive: { copyIds: [...state.receive], currencies: structuredClone(state.receiveCurrencies) }, versions: Object.fromEntries(versions), message: state.message };
+    }
+    function expireReview(current) {
+        if (disposed || current !== reviewGeneration || !state.reviewExpiresAt)
+            return;
+        const remaining = Date.parse(state.reviewExpiresAt) - Date.now();
+        if (remaining > 0) {
+            expiryTimer = setTimeout(() => expireReview(current), Math.min(remaining, 2147483647));
+            return;
+        }
+        if (expiryTimer !== undefined)
+            clearTimeout(expiryTimer);
+        expiryTimer = undefined;
+        publish({ reviewed: false, reviewPhase: 'error', reviewExpiresAt: null, error: 'Trade review expired. Review the offer again.' });
+    }
+    async function reviewAsync() {
+        if (disposed)
+            return;
+        invalidateReview();
+        const current = reviewGeneration;
+        try {
+            const input = offer();
+            if (!client.reviewTransfer) {
+                if (needsRemoteReview())
+                    throw new Error('Remote trade review is unavailable');
+                publish({ reviewed: true, reviewPhase: 'allowed', error: null });
+                return;
+            }
+            if (parentTradeId && !expectedDigest)
+                throw new Error('Reload the original offer before reviewing a counteroffer');
+            const controller = new AbortController();
+            reviewAbort = controller;
+            publish({ reviewed: false, reviewPhase: 'pending', reviewExpiresAt: null, error: null });
+            if (disposed || current !== reviewGeneration)
+                return;
+            const result = await client.reviewTransfer({ ...input, ...(parentTradeId ? { parentTradeId, expectedDigest } : {}) }, { signal: controller.signal });
+            if (disposed || current !== reviewGeneration)
+                return;
+            const copyIds = [...new Set([...input.give.copyIds, ...input.receive.copyIds])];
+            if (!record(result) || result.status !== 'allowed' || typeof result.inputDigest !== 'string' || !/^[a-f0-9]{64}$/.test(result.inputDigest) || typeof result.snapshotDigest !== 'string' || !/^[a-f0-9]{64}$/.test(result.snapshotDigest) || typeof result.expiresAt !== 'string' || !Number.isFinite(Date.parse(result.expiresAt)) || !Array.isArray(result.copyIds) || result.copyIds.length !== copyIds.length || new Set(result.copyIds).size !== copyIds.length || !result.copyIds.every(id => typeof id === 'string' && copyIds.includes(id)))
+                throw new Error('Invalid trade review response');
+            if (Date.parse(result.expiresAt) <= Date.now())
+                throw new Error('Trade review expired. Review the offer again.');
+            reviewAbort = null;
+            publish({ reviewed: true, reviewPhase: 'allowed', reviewExpiresAt: result.expiresAt, error: null });
+            expireReview(current);
+        }
+        catch (error) {
+            if (disposed || current !== reviewGeneration)
+                return;
+            reviewAbort = null;
+            publish({ reviewed: false, reviewPhase: 'error', reviewExpiresAt: null, error: error instanceof Error ? error.message : 'Unable to review trade' });
+        }
+    }
     function sideFields(side) { if (!['give', 'receive'].includes(side))
         throw new Error('Invalid trade side'); return side === 'give' ? { list: 'inventory', cursor: 'ownNext', owner: userId } : { list: 'partnerInventory', cursor: 'partnerNext', owner: state.recipientId }; }
     function select(side, copyId) { if (disposed)
@@ -95,8 +173,9 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
     async function load(recipientId) {
         if (disposed)
             return;
+        invalidateReview();
         const current = ++generation;
-        publish({ phase: 'loading', recipientId, reviewed: false, error: null });
+        publish({ phase: 'loading', recipientId, reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null });
         if (disposed || generation !== current)
             return;
         try {
@@ -129,7 +208,7 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
         async more(side) { if (disposed)
             return; const fields = sideFields(side), after = state[fields.cursor], current = generation; if (!after || !fields.owner)
             return; const value = await client.tradeInventory(fields.owner, { limit: 200, after }); if (disposed || generation !== current)
-            return; const result = inventory(value); result.items.forEach(copy => copyMaps[side].set(copy.id, copy)); publish({ [fields.list]: [...state[fields.list], ...result.items], [fields.cursor]: result.next ?? null }); },
+            return; const result = inventory(value); const changed = result.items.some(copy => state[side].includes(copy.id)); result.items.forEach(copy => copyMaps[side].set(copy.id, copy)); publish({ [fields.list]: [...state[fields.list], ...result.items], [fields.cursor]: result.next ?? null }, changed); },
         add: select, remove(side, copyId) { if (disposed)
             return; sideFields(side); publish({ [side]: state[side].filter(id => id !== copyId) }, true); },
         setCurrency(side, currencyId, amount) { if (disposed)
@@ -143,31 +222,26 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
             throw new Error('Message is too long'); publish({ message: value }, true); },
         review(value = true) { if (disposed)
             return; if (state.phase !== 'ready')
-            throw new Error('Load both inventories first'); publish({ reviewed: !!value }); },
+            throw new Error('Load both inventories first'); invalidateReview(); if (value && needsRemoteReview()) {
+            publish({ reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null });
+            throw new Error('Review this offer with reviewAsync first');
+        } publish({ reviewed: !!value, reviewPhase: value ? 'allowed' : 'idle', reviewExpiresAt: null, error: null }); }, reviewAsync,
         buildOffer() {
             if (disposed)
                 throw new Error('Trade draft is disposed');
+            if (state.reviewExpiresAt && Date.parse(state.reviewExpiresAt) <= Date.now()) {
+                expireReview(reviewGeneration);
+                throw new Error('Trade review expired. Review the offer again.');
+            }
             if (!state.reviewed)
                 throw new Error('Review and confirm the offer contents');
-            if (!state.recipientId)
-                throw new Error('Choose a recipient');
-            if (!state.give.length && !state.receive.length && !state.giveCurrencies.length && !state.receiveCurrencies.length)
-                throw new Error('Add cards or currency');
-            const versions = [];
-            for (const side of ['give', 'receive'])
-                for (const id of state[side]) {
-                    const copy = copyMaps[side].get(id);
-                    if (!copy)
-                        throw new Error('Reload the selected inventory');
-                    versions.push([id, copy.version]);
-                }
-            return { toUserId: state.recipientId, give: { copyIds: [...state.give], currencies: structuredClone(state.giveCurrencies) }, receive: { copyIds: [...state.receive], currencies: structuredClone(state.receiveCurrencies) }, versions: Object.fromEntries(versions), message: state.message };
+            return offer();
         },
         clear() { if (disposed)
-            return; try {
+            return; invalidateReview(); try {
             storage?.removeItem(storageKey);
         }
-        catch { } publish({ give: [], receive: [], giveCurrencies: [], receiveCurrencies: [], message: '', reviewed: false }); },
-        dispose() { disposed = true; generation++; listeners.clear(); }
+        catch { } publish({ give: [], receive: [], giveCurrencies: [], receiveCurrencies: [], message: '', reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null }); },
+        dispose() { disposed = true; generation++; invalidateReview(); listeners.clear(); }
     };
 }

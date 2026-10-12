@@ -1,9 +1,11 @@
 import {createClient} from '@digital-card/framework/client';
 import {createTradeDraft} from '@digital-card/framework/trade-client';
 const draft=createTradeDraft({client:createClient(),userId:'account',catalog:{features:{cardTrading:true,currencyTrading:true},currencies:[{id:'credits',tradable:true}]}});
-draft.subscribe(state=>{const version:number|undefined=state.selectedGive[0]?.version;const name:string|undefined=state.selectedGive[0]?.definition?.name;void version;void name;});
+draft.subscribe(state=>{const version:number|undefined=state.selectedGive[0]?.version;const name:string|undefined=state.selectedGive[0]?.definition?.name;const needsReview:boolean|undefined=state.selectedGive[0]?.remoteReviewRequired;const reviewPhase:'idle'|'pending'|'allowed'|'error'=state.reviewPhase;void version;void name;void needsReview;void reviewPhase;});
 draft.add('give','copy');draft.setCurrency('receive','credits',1);
 const offer=draft.buildOffer();const version:number|undefined=offer.versions.copy;void version;
+const review:Promise<void>=draft.reviewAsync();void review;
+void createClient().reviewTransfer(offer,{signal:new AbortController().signal}).then(result=>{const status:'allowed'=result.status;const expiry:string=result.expiresAt;void status;void expiry;});
 // @ts-expect-error sides are explicit so edits cannot target arbitrary state fields
 draft.add('inventory','copy');
 // @ts-expect-error currency amounts use integer JSON numbers, not strings

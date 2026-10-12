@@ -114,13 +114,15 @@ function publicListing(s, l, at, userId) {
 export class CommerceService {
   #b;
   #random;
+  #transfers;
   #remotePolicy;
   #proposals;
   #remoteListingPolicy;
   #listingProposals;
-  constructor(bridge, { random = randomInt, remotePolicy, policyCoordinator, remoteListingPolicy, listingPolicyCoordinator } = {}) {
+  constructor(bridge, { random = randomInt, remotePolicy, policyCoordinator, remoteListingPolicy, listingPolicyCoordinator, transferPolicies } = {}) {
     this.#b = bridge;
     this.#random = random;
+    this.#transfers=transferPolicies;
     this.#remotePolicy = remotePolicy;
     this.#proposals = policyCoordinator;
     this.#remoteListingPolicy = remoteListingPolicy;
@@ -306,7 +308,7 @@ export class CommerceService {
   }
   createListing(actor, input) {
     const reviewed=this.#reviewListing(input);
-    if(this.#remoteListingPolicy){
+    if(this.#remoteListingPolicy||this.#transfers.configured('canTransfer')&&['copies','packs'].includes(reviewed.items.kind)){
       const previous=this.#b.creationReceipt(actor,reviewed.key,this.#creationCommandInput(reviewed));if(previous.found)return previous.result;
       check(false,'POLICY_ASYNC_REQUIRED','Use asynchronous listing policy evaluation',503);
     }
@@ -424,6 +426,13 @@ export class CommerceService {
     check(!raffle||raffle.winners<=(primary?items.quantity:items.ids.length),'INVALID_INPUT','Winners exceed reserved stock');
     return shop;
   }
+  #creationTransfers(s,shop,items){
+    if(!['copies','packs'].includes(items.kind))return {};
+    const copyIds=items.kind==='copies'?items.ids:items.ids.flatMap(id=>s.packs[id].copyIds);
+    if(this.#transfers.configured('canTransfer'))check(copyIds.length<=2000,'POLICY_LIMIT','Policy batch exceeds 2000 cards',502);
+    for(const id of copyIds)this.#b.transferPreflight(s,s.copies[id],shop.ownerId,null,'sale',false);
+    return {canTransfer:copyIds.length?{channel:'sale',legs:[{fromUserId:shop.ownerId,toUserId:null,copyIds:clone(copyIds),versions:copyIds.map(id=>s.copies[id].version)}]}:null};
+  }
   #creationDependencies(s,actor,reviewed,shop){
     const {items}=reviewed,product=items.kind==='mint-pack'?effectiveProduct(s,find(s.catalog.products,items.productId)):null;
     const variantIds=items.kind==='mint-card'?[items.variantId]:product?[...new Set(product.slots.flatMap(slot=>slot.pool.map(entry=>entry.variantId)))]:[];
@@ -441,17 +450,18 @@ export class CommerceService {
       activeListings:recordContexts.get(s)?.activeShopListings??Object.values(s.listings).filter(l=>l.shopId===shop.id&&active(l)).length,catalogVersion:s.catalog?.version??0,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,tradingRevision:s.tradingPolicy?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0});
   }
   async createListingAsync(actor,input,{signal}={}){
-    if(!this.#remoteListingPolicy)return this.createListing(actor,input);
+    if(!this.#remoteListingPolicy&&!this.#transfers.configured('canTransfer'))return this.createListing(actor,input);
     const principal=clone(actor),reviewed=this.#reviewListing(clone(input)),commandInput=this.#creationCommandInput(reviewed);
     const previous=this.#b.creationReceipt(principal,reviewed.key,commandInput);if(previous.found)return previous.result;
     const prepared=this.#b.createListingRead(principal,commandInput,s=>{
       const shop=this.#creationPreflight(s,principal,reviewed),{items}=reviewed;
+      const contexts=this.#creationTransfers(s,shop,items);
       const stock=['copies','packs'].includes(items.kind)?{kind:items.kind,ids:clone(items.ids)}:items.kind==='mint-card'?{kind:items.kind,variantId:items.variantId,quantity:items.quantity}:items.kind==='mint-pack'?{kind:items.kind,productId:items.productId,quantity:items.quantity}:{kind:items.kind,handler:items.handler,quantity:items.quantity};
-      return {phase:'create',userId:principal.userId,key:reviewed.key,input:commandInput,snapshotDigest:this.#creationDependencies(s,principal,reviewed,shop),context:{actor:{id:principal.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(reviewed.price),stock}};
+      return {contexts,phase:'create',userId:principal.userId,key:reviewed.key,input:commandInput,snapshotDigest:this.#creationDependencies(s,principal,reviewed,shop),context:{actor:{id:principal.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(reviewed.price),stock}};
     });
-    const proposal=this.#listingProposals.prepare(prepared);await this.#listingProposals.evaluate(proposal,{signal});return this.#createListing(principal,reviewed,proposal,signal);
+    const proposal=this.#remoteListingPolicy?this.#listingProposals.prepare(prepared):null,batch=this.#transfers.prepare({...prepared,phase:'list'});await Promise.all([proposal?this.#listingProposals.evaluate(proposal,{signal}):null,this.#transfers.evaluate(batch,{signal})]);return this.#createListing(principal,reviewed,proposal,signal,batch);
   }
-  #createListing(actor,reviewed,proposal,signal){
+  #createListing(actor,reviewed,proposal,signal,batch){
     const {key,shopId,title,description,price,items,previewAt,startsAt,endsAt,perBuyerLimit,metadata,raffle}=reviewed,receipt={};
     return this.#b.createListingCommand(
       actor,
@@ -472,6 +482,8 @@ export class CommerceService {
       },
       (s, u) => {
         initialize(s);
+        try{
+        if(batch){const currentShop=this.#creationPreflight(s,actor,reviewed);this.#creationTransfers(s,currentShop,items);receipt.policyAdmissions=this.#transfers.admit(s,batch,this.#creationDependencies(s,actor,reviewed,currentShop),{signal});}
         if(proposal){const currentShop=this.#creationPreflight(s,actor,reviewed);receipt.policyAdmission=this.#listingProposals.admit(proposal,this.#creationDependencies(s,actor,reviewed,currentShop),{signal});}
         const shop = this.#own(s, actor, shopId);
         check(config(s).enabled,'SHOP_DISABLED','Listing creation is disabled',409);
@@ -690,6 +702,7 @@ export class CommerceService {
         assertAdminShop(s,shop,null,listing);
         s.listings[listing.id] = listing;
         return publicListing(s, listing, this.#b.now(), u.id);
+        }finally{this.#transfers.clear(s);}
       },receipt,
     );
   }
@@ -813,12 +826,16 @@ export class CommerceService {
     check(!this.#remotePolicy,'POLICY_ASYNC_REQUIRED','Use asynchronous listing policy evaluation',503);
     return this.#quote(actor,{listingId,quantity});
   }
-  #quote(actor, {listingId,quantity=1}, proposal, signal) {
+  #quote(actor, {listingId,quantity=1}, proposal, signal,batch) {
     return this.#b.listingRead(actor, {listingId,quantity}, (s) => {
       const u = this.#b.user(s, actor),
         l = record(s.listings, listingId);
       check(l, "NOT_FOUND", "Listing not found", 404);
       const units = this.#selection(s, l, u, quantity);
+      const contexts=this.#transfers.configured('canTransfer')||this.#transfers.configured('canTrade')?this.#saleContexts(s,l,u,units):{};
+      check(batch||!this.#salePolicyRequired(contexts),'POLICY_ASYNC_REQUIRED','Use asynchronous resale policy evaluation',503);
+      try{
+      if(batch)this.#transfers.admit(s,batch,this.#dependencies(s,l,u,units,{listingId,quantity}),{signal});
       if(proposal)this.#proposals.admit(proposal,this.#dependencies(s,l,u,units,{listingId,quantity}),{signal});
       integer(l.price.amount * quantity, "total", 0);
       return {
@@ -832,6 +849,7 @@ export class CommerceService {
         },
         items: units.map((unit) => this.#unitView(s, unit)),
       };
+      }finally{this.#transfers.clear(s);}
     });
   }
   #dependencies(s,l,u,units,input){
@@ -844,32 +862,42 @@ export class CommerceService {
     return contentDigest({input,parties,listing:l,shop:s.shops[l.shopId],copies,packs,codes,purchased,
       catalogVersion:s.catalog?.version??0,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,tradingRevision:s.tradingPolicy?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0});
   }
+  #salePolicyRequired(contexts){return Object.entries(contexts).some(([hook,value])=>value&&this.#transfers.configured(hook));}
+  #saleContexts(s,l,u,units){
+    if(!units.some(unit=>!unit.primary))return {};
+    const copyIds=units.flatMap(unit=>unit.kind==='copy'?[unit.copyId]:unit.kind==='pack'?s.packs[unit.packId].copyIds:[]),price={currencyId:l.price.currencyId,amount:l.price.amount*units.length},give={copyIds,currencies:[]},receive={copyIds:[],currencies:price.amount>0?[price]:[]};
+    if(this.#transfers.configured('canTransfer')||this.#transfers.configured('canTrade'))check(copyIds.length<=2000,'POLICY_LIMIT','Policy batch exceeds 2000 cards',502);
+    integer(price.amount,'total',0);check((s.balances[u.id]?.[price.currencyId]??0)>=price.amount,'INSUFFICIENT_FUNDS','Insufficient funds',409);
+    for(const id of copyIds){const c=s.copies[id];check(c?.ownerId===l.sellerId&&c.lockedBy==='market:'+l.id,'TRANSFER_BLOCKED','Listing stock ownership changed',409);this.#b.transferPreflight(s,c,l.sellerId,u.id,'sale',true);}
+    this.#b.resalePreflight(s,l.sellerId,u.id,give,receive);
+    return {canTransfer:copyIds.length?{channel:'sale',legs:[{fromUserId:l.sellerId,toUserId:u.id,copyIds,versions:copyIds.map(id=>s.copies[id].version)}]}:null,canTrade:{channel:'sale',fromUserId:l.sellerId,toUserId:u.id,give,receive}};
+  }
   #preparePolicy(actor,input,phase,key){
     const prepared=this.#b.listingRead(actor,input,s=>{
       const u=this.#b.user(s,actor),l=record(s.listings,input.listingId);check(l,'NOT_FOUND','Listing not found',404);
       const units=this.#selection(s,l,u,input.quantity,false);
       if(phase==='purchase')check(JSON.stringify(units.map(unit=>unit.id))===JSON.stringify(input.unitIds)&&digest(l,units)===input.digest,'STALE_QUOTE','Stock or terms changed; review a new quote',409);
       const shop=s.shops[l.shopId];
-      return {phase,userId:u.id,key,input,snapshotDigest:this.#dependencies(s,l,u,units,input),context:{
+      return {contexts:this.#transfers.configured('canTransfer')||this.#transfers.configured('canTrade')?this.#saleContexts(s,l,u,units):{},phase,userId:u.id,key,input,snapshotDigest:this.#dependencies(s,l,u,units,input),context:{
         user:{id:u.id},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},listing:{id:l.id,kind:l.kind,price:clone(l.price)},quantity:input.quantity,unitIds:units.map(unit=>unit.id),
       }};
     });
-    return this.#proposals.prepare(prepared);
+    return {proposal:this.#remotePolicy?this.#proposals.prepare(prepared):null,batch:this.#transfers.prepare(prepared)};
   }
   async quoteAsync(actor,{listingId,quantity=1},{signal}={}){
-    if(!this.#remotePolicy)return this.quote(actor,{listingId,quantity});
+    if(!this.#remotePolicy&&!this.#transfers.configured('canTransfer')&&!this.#transfers.configured('canTrade'))return this.quote(actor,{listingId,quantity});
     const principal=clone(actor),input={listingId,quantity};
-    const proposal=this.#preparePolicy(principal,input,'quote');
-    await this.#proposals.evaluate(proposal,{signal});return this.#quote(principal,input,proposal,signal);
+    const {proposal,batch}=this.#preparePolicy(principal,input,'quote');
+    await Promise.all([proposal?this.#proposals.evaluate(proposal,{signal}):null,this.#transfers.evaluate(batch,{signal})]);return this.#quote(principal,input,proposal,signal,batch);
   }
   async buyAsync(actor,{key,listingId,quantity=1,unitIds,digest:expectedDigest},{signal}={}){
-    if(!this.#remotePolicy)return this.buy(actor,{key,listingId,quantity,unitIds,digest:expectedDigest});
+    if(!this.#remotePolicy&&!this.#transfers.configured('canTransfer')&&!this.#transfers.configured('canTrade'))return this.buy(actor,{key,listingId,quantity,unitIds,digest:expectedDigest});
     const principal=clone(actor),input=clone({listingId,quantity,unitIds,digest:expectedDigest});
     text(key,'idempotency key',128);
     const previous=this.#b.purchaseReceipt(principal,key,input);if(previous.found)return previous.result;
     check(Array.isArray(unitIds)&&unitIds.length===quantity,'INVALID_INPUT','Quoted unit IDs required');
-    const proposal=this.#preparePolicy(principal,input,'purchase',key);
-    await this.#proposals.evaluate(proposal,{signal});return this.#buy(principal,{key,...input},proposal,signal);
+    const {proposal,batch}=this.#preparePolicy(principal,input,'purchase',key);
+    await Promise.all([proposal?this.#proposals.evaluate(proposal,{signal}):null,this.#transfers.evaluate(batch,{signal})]);return this.#buy(principal,{key,...input},proposal,signal,batch);
   }
   buy(
     actor,
@@ -882,7 +910,7 @@ export class CommerceService {
     }
     return this.#buy(actor,{key,listingId,quantity,unitIds,digest:expectedDigest});
   }
-  #buy(actor,{key,listingId,quantity=1,unitIds,digest:expectedDigest},proposal,signal){
+  #buy(actor,{key,listingId,quantity=1,unitIds,digest:expectedDigest},proposal,signal,batch){
     check(
       Array.isArray(unitIds) && unitIds.length === quantity,
       "INVALID_INPUT",
@@ -899,6 +927,8 @@ export class CommerceService {
         const l = record(s.listings, listingId);
         check(l, "NOT_FOUND", "Listing not found", 404);
         const units = this.#selection(s, l, u, quantity);
+        try{
+        if(batch){this.#saleContexts(s,l,u,units);receipt.policyAdmissions=this.#transfers.admit(s,batch,this.#dependencies(s,l,u,units,{listingId,quantity,unitIds,digest:expectedDigest}),{signal});}
         if(proposal)receipt.policyAdmission=this.#proposals.admit(proposal,this.#dependencies(s,l,u,units,{listingId,quantity,unitIds,digest:expectedDigest}),{signal});
         check(
           units.length === quantity &&
@@ -1011,6 +1041,7 @@ export class CommerceService {
           listingId: l.id,
         });
         return this.#orderView(s, order);
+        }finally{this.#transfers.clear(s);}
       },receipt,
     );
   }

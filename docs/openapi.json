@@ -1658,6 +1658,127 @@
         }
       }
     },
+    "/trades/review-transfer": {
+      "post": {
+        "operationId": "reviewTransfer",
+        "description": "Checks both transfer legs against current local and remote policies. Advisory result only; submission and acceptance evaluate policy again.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-DC-Principal",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required by the production host; must match the verified session principal."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TradeTransferReviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeTransferReview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/availability": {
       "get": {
         "operationId": "availability",
@@ -11497,6 +11618,97 @@
           }
         }
       },
+      "TradeTransferReviewInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "toUserId",
+          "give",
+          "receive"
+        ],
+        "properties": {
+          "toUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "give": {
+            "$ref": "#/components/schemas/TradeOffer"
+          },
+          "receive": {
+            "$ref": "#/components/schemas/TradeOffer"
+          },
+          "versions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "parentTradeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "dependentRequired": {
+          "parentTradeId": [
+            "expectedDigest"
+          ],
+          "expectedDigest": [
+            "parentTradeId"
+          ]
+        }
+      },
+      "TradeTransferReview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "inputDigest",
+          "snapshotDigest",
+          "expiresAt",
+          "copyIds"
+        ],
+        "properties": {
+          "status": {
+            "const": "allowed"
+          },
+          "inputDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "snapshotDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "copyIds": {
+            "type": "array",
+            "maxItems": 2000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
       "CardType": {
         "type": "object",
         "required": [
@@ -16444,6 +16656,9 @@
                 "format": "date-time"
               },
               "tradable": {
+                "type": "boolean"
+              },
+              "remoteReviewRequired": {
                 "type": "boolean"
               },
               "untradableReason": {

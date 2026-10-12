@@ -7,7 +7,7 @@ export const frameworkMethods = Object.freeze([
   'cardPolicies','effectiveCardPolicy','saveCardPolicy','previewCardPolicy','activateCardPolicy',
   'retireCardPolicy','restoreCardPolicy','saveCardResource','retireCardResource','restoreCardResource',
   'updateCopyStats','registerCardPresentation','commerceSettings','configureCommerce','createShop',
-  'setShopEnabled','shops','createListing','createListingAsync','listings','quoteListing','buyListing','quoteListingAsync','buyListingAsync','setRemotePolicyEnabled','orders','cancelListing',
+  'setShopEnabled','shops','createListing','createListingAsync','proposeTradeAsync','counterTradeAsync','acceptTradeAsync','reviewTransferAsync','listings','quoteListing','buyListing','quoteListingAsync','buyListingAsync','setRemotePolicyEnabled','orders','cancelListing',
   'expireListings','enterRaffle','raffleStatus','drawRaffle','drawDueRaffles','openCard','fulfillments',
   'actionJobs','retryAction','claimAction','settleAction','dispatchActions','tradingPolicy','configureTrading',
   'setCardTransferLock','configureCodePool','importCodes','codePools','codeInventory','codeRegistrationMaterial',

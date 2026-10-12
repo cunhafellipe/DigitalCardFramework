@@ -57,7 +57,7 @@ export function createAuthHost({framework,sessions,provider,origin,adminSubjects
         }else if(url.pathname==='/auth/callback'&&req.method==='GET'){
           const flow=sessions.get(cookie(req,flowName),'flow',{consume:true});if(!flow)throw new Error('Login expired');
           const identity=await provider.finish(url,flow);if(!identity?.issuer||!identity?.subject)throw new Error('Invalid identity');
-          const user=framework.registerUser({role:'admin'},{provider:identity.issuer,subject:identity.subject,displayName:identity.displayName});
+          const user=await framework.registerUser({role:'admin'},{provider:identity.issuer,subject:identity.subject,displayName:identity.displayName});
           sessions.revoke(cookie(req,sessionName));const secret=sessions.create('session',{userId:user.id,issuer:identity.issuer,subject:identity.subject},sessionTTL);
           res.setHeader('Set-Cookie',[setCookie(flowName,'',0),setCookie(sessionName,secret,Math.floor(sessionTTL/1000))]);res.statusCode=303;res.setHeader('Location','/');res.end();
         }else if(url.pathname==='/auth/logout'&&req.method==='POST'){

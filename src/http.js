@@ -57,7 +57,7 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/operator/admin/history':()=>framework.adminHistory(actor,options),
           '/api/trading-policy':()=>framework.tradingPolicy(),'/api/commerce-settings':()=>framework.commerceSettings(),'/api/shops':()=>framework.shops(actor,options),'/api/listings':()=>framework.listings(actor,{...options,...(url.searchParams.has('shopId')?{shopId:url.searchParams.get('shopId')}:{})}),'/api/orders':()=>framework.orders(actor,options),'/api/fulfillments':()=>framework.fulfillments(actor,options),'/api/operator/actions':()=>framework.actionJobs(actor,options),
           '/api/capabilities':()=>framework.capabilities(actor),
-          '/api/catalog':()=>framework.catalog(), '/api/me':()=>({...framework.me(actor),role:actor.role==='admin'?'admin':'player',permissions:publicPermissions(actor)}),
+          '/api/catalog':()=>framework.catalog(), '/api/me':async()=>({...await framework.me(actor),role:actor.role==='admin'?'admin':'player',permissions:publicPermissions(actor)}),
           '/api/availability':()=>framework.availability(),'/api/pity':()=>framework.pityProgress(actor),
           '/api/wallet':()=>framework.wallet(actor), '/api/history':()=>framework.history(actor),
           '/api/inventory':()=>url.searchParams.has('limit')?framework.inventoryPage(actor,options):framework.inventory(actor), '/api/packs':()=>framework.packs(actor),
@@ -69,10 +69,10 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/albums':()=>framework.albums(actor), '/api/public-albums':()=>framework.publicAlbums(),
           '/api/trades':()=>framework.trades(actor), '/api/bindings':()=>framework.bindings(actor)
         };
-        if(routes[path]) result=routes[path]();
-        else if(/^\/api\/albums\/[^/]+$/.test(path)) result=framework.viewAlbum(actor,decodeURIComponent(path.split('/').at(-1)));
-        else if(/^\/api\/cards\/[^/]+$/.test(path)) result=framework.inspectCard(actor,decodeURIComponent(path.split('/').at(-1)));
-        else if(/^\/api\/users\/[^/]+\/inventory$/.test(path))result=framework.tradeInventory(actor,decodeURIComponent(path.split('/')[3]),options);
+        if(routes[path]) result=await routes[path]();
+        else if(/^\/api\/albums\/[^/]+$/.test(path)) result=await framework.viewAlbum(actor,decodeURIComponent(path.split('/').at(-1)));
+        else if(/^\/api\/cards\/[^/]+$/.test(path)) result=await framework.inspectCard(actor,decodeURIComponent(path.split('/').at(-1)));
+        else if(/^\/api\/users\/[^/]+\/inventory$/.test(path))result=await framework.tradeInventory(actor,decodeURIComponent(path.split('/')[3]),options);
         else throw new FrameworkError('NOT_FOUND','Unknown API route',404);
       } else {
         const routes={
@@ -86,9 +86,9 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/codes/reveal':'revealCode','/api/codes/report':'reportCodeUsage','/api/operator/code-pools':'configureCodePool','/api/operator/codes/import':'importCodes','/api/operator/codes/confirm':'confirmCodeStatus',
           '/api/operator/import/preview':'previewImport','/api/operator/import/commit':'commitImport','/api/operator/card-policies/effective':'effectiveCardPolicy','/api/operator/card-policies/save':'saveCardPolicy','/api/operator/card-policies/preview':'previewCardPolicy','/api/operator/card-policies/activate':'activateCardPolicy','/api/operator/card-policies/retire':'retireCardPolicy','/api/operator/card-policies/restore':'restoreCardPolicy','/api/operator/card-resources/save':'saveCardResource','/api/operator/card-resources/retire':'retireCardResource','/api/operator/card-resources/restore':'restoreCardResource','/api/operator/copy-stats':'updateCopyStats'
         };
-        if(path==='/api/command-intents')result=framework.registerCommandIntent(actor,input,{operators:exposeOperators});
+        if(path==='/api/command-intents')result=await framework.registerCommandIntent(actor,input,{operators:exposeOperators});
         else if(path==='/api/command-intents/execute')result=await (framework.executeCommandIntentAsync??framework.executeCommandIntent).call(framework,actor,input,{operators:exposeOperators,requireTradeReview});
-        else if(path==='/api/command-intents/acknowledge')result=framework.acknowledgeCommandIntent(actor,input,{operators:exposeOperators});
+        else if(path==='/api/command-intents/acknowledge')result=await framework.acknowledgeCommandIntent(actor,input,{operators:exposeOperators});
         else if(path==='/api/currency/reconcile' && currencyGateway) result=await currencyGateway.reconcile(actor,input);
         else if(path==='/api/codes/reconcile' && codeGateway) result=await codeGateway.reconcile(actor,input);
         else {

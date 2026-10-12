@@ -42,7 +42,7 @@ export function createCurrencyGateway({
       }));
     },
     async reconcile(actor, { providerId, transactionId }, { signal } = {}) {
-      framework.me(actor); // Includes disabled-user and existence checks.
+      await framework.me(actor); // Includes disabled-user and existence checks.
       text(transactionId, "external transaction ID", 300);
       const provider = registry.get(providerId);
       check(provider, "UNKNOWN_PROVIDER", "Unknown currency provider", 404);

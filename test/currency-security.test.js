@@ -33,6 +33,17 @@ function gateway(x, { receipt = {}, lookup, mapping, timeoutMs } = {}) {
   });
 }
 const request = { providerId: "points", transactionId: "settled-123" };
+test('currency reconciliation awaits account checks before provider effects and awaits settlement',async()=>{
+  const x=fixture(),events=[];
+  const framework={async me(actor){await new Promise(resolve=>setImmediate(resolve));events.push('checked');return x.core.me(actor);},async settleExternalCredit(...args){await new Promise(resolve=>setImmediate(resolve));events.push('settled');return x.core.settleExternalCredit(...args);}};
+  const api=createCurrencyGateway({framework,providers:{points:{currencies:{POINTS:{currencyId:'credits'}},resolveAccount({userId}){events.push('account');return 'external:'+userId;},lookup({transactionId,account}){events.push('lookup');return {transactionId,account,status:'settled',currency:'POINTS',amountUnits:'150'};}}}});
+  try{
+    await assert.rejects(api.reconcile({...x.alice,disabled:true},request),code('UNAUTHENTICATED'));
+    assert.deepEqual(events,['checked']);events.length=0;
+    assert.equal((await api.reconcile(x.alice,request)).amount,150);
+    assert.deepEqual(events,['checked','account','lookup','settled']);
+  }finally{x.core.close();}
+});
 test("forty concurrent deliveries credit once and cannot buy free duplicate packs", async () => {
   const x = fixture(),
     api = gateway(x);

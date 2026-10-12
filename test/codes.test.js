@@ -10,7 +10,21 @@ import path from 'node:path';
 import { vault, codesFixture } from './codes-fixtures.mjs';
 import { codeSummary } from '../src/codes.js';
 import { page } from '../src/data.js';
+import {FrameworkError} from '../src/catalog.js';
 const gift = (x, copy, from=x.alice,to=x.bob) => x.core.proposeTrade(from,{key:'gift-'+copy.id,toUserId:to.userId,give:{copyIds:[copy.id],currencies:[]},receive:{copyIds:[],currencies:[]}});
+
+test('code reconciliation awaits material checks and confirmation while preserving provider error handling',async()=>{
+  let deny=true,fail=false;const events=[];
+  const framework={
+    async codeLookupMaterial(){await new Promise(resolve=>setImmediate(resolve));events.push('checked');if(deny)throw new FrameworkError('UNAUTHENTICATED','Sign in to continue',401);return {providerId:'example.game',code:'test-code'};},
+    async confirmCodeStatus(actor,input){await new Promise(resolve=>setImmediate(resolve));events.push('confirmed');if(fail)throw Error('private failure');assert.deepEqual(actor,{permissions:['codes.confirm'],codeProviderIds:['example.game']});return {codeId:input.codeId,status:input.status};}
+  };
+  const api=createCodeGateway({framework,providers:{'example.game':{lookup(material){events.push('lookup');assert.equal(material.code,'test-code');return {codeId:'code',status:'redeemed',eventId:'verified',occurredAt:'2026-10-01T00:00:00Z'};}}}});
+  await assert.rejects(api.reconcile({userId:'collector'},{codeId:'code'}),code('UNAUTHENTICATED'));assert.deepEqual(events,['checked']);
+  deny=false;events.length=0;
+  assert.deepEqual(await api.reconcile({userId:'collector'},{codeId:'code'}),{codeId:'code',status:'redeemed'});assert.deepEqual(events,['checked','lookup','confirmed']);
+  fail=true;await assert.rejects(api.reconcile({userId:'collector'},{codeId:'code'}),code('CODE_PROVIDER_ERROR'));
+});
 
 for(const adapter of ['memory','sqlite'])test('indexed code history preserves former holders, privacy and page semantics: '+adapter,()=>{
   const store=adapter==='memory'?new MemoryStore():new SQLiteStore(':memory:',{encryptionKey:Buffer.alloc(32,41)});

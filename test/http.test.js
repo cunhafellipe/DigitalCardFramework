@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFrameworkServer} from '../src/http.js';
+import {createApiHandler,createFrameworkServer} from '../src/http.js';
+import {FrameworkError} from '../src/catalog.js';
+import {Readable} from 'node:stream';
 import {fixture} from './helpers.js';
 
 test('HTTP identity, origin, public privacy and command recovery at the service boundary',async t=>{
@@ -32,4 +34,57 @@ test('HTTP identity, origin, public privacy and command recovery at the service 
 });
 test('HTTP server refuses construction without host identity verification',()=>{
   const x=fixture();assert.throws(()=>createFrameworkServer({framework:x.core}),/identity resolver/);
+});
+
+test('HTTP awaits delayed reads, detail projections and command intents before responding',async()=>{
+  const actor={userId:'collector',role:'player',permissions:['catalog.read']},calls=[],telemetry=[];
+  const delayed=(name,value)=>(...args)=>new Promise(resolve=>setImmediate(()=>{calls.push({name,args});resolve(value);}));
+  const framework={
+    catalog:delayed('catalog',{version:3}),inventory:delayed('inventory',[{id:'copy'}]),
+    inventoryPage:delayed('inventoryPage',{items:[{id:'copy'}],next:null}),
+    me:delayed('me',{id:'collector',displayName:'Collector',role:'admin',permissions:['admin.manage']}),
+    viewAlbum:delayed('viewAlbum',{id:'public album',cards:[]}),inspectCard:delayed('inspectCard',{id:'copy 1'}),
+    tradeInventory:delayed('tradeInventory',{items:[],next:null}),
+    registerCommandIntent:delayed('registerCommandIntent',{id:'intent'}),
+    acknowledgeCommandIntent:delayed('acknowledgeCommandIntent',{id:'intent',status:'acknowledged'})
+  };
+  const invoke=async(path,{identity=actor,body}={})=>{
+    const request=Readable.from(body===undefined?[]:[Buffer.from(JSON.stringify(body))]);
+    Object.assign(request,{url:'/api'+path,method:body===undefined?'GET':'POST',headers:{origin:'https://cards.test','content-type':'application/json'}});
+    const headers=new Map(),response={statusCode:200,setHeader:(name,value)=>headers.set(name,value),getHeader:name=>headers.get(name),end(value){this.body=value;}};
+    await createApiHandler({framework,resolveIdentity:()=>identity,allowedOrigin:'https://cards.test',onRequest:event=>telemetry.push(event)})(request,response);
+    assert.equal(response.statusCode,200);assert.equal(headers.get('Cache-Control'),'no-store');
+    assert.equal(telemetry.at(-1).requestId,headers.get('X-Request-ID'));assert.equal(telemetry.at(-1).status,200);
+    return JSON.parse(response.body);
+  };
+  assert.deepEqual(await invoke('/catalog',{identity:null}),{version:3});
+  assert.deepEqual(await invoke('/inventory'),[{id:'copy'}]);
+  assert.deepEqual(await invoke('/inventory?limit=2&after=last'),{items:[{id:'copy'}],next:null});
+  assert.deepEqual(calls.at(-1).args,[actor,{limit:2,after:'last'}]);
+  assert.deepEqual(await invoke('/me'),{id:'collector',displayName:'Collector',role:'player',permissions:['catalog.read']});
+  assert.deepEqual(await invoke('/albums/public%20album',{identity:null}),{id:'public album',cards:[]});
+  assert.deepEqual(calls.at(-1).args,[null,'public album']);
+  assert.deepEqual(await invoke('/cards/copy%201'),{id:'copy 1'});
+  assert.deepEqual(calls.at(-1).args,[actor,'copy 1']);
+  assert.deepEqual(await invoke('/users/other%20user/inventory?limit=5'),{items:[],next:null});
+  assert.deepEqual(calls.at(-1).args,[actor,'other user',{limit:5}]);
+  assert.deepEqual(await invoke('/command-intents',{body:{command:'open'}}),{id:'intent'});
+  assert.deepEqual(await invoke('/command-intents/acknowledge',{body:{id:'intent'}}),{id:'intent',status:'acknowledged'});
+});
+
+test('HTTP catches delayed framework errors and denies unauthorized reads before calling the framework',async()=>{
+  let calls=0;const telemetry=[];
+  const framework=new Proxy({}, {get:()=>async()=>{calls++;await new Promise(resolve=>setImmediate(resolve));throw new FrameworkError('ACCOUNT_DISABLED','Account is disabled',403);}});
+  const invoke=async(path,actor)=>{
+    const headers=new Map(),response={statusCode:200,setHeader:(name,value)=>headers.set(name,value),getHeader:name=>headers.get(name),end(value){this.body=JSON.parse(value);}};
+    await createApiHandler({framework,resolveIdentity:()=>actor,onRequest:event=>telemetry.push(event)})({method:'GET',url:'/api'+path,headers:{}},response);
+    assert.equal(telemetry.at(-1).status,response.statusCode);return response;
+  };
+  assert.equal((await invoke('/inventory',null)).statusCode,401);
+  assert.equal((await invoke('/operator/catalog',{userId:'collector',role:'player'})).statusCode,403);
+  assert.equal(calls,0);
+  const response=await invoke('/me',{userId:'collector',role:'player'});
+  assert.equal(response.statusCode,403);assert.deepEqual(response.body,{code:'ACCOUNT_DISABLED',message:'Account is disabled'});assert.equal(calls,1);
+  const failure=await createApiHandler({framework:{catalog:async()=>{await new Promise(resolve=>setImmediate(resolve));throw Error('private detail');}},resolveIdentity:()=>null})({method:'GET',url:'/api/catalog',headers:{}},{statusCode:200,setHeader(){},getHeader(){},end(value){assert.deepEqual(JSON.parse(value),{code:'INTERNAL_ERROR',message:'The server could not complete this request'});assert.equal(this.statusCode,500);}});
+  assert.equal(failure,true);
 });

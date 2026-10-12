@@ -62,7 +62,7 @@ Trusted account services may use `userByIdentity(operator,{provider,subject})` a
 
 ## HTTP adapter
 
-createApiHandler({framework,resolveIdentity,allowedOrigin}) returns an async Node request handler that handles /api/* and returns true, or false for another route. createFrameworkServer wraps it in an HTTP server. resolveIdentity(request) must return a verified {userId} or null, never an unverified client account ID. Public GET catalog/public albums/individual public album can run anonymously. Other routes require identity. POST requires JSON and the exact configured Origin.
+createApiHandler({framework,resolveIdentity,allowedOrigin}) returns an async Node request handler that handles /api/* and returns true, or false for another route. createFrameworkServer wraps it in an HTTP server. Framework methods consumed by the HTTP adapter may return values or Promises; the adapter awaits results and errors before serializing responses, including composed account data. This adapter contract does not move synchronous database work to another thread. resolveIdentity(request) must return a verified {userId} or null, never an unverified client account ID. Public GET catalog/public albums/individual public album can run anonymously. Other routes require identity. POST requires JSON and the exact configured Origin.
 
 Operator endpoints require a verified host principal with the permissions stated in [the HTTP contract](openapi.json). The [admin panel](admin-panel.md) uses those routes for supported administration tasks. Identity linkage and external payment evidence remain trusted host responsibilities. HTTP errors use stable code,message fields; unknown internal exceptions are redacted as INTERNAL_ERROR.
 

@@ -59,3 +59,26 @@ test('integrity audit diagnoses supply and ledger corruption without altering st
   const store=new SQLiteStore(':memory:'),y=fixture({store});y.open();const snapshot=store.read(s=>s);snapshot.supply['dawn.standard']=9;snapshot.balances[y.a.id].credits+=1;
   assert(!auditState(snapshot).ok);assert(auditState(snapshot).issues.some(i=>i.code==='SUPPLY_MISMATCH'));assert(y.core.audit(admin).ok);y.core.close();x.core.close();
 });
+
+test('authentication waits for account registration before issuing a session and fails closed on rejection',async()=>{
+  for(const rejected of [false,true]){
+    const sessions=new SessionStore(':memory:',{encryptionKey:randomBytes(32)}),flow=sessions.create('flow',{},60000);
+    let release;const pending=new Promise(resolve=>{release=resolve;}),events=[];
+    const framework={async registerUser(){events.push('register');await pending;if(rejected)throw Error('Registration failed');events.push('registered');return {id:'collector'};}};
+    const provider={async finish(){return {issuer:'https://issuer.test',subject:'collector',displayName:'Collector'};}};
+    const host=createAuthHost({framework,sessions,provider,origin:'http://cards.test',secure:false});
+    const headers=new Map(),response={statusCode:200,setHeader:(name,value)=>headers.set(name,value),end(){events.push('responded');}};
+    try{
+      const handled=host.handle({url:'/auth/callback',method:'GET',headers:{cookie:'dc_flow='+flow}},response);
+      await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(events,['register']);assert.equal(headers.has('Set-Cookie'),false);
+      release();assert.equal(await handled,true);
+      assert.equal(response.statusCode,rejected?400:303);
+      if(rejected)assert.equal(headers.get('Set-Cookie').startsWith('dc_flow='),true);
+      else{
+        const sessionCookie=headers.get('Set-Cookie').find(value=>value.startsWith('dc_session=')).split(';')[0];
+        assert.equal(host.resolveIdentity({headers:{cookie:sessionCookie}}).userId,'collector');
+        assert.deepEqual(events,['register','registered','responded']);
+      }
+    }finally{sessions.close();}
+  }
+});

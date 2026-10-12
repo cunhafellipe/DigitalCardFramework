@@ -28,7 +28,9 @@ const codeProviderRegistry=createCodeProviderRegistry({codeProviders:extension.c
 const codeKeyConfig=await secret('CODE_VAULT_KEYS'),codeIndex=await secret('CODE_INDEX_KEY');
 const codeVaultOptions=codeKeyConfig?({activeKeyId:process.env.CODE_ACTIVE_KEY_ID,keys:Object.fromEntries(Object.entries(JSON.parse(codeKeyConfig)).map(([id,hex])=>[id,keyFromHex(hex)])),indexKey:keyFromHex(codeIndex)}):undefined;
 const workerOptions=extension.workerOptions??{};for(const name of Object.keys(workerOptions))if(!['maxPendingRequests','maxPendingBytes','startupTimeoutMs','closeTimeoutMs'].includes(name))throw new Error('Unsupported worker option '+name);
-const framework=new FrameworkWorkerService({filename:dbPath,storeOptions:{encryptionKey,maxCompletionBytes:extension.limits?.completionBytes},sessionOptions:{encryptionKey,maxSessions:extension.sessionOptions?.maxSessions},extensionModule:process.env.HOST_MODULE,codeVaultOptions,
+const storageOptions=extension.storageOptions??{};if(typeof storageOptions!=='object'||Array.isArray(storageOptions))throw new Error('Invalid storage options');for(const name of Object.keys(storageOptions))if(name!=='maxStateBytes')throw new Error('Unsupported storage option '+name);
+if(storageOptions.maxStateBytes!==undefined&&(!Number.isSafeInteger(storageOptions.maxStateBytes)||storageOptions.maxStateBytes<1))throw new Error('Invalid storage capacity');
+const framework=new FrameworkWorkerService({filename:dbPath,storeOptions:{encryptionKey,maxStateBytes:storageOptions.maxStateBytes,maxCompletionBytes:extension.limits?.completionBytes},sessionOptions:{encryptionKey,maxSessions:extension.sessionOptions?.maxSessions},extensionModule:process.env.HOST_MODULE,codeVaultOptions,
   frameworkOptions:{limits:{users:500,copies:5000,packs:2000,requests:20000,albums:2000,trades:2000,copiesPerUser:1000,packsPerUser:500}},...workerOptions});
 try {
 await framework.ready;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a validated production host setting for the ordinary storage payload budget, retaining the 64 MiB default and separate completion limits.
+
 - Added a versioned remote code-status provider protocol and bounded authenticated HTTP bridge with data-only host configuration, cancellation and disable controls.
 
 - Moved production authentication session operations into the framework worker, preserving atomic login challenge consumption and awaited session creation/revocation. Synchronous embedded session stores remain supported.

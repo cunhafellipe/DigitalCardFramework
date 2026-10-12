@@ -17,6 +17,7 @@ export class SessionStore {
   create(kind,data,ttl){if(!['session','flow'].includes(kind)||!Number.isSafeInteger(ttl)||ttl<1)throw new Error('Invalid session kind or lifetime');const secret=token();this.#db.exec('BEGIN IMMEDIATE');try{this.#db.prepare('DELETE FROM auth_sessions WHERE expires<=?').run(this.#clock());if(this.#db.prepare('SELECT COUNT(*) AS total FROM auth_sessions').get().total>=this.#maxSessions)throw new Error('Authentication session capacity reached');this.#db.prepare('INSERT INTO auth_sessions VALUES (?,?,?,?)').run(hash(secret),kind,this.#clock()+ttl,this.#codec.encode(data));this.#db.exec('COMMIT');return secret;}catch(error){this.#db.exec('ROLLBACK');throw error;}}
   get(secret,kind,{consume=false}={}){
     if(typeof secret!=='string'||!/^[\w-]{43}$/.test(secret))return null;
+    if(!consume){const row=this.#db.prepare('SELECT * FROM auth_sessions WHERE digest=? AND kind=?').get(hash(secret),kind);return row&&row.expires>this.#clock()?this.#codec.decode(row.payload):null;}
     this.#db.exec('BEGIN IMMEDIATE');try{const row=this.#db.prepare('SELECT * FROM auth_sessions WHERE digest=? AND kind=?').get(hash(secret),kind);
       if(consume||row?.expires<=this.#clock())this.#db.prepare('DELETE FROM auth_sessions WHERE digest=?').run(hash(secret));
       const result=row&&row.expires>this.#clock()?this.#codec.decode(row.payload):null;this.#db.exec('COMMIT');return result;

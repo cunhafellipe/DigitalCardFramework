@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed write-lock acquisition from ordinary session reads so authenticated requests can read committed sessions while framework writes are in progress. Login-challenge consumption remains atomic.
+
 - Added a worker-backed framework service and production host integration with bounded admission, cancellation, readiness checks and draining shutdown. Failed workers do not automatically replay mutations.
 
 - Await asynchronous framework results across API reads, login registration and code/currency reconciliation, preserving authorization checks before provider calls.

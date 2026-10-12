@@ -1,3 +1,4 @@
+import {DatabaseSync} from 'node:sqlite';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
@@ -81,4 +82,15 @@ test('authentication waits for account registration before issuing a session and
       }
     }finally{sessions.close();}
   }
+});
+
+
+test('ordinary session reads remain available under a concurrent database writer and observe expiry and revocation',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'session-read-')),path=join(dir,'state.sqlite');let now=0;
+  const sessions=new SessionStore(path,{encryptionKey:randomBytes(32),clock:()=>now}),secret=sessions.create('session',{userId:'collector'},100),flow=sessions.create('flow',{nonce:'once'},100),writer=new DatabaseSync(path);
+  try{
+    writer.exec('BEGIN IMMEDIATE');
+    try{assert.equal(sessions.get(secret,'session').userId,'collector');assert.equal(sessions.get(secret,'flow'),null);now=101;assert.equal(sessions.get(secret,'session'),null);assert.equal(sessions.get(flow,'flow'),null);}finally{writer.exec('ROLLBACK');}
+    now=0;sessions.revoke(secret);assert.equal(sessions.get(secret,'session'),null);assert.deepEqual(sessions.get(flow,'flow',{consume:true}),{nonce:'once'});assert.equal(sessions.get(flow,'flow',{consume:true}),null);
+  }finally{writer.close();sessions.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -55,7 +55,28 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false}={}){
+export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false,listingCreation=false}={}){
+  const derived=plan.changes.filter(row=>['_shopListingCounts','_codeIdentities','_codeStock'].includes(row.collection));
+  for(const row of derived){
+    if(row.collection==='_shopListingCounts'){const delta=plan.changes.filter(item=>item.collection==='listings').reduce((n,item)=>n+Number(item.value?.shopId===row.key&&item.value.status==='active')-Number(item.old?.value.shopId===row.key&&item.old.value.status==='active'),0);check(delta!==0&&row.value===(row.old?.value??0)+delta,'INVALID_STATE','Listing count projection differs',500);}
+    else if(row.collection==='_codeStock')check(plan.changes.some(item=>item.collection==='codes'&&item.key===row.key&&isDeepStrictEqual(row.value,{id:item.key,variantId:item.key,poolId:item.value.poolId,status:item.value.status,createdAt:item.value.expiresAt?new Date(item.value.expiresAt).toISOString():''})),'INVALID_STATE','Code stock projection differs',500);
+    else check(!row.old&&plan.changes.some(item=>item.collection==='codes'&&!item.old&&item.key===row.value&&(row.key===JSON.stringify(['fingerprint',item.value.fingerprint])||item.value.externalId&&row.key===JSON.stringify(['external',item.value.providerId,item.value.externalId]))),'INVALID_STATE','Code identity projection differs',500);
+  }
+  plan={...plan,changes:plan.changes.filter(row=>!derived.includes(row))};
+  if(listingCreation){
+    check(!plan.scalars.length&&!plan.completion,'RECORD_TRANSACTION_UNSUPPORTED','Listing creation requires ordinary admission',409);
+    const listings=plan.changes.filter(row=>row.collection==='listings');check(listings.length===1&&!listings[0].old&&listings[0].value.status==='active','INVALID_STATE','One new active listing required',500);
+    const listing=listings[0].value,lock='market:'+listing.id;
+    for(const row of plan.changes){
+      check(['listings','copies','packs','codes','supply','pity','requests','events','actionJobs','completionObligations','_copyReferences'].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside listing creation scope',409);
+      if(['listings','requests','events','actionJobs','_copyReferences'].includes(row.collection))check(!row.old,'INVALID_STATE','Listing creation cannot replace accepted records',500);
+      if(['copies','packs'].includes(row.collection)){check(row.value.ownerId===listing.sellerId&&row.value.lockedBy===lock,'INVALID_STATE','Listing stock requires matching seller reservation',500);if(row.old){const stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>key!=='lockedBy'));check(!row.old.value.lockedBy&&isDeepStrictEqual(stable(row.old.value),stable(row.value)),'INVALID_STATE','Existing stock identity is immutable',500);}}
+      if(row.collection==='codes'&&row.old){check(row.old.value.status==='available'&&row.value.status==='allocated','INVALID_STATE','Only available code stock may be allocated',500);const stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['status','copyId','holderId','attachmentId','reveal','transfer','title','redeemUrl','instructions','allocatedAt','history','updatedAt'].includes(key)));check(isDeepStrictEqual(stable(row.old.value),stable(row.value)),'INVALID_STATE','Code stock identity is immutable',500);}
+      if(row.collection==='completionObligations')check(!row.old,'INVALID_STATE','New listing cannot replace reservations',500);
+    }
+    const additions=Object.fromEntries(['copies','packs','listings','actionJobs','completionObligations'].map(field=>[field,Object.fromEntries((field==='completionObligations'?plan.loaded:plan.changes).filter(row=>row.collection===field).map(row=>[row.key,row.value]))]));check(missingCompletions(additions).length===0,'COMPLETION_MIGRATION_REQUIRED','Listing stock requires completion reservations',503);
+    return;
+  }
   if(!plan.changes.length&&!plan.scalars.length&&!plan.completion)return;
   if(listingPurchase){
     check(!plan.scalars.length&&!plan.completion,'RECORD_TRANSACTION_UNSUPPORTED','Listing purchases require ordinary admission',409);
@@ -189,6 +210,7 @@ export function createRecordTransaction(backend,{maxRecords=4096,maxBytes=16*102
     ownerCounts(ownerId){keyName(ownerId);charge(0);const result=clone(backend.ownerCounts(ownerId));
       const apply=(collection,row,delta)=>{if(!row)return;if(collection==='copies'&&row.ownerId===ownerId){result.copies+=delta;if(row.state==='owned')result.ownedCopies+=delta;if(row.state==='sealed')result.sealedCopies+=delta;}if(collection==='packs'&&row.ownerId===ownerId){result.packs+=delta;if(!row.openedAt)result.unopenedPacks+=delta;}if(collection==='codes'&&row.holderId===ownerId)result.codes+=delta;};
       for(const row of records.values()){apply(row.collection,row.old?.value,-1);apply(row.collection,row.value,1);}return result;},
+    availableCodeStock(poolId,limit,at){keyName(poolId);check(Number.isSafeInteger(limit)&&limit>=1&&limit<=1000,'RECORD_PATH_UNAVAILABLE','Code stock scope requires compatibility allocation',409);return backend.availableCodeStock(poolId,limit,at,charge).map(row=>clone(row));},
     ownedVariantCount(ownerId,variantIds){keyName(ownerId);check(Array.isArray(variantIds)&&variantIds.length<=2000&&variantIds.every(id=>typeof id==='string'&&id.length<=2048),'INVALID_INPUT','Invalid owned variant query');charge(Buffer.byteLength(JSON.stringify(variantIds)));const ids=new Set(variantIds),matches=row=>!!row&&row.ownerId===ownerId&&row.state==='owned'&&ids.has(row.variantId);let total=backend.ownedVariantCount(ownerId,[...ids]);for(const row of records.values())if(row.collection==='copies')total+=Number(matches(row.value))-Number(matches(row.old?.value));return total;},
     put(name,key,value){const metadata=field(name),kind=metadata?.kind??createdKinds.get(name);check(!kind||kind==='object','INVALID_INPUT','put requires an object collection');check(value!==undefined,'INVALID_INPUT','Cannot store undefined');createdKinds.set(name,'object');const row=load(name,key);row.value=clone(value);if(row.ordinal===undefined)row.ordinal=ordinal(name);if(name==='copies'&&!row.old)api.put('_copyReferences',key,{users:[],albums:[]});return clone(value);},
     append(name,value){const metadata=field(name),kind=metadata?.kind??createdKinds.get(name);check(!kind||kind==='array','INVALID_INPUT','append requires an array collection');check(value!==undefined,'INVALID_INPUT','Cannot store undefined');createdKinds.set(name,'array');const index=ordinal(name),key=name==='notifications'?value.id:String(index),row=load(name,key);check(!row.old&&row.value===undefined,'INVALID_STATE','Append position is occupied',500);row.value=clone(value);row.ordinal=index;row.array=true;return index;},

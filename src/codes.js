@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { types } from 'node:util';
+import {recordContexts} from './record-context.js';
 import { check, text, integer, jsonObject } from './catalog.js';
 import { hasPermission } from './access.js';
 import { safeData, page } from './data.js';
@@ -161,13 +162,13 @@ export class CodeService {
 
   assertGeneratedCapacity(s, count) {
     integer(count, 'generated code count', 0);
-    check(Object.keys(s.codes ?? {}).length + count <= this.#maxCodes, 'INSTALLATION_CAPACITY', 'Code capacity reached', 507);
+    check((recordContexts.get(s)?.codeCount??0)+Object.keys(s.codes ?? {}).length + count <= this.#maxCodes, 'INSTALLATION_CAPACITY', 'Code capacity reached', 507);
   }
 
   allocateGenerated(s, pool, copy, at) {
     const generator = this.#generators[pool.generator];
     check(typeof generator === 'function', 'MISSING_CODE_GENERATOR', 'Code generator unavailable', 503);
-    check(Object.keys(s.codes ?? {}).length < this.#maxCodes, 'INSTALLATION_CAPACITY', 'Code capacity reached', 507);
+    check((recordContexts.get(s)?.codeCount??0)+Object.keys(s.codes ?? {}).length < this.#maxCodes, 'INSTALLATION_CAPACITY', 'Code capacity reached', 507);
     const value = generator({ copy: structuredClone(copy), pool: structuredClone(pool) });
     if(value && typeof value.then==='function')Promise.resolve(value).catch(()=>{});
     check(value && !value.then, 'INVALID_PROVIDER', 'Code generator must return synchronously');
@@ -176,7 +177,7 @@ export class CodeService {
     const code = pool.normalization === 'upper-trim' ? value.code.trim().toUpperCase() : value.code;
     text(code,'generated code',512);
     const vault = this.#checkVault(s), fingerprint = vault.fingerprint({providerId:pool.providerId,code});
-    check(!Object.values(s.codes).some(row=>row.fingerprint===fingerprint || (value.externalId && row.providerId===pool.providerId && row.externalId===value.externalId)), 'DUPLICATE_CODE', 'Generated identity collision', 409);
+    check(!recordContexts.get(s)?.codeIdentityExists?.(fingerprint,pool.providerId,value.externalId)&&!Object.values(s.codes).some(row=>row.fingerprint===fingerprint || (value.externalId && row.providerId===pool.providerId && row.externalId===value.externalId)), 'DUPLICATE_CODE', 'Generated identity collision', 409);
     if(value.externalId !== undefined)text(value.externalId,'external code reference',300);
     const row={id:randomUUID(),poolId:pool.id,providerId:pool.providerId,fingerprint,batchId:null,importedAt:at,
       externalId:value.externalId??null,expiresAt:null,metadata:jsonObject(value.metadata??{}),status:'available',

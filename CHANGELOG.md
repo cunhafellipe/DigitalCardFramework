@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded listing creation for prepared stores across owned cards/packs, minted cards/packs and custom actions. Creation preserves stock locks, allocation snapshots, code uniqueness, shop limits and future completion reservations.
+
 - Added bounded listing cancellation for prepared stores, preserving seller/manager authorization, stock release, completion reservations and exact-key receipt replay.
 
 - Added bounded listing quotes and purchases for prepared stores, preserving card, sealed-pack, custom-action and raffle-claim behavior. Revision-bound buyer totals enforce purchase limits without scanning order history; payment, stock, ownership, receipts and delivery jobs commit atomically.

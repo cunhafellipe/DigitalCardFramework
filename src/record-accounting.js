@@ -69,6 +69,23 @@ export function updateTradeEscrow(state){
  state._copyReferences=references;
  const purchases=Object.create(null);for(const order of Object.values(state.orders??{})){const key=JSON.stringify([order.listingId,order.buyerId]),sum=(purchases[key]??0)+order.quantity;check(Number.isSafeInteger(sum)&&sum>=0,'INVALID_STATE','Invalid listing purchase quantity',500);purchases[key]=sum;}
  state._listingPurchases=purchases;state._listingPurchasesReady=true;state._listingPurchasesRevision=state.revision;
+ const shops=Object.create(null);for(const listing of Object.values(state.listings??{}))if(listing.status==='active')shops[listing.shopId]=(shops[listing.shopId]??0)+1;
+ state._shopListingCounts=shops;
+ const identities=Object.create(null);for(const code of Object.values(state.codes??{})){identities[JSON.stringify(['fingerprint',code.fingerprint])]=code.id;if(code.externalId)identities[JSON.stringify(['external',code.providerId,code.externalId])]=code.id;}
+ state._codeIdentities=identities;state._codeStock=Object.fromEntries(Object.values(state.codes??{}).map(row=>[row.id,{id:row.id,variantId:row.id,poolId:row.poolId,status:row.status,createdAt:row.expiresAt?new Date(row.expiresAt).toISOString():''}]));state._listingCreationReady=true;state._listingCreationRevision=state.revision;
+}
+
+/** Maintain encrypted creation projections alongside record changes. */
+export function updateListingCreationRecords(tx,plan){
+ if(tx.value('_listingCreationReady')!==true||tx.value('_listingCreationRevision')!==tx.value('revision'))return;
+ for(const row of plan.changes){
+  if(row.collection==='listings'){
+   const deltas=new Map();for(const [value,sign]of [[row.old?.value,-1],[row.value,1]])if(value?.status==='active')deltas.set(value.shopId,(deltas.get(value.shopId)??0)+sign);
+   for(const [shopId,delta]of deltas)if(delta){const count=(tx.get('_shopListingCounts',shopId)??0)+delta;check(Number.isSafeInteger(count)&&count>=0,'INVALID_STATE','Invalid active listing count',500);tx.put('_shopListingCounts',shopId,count);}
+  }
+  if(row.collection==='codes'&&!row.old){tx.put('_codeIdentities',JSON.stringify(['fingerprint',row.value.fingerprint]),row.key);if(row.value.externalId)tx.put('_codeIdentities',JSON.stringify(['external',row.value.providerId,row.value.externalId]),row.key);}
+  if(row.collection==='codes')tx.put('_codeStock',row.key,{id:row.key,variantId:row.key,poolId:row.value.poolId,status:row.value.status,createdAt:row.value.expiresAt?new Date(row.value.expiresAt).toISOString():''});
+ }
 }
 
 export const recordPreparationMarker='prepare-accounting-v3';

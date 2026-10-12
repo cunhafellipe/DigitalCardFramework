@@ -51,6 +51,7 @@ export class CardFramework {
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
       cancelListingCommand:(actor,key,type,input,fn)=>this.#cancelListingRecords(actor,key,input,fn),
+      createListingCommand:(actor,key,type,input,fn)=>this.#createListingRecords(actor,key,input,fn),
       listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn)=>this.#listingRecords(actor,key,input,fn),
       selectDueExpirations:(collection,at,limit)=>store.selectDueExpirations?store.selectDueExpirations(collection,at,limit):store.read(s=>Object.values(s[collection]??{}).filter(l=>l.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(date=>Date.parse(date)<=Date.parse(at))).slice(0,limit).map(l=>l.id)),expireListing:(listingId,release)=>this.#expireListingRecords(listingId,release),
       user:(s,a)=>this.#user(s,a),currency:(s,id)=>this.#currency(s,id),blocked:(s,a,b)=>this.#blocked(s,a,b),
@@ -925,6 +926,40 @@ export class CardFramework {
     this.#notify(s,trade.fromUserId,'trade.'+status,{tradeId:trade.id});this.#notify(s,trade.toUserId,'trade.'+status,{tradeId:trade.id});
   });}
 
+  #createListingRecords(actor,key,input,fn){
+    const type='listing.created',fallback=()=>this.#command(actor,key,type,input,fn);text(key,'idempotency key',128);
+    if(!this.#store.transactRecords)return fallback();let invoked=false;
+    try{return this.#store.transactRecords(tx=>{
+      const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input}),previous=tx.get('requests',token);
+      if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
+      let accounting;const raw=tx.value(recordAccountingField);try{accounting=JSON.parse(raw);}catch{}
+      if(raw!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);
+      check(validRecordAccounting(accounting,tx.value('revision'))&&tx.value('_listingCreationReady')===true&&tx.value('_listingCreationRevision')===accounting.revision,'RECORD_PATH_UNAVAILABLE','Prepare listing creation projections',503);
+      const shop=typeof input.shopId==='string'?tx.get('shops',input.shopId):null,users={[user.id]:user};
+      if(shop?.ownerId!==user.id&&shop?.ownerId){const seller=tx.get('users',shop.ownerId);if(seller)users[seller.id]=seller;}
+      const state={schemaVersion:1,revision:accounting.revision,catalog:tx.value('catalog'),adminControls:tx.value('adminControls'),cardAuthoring:tx.value('cardAuthoring'),tradingPolicy:tx.value('tradingPolicy'),commerceSettings:tx.value('commerceSettings'),users,shops:shop?{[shop.id]:shop}:{},copies:{},packs:{},codes:{},codePools:{},supply:{},pity:{},cardValidation:{},listings:{},orders:{},trades:{},requests:{},events:[],ledger:[],notifications:[],completionObligations:{}};
+      const items=input.items,copyIds=new Set();
+      if(['copies','packs'].includes(items.kind)&&Array.isArray(items.ids))for(const id of items.ids){if(typeof id!=='string')continue;if(items.kind==='copies')copyIds.add(id);else{const pack=tx.get('packs',id);if(pack){state.packs[id]=pack;for(const copyId of pack.copyIds)copyIds.add(copyId);const obligation=tx.get('completionObligations','pack:'+id);check(obligation?.status==='reserved','RECORD_PATH_UNAVAILABLE','Stock pack requires its reservation',409);state.completionObligations[obligation.id]=obligation;}}}
+      for(const id of copyIds){const copy=tx.get('copies',id);if(!copy)continue;state.copies[id]=copy;for(const codeId of copy.codeIds??[]){const code=tx.get('codes',codeId);check(code,'INVALID_STATE','Attached stock code missing',500);state.codes[codeId]=code;}}
+      const product=items.kind==='mint-pack'?effectiveProduct(state,state.catalog?.products.find(row=>row.id===items.productId)):null;
+      const variantIds=items.kind==='mint-card'?[items.variantId]:product?[...new Set(product.slots.flatMap(slot=>slot.pool.map(entry=>entry.variantId)))]:[];
+      for(const variantId of variantIds){if(typeof variantId!=='string')continue;state.supply[variantId]=tx.get('supply',variantId)??0;const validation=tx.get('cardValidation',variantId);if(validation)state.cardValidation[variantId]=validation;}
+      const variants=variantIds.map(id=>state.catalog?.variants.find(row=>row.id===id)).filter(Boolean);
+      const demand=new Map(),addDemand=(variantIds,count)=>{for(const poolId of new Set(variantIds.flatMap(id=>(state.catalog?.variants.find(row=>row.id===id)?.codes??[]).map(spec=>spec.poolId)))){const maximum=Math.max(0,...variantIds.map(id=>(state.catalog?.variants.find(row=>row.id===id)?.codes??[]).filter(spec=>spec.poolId===poolId).length));demand.set(poolId,(demand.get(poolId)??0)+maximum*count);}};
+      if(Number.isSafeInteger(items.quantity)&&items.quantity>0){if(items.kind==='mint-card')addDemand(variantIds,items.quantity);else if(product)for(const slot of product.slots)addDemand(slot.pool.map(entry=>entry.variantId),items.quantity*slot.count);}
+      for(const [poolId,needed]of demand){const pool=tx.get('codePools',poolId);if(pool){state.codePools[poolId]=pool;if(!pool.generator)for(const code of tx.availableCodeStock(poolId,needed,this.#clock()))state.codes[code.id]=code;}}
+      const ownerCountsById={};if(shop){const counts=tx.ownerCounts(shop.ownerId);for(const copy of Object.values(state.copies)){if(copy.ownerId===shop.ownerId){if(copy.state==='owned')counts.ownedCopies--;if(copy.state==='sealed')counts.sealedCopies--;}}for(const pack of Object.values(state.packs))if(pack.ownerId===shop.ownerId){counts.packs--;if(!pack.openedAt)counts.unopenedPacks--;}ownerCountsById[shop.ownerId]=counts;if(items.kind==='mint-pack')state.pity[shop.ownerId]=tx.get('pity',shop.ownerId)??{};}
+      const part=summarizeRecords(state);for(const field of ['copies','packs','shops'])accounting.counts[field]-=part.counts[field]??0;for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
+      const quantity=Number.isSafeInteger(items.quantity)?items.quantity:0,draws=items.kind==='mint-pack'?quantity*(product?.slots.reduce((n,slot)=>n+slot.count,0)??0):items.kind==='mint-card'?quantity:0;
+      check(copyIds.size*5+draws*12+Object.keys(state.codes).length*2+quantity*3<2800&&Buffer.byteLength(JSON.stringify(state))<4*1024*1024,'RECORD_PATH_UNAVAILABLE','Listing creation requires compatibility scope',409);
+      const codeCount=tx.count('codes')-Object.keys(state.codes).length,activeShopListings=shop?(tx.get('_shopListingCounts',shop.id)??0):0;
+      recordContexts.set(state,{accounting,ownerCountsById,activeShopListings,codeCount,codeIdentityExists:(fingerprint,providerId,externalId)=>!!tx.get('_codeIdentities',JSON.stringify(['fingerprint',fingerprint]))||!!(externalId&&tx.get('_codeIdentities',JSON.stringify(['external',providerId,externalId])))});
+      try{invoked=true;const result=fn(state,user);this.#reserve(state,'listing',result.id);state.requests[token]={hash,result:clone(result)};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
+        for(const field of ['supply','pity','copies','packs','codes','listings','requests','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);
+        for(const row of state.events)tx.append('events',row);return result;
+      }finally{recordContexts.delete(state);}
+    },{listingCreation:true});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+  }
   #listingRecords(actor,key,input,fn,purchasing=true){
     const type='shop.purchased';
     const fallback=()=>purchasing?this.#command(actor,key,type,input,fn):this.#store.read(s=>fn(s));

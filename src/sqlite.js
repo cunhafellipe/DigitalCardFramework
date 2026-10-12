@@ -1,6 +1,6 @@
 import {completionPool} from './completion.js';
 import {createRecordTransaction,validateRecordPlan} from './record-transaction.js';
-import {validRecordAccounting,recordAccountingField,summarizeRecords,finalizeRecordAccounting,refreshTradeAccounting,recordPreparationMarker} from './record-accounting.js';
+import {validRecordAccounting,recordAccountingField,summarizeRecords,finalizeRecordAccounting,refreshTradeAccounting,recordPreparationMarker,updateListingCreationRecords} from './record-accounting.js';
 import {DatabaseSync,backup} from 'node:sqlite';
 import {existsSync,mkdtempSync,chmodSync,rmSync,statSync} from 'node:fs';
 import {createHash,createHmac} from 'node:crypto';
@@ -201,7 +201,7 @@ export class SQLiteStore {
   prepareRecordTransactions({force=false}={}){
     return this.transact(state=>{
       let summary;try{summary=JSON.parse(state[recordAccountingField]);}catch{}
-      if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision)return {prepared:false};
+      if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision&&state._listingCreationReady===true&&state._listingCreationRevision===state.revision)return {prepared:false};
       state[recordAccountingField]=recordPreparationMarker;
       return {prepared:true};
     });
@@ -221,11 +221,12 @@ export class SQLiteStore {
         count:name=>this.#db.prepare('SELECT COUNT(*) AS n FROM framework_entities WHERE collection=?').get(name).n,
         nextOrdinal:name=>this.#db.prepare('SELECT COALESCE(MAX(ordinal)+1,0) AS n FROM framework_entities WHERE collection=?').get(name).n,
         ownerCounts:ownerId=>sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey).collectionCounts(ownerId),
+        availableCodeStock:(poolId,limit,at,charge)=>{charge(0);const ids=this.#db.prepare("SELECT variant_id FROM framework_entities INDEXED BY framework_pool_status WHERE collection='_codeStock' AND pool_id=? AND status='available' AND (created_at='' OR created_at>?) ORDER BY ordinal LIMIT ?").all(poolId,new Date(at).toISOString(),limit);return ids.map(item=>{const row=this.#db.prepare("SELECT payload FROM framework_entities WHERE collection='codes' AND entity_key=?").get(item.variant_id);check(row,'INVALID_STATE','Projected code stock is missing',500);return decode(row,'codes',item.variant_id,charge).value;});},
         notificationOverflow:(ownerId,keep,charge)=>{const count=this.#db.prepare("SELECT COUNT(*) AS n FROM framework_entities WHERE collection='notifications' AND owner_id=?").get(ownerId).n;charge(0);const rows=this.#db.prepare("SELECT entity_key,ordinal,payload FROM framework_entities INDEXED BY framework_notification_owner_order WHERE collection='notifications' AND owner_id=? ORDER BY ordinal LIMIT ?").all(ownerId,Math.max(0,count-keep));return rows.map(row=>({key:decode(row,'notifications',row.entity_key,charge).key}));},
         ownedVariantCount:(ownerId,variantIds)=>variantIds.length?this.#db.prepare("SELECT COUNT(*) AS n FROM framework_entities INDEXED BY framework_owner_variant WHERE collection='copies' AND owner_id=? AND state='owned' AND variant_id IN ("+variantIds.map(()=>'?').join(',')+")").get(ownerId,...variantIds).n:0,
       };
       scope=createRecordTransaction(backend,options);
-      const result=cloneResult(fn(scope.api)),plan=scope.finish();
+      const result=cloneResult(fn(scope.api));updateListingCreationRecords(scope.api,scope.finish());const plan=scope.finish();
       if(plan.changes.length||plan.scalars.length){
         validateRecordPlan(plan,options);
         const revision=scope.api.value('revision');let summary;
@@ -245,7 +246,7 @@ export class SQLiteStore {
           if(row.value!==undefined){if(kind==='array')partial[row.collection].push(row.value);else partial[row.collection][row.key]=row.value;}
           if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);
         }
-        if(options.listingCompletion||options.listingCancellation||options.listingPurchase)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
+        if(options.listingCompletion||options.listingCancellation||options.listingPurchase||options.listingCreation)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&row.old&&!row.old.value.receipt)){
           const obligation=scope.api.get('completionObligations','pack:'+pack.key);check(obligation?.status==='reserved','COMPLETION_MIGRATION_REQUIRED','Listed pack requires its existing reservation',503);
           previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);previousPartial.completionObligations[obligation.id]=obligation;partial.completionObligations[obligation.id]=obligation;
         }
@@ -262,6 +263,7 @@ export class SQLiteStore {
         const scalar=(name,old,value)=>{before.fields.set(name,{kind:'scalar',raw:JSON.stringify(old),value:old});after.fields.set(name,{kind:'scalar',raw:JSON.stringify(value),value});};
         scalar('revision',revision,summary.revision);
         const purchaseRevision=scope.api.value('_listingPurchasesRevision');if(purchaseRevision===revision){scalar('_listingPurchasesRevision',purchaseRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,purchaseRevision);}
+        const creationRevision=scope.api.value('_listingCreationRevision');if(creationRevision===revision){scalar('_listingCreationRevision',creationRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_listingCreationRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_listingCreationRevision',null,creationRevision);}
         delta+=encodedRecordBytes(this.#codec,'revision',null,summary.revision)-encodedRecordBytes(this.#codec,'revision',null,revision);
         for(const row of plan.scalars){if(row.old!==undefined)before.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.old),value:row.old});after.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.value),value:row.value});delta+=encodedRecordBytes(this.#codec,row.name,null,row.value)-(row.old===undefined?0:encodedRecordBytes(this.#codec,row.name,null,row.old));}
         const oldAccounting=scope.api.value(recordAccountingField),accountingBytes=encodedRecordBytes(this.#codec,recordAccountingField,null,oldAccounting);

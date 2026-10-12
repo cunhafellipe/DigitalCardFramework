@@ -44,7 +44,7 @@ export function queryOptions(collection, input = {}) {
 export function projection(collection, key, value) {
   // Only queried domain entities contribute plaintext operational indexes. Identity,
   // arbitrary extension records and private metadata remain inside their payloads.
-  const row = ['copies','packs','codes','externalPurchases','notifications'].includes(collection) && value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const row = ['copies','packs','codes','externalPurchases','notifications','_codeStock'].includes(collection) && value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const name = collection === 'copies' ? row.definition?.name ?? '' : '';
   return {
     key, ownerId: (collection==='notifications'?row.userId:row.ownerId) ?? null, holderId: row.holderId ?? null,

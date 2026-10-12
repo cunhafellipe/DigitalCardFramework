@@ -367,7 +367,7 @@ export class CommerceService {
       "INVALID_INPUT",
       "Invalid stock kind",
     );
-    return this.#b.command(
+    return this.#b.createListingCommand(
       actor,
       key,
       "listing.created",
@@ -393,9 +393,9 @@ export class CommerceService {
         assertAdminShop(s,shop);
         this.#currency(s, shop, price);
         check(
-          Object.values(s.listings).filter(
+          (recordContexts.get(s)?.activeShopListings??Object.values(s.listings).filter(
             (l) => l.shopId === shopId && active(l),
-          ).length < config(s).maxListingsPerShop,
+          ).length) < config(s).maxListingsPerShop,
           "INSTALLATION_CAPACITY",
           "Shop listing limit reached",
           507,

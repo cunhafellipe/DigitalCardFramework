@@ -1633,7 +1633,7 @@ schemas.CreateListing={type:'object',required:['key','shopId','title','price','i
 schemas.CreateListing.properties.allocationDigest=allocationDigest;
 schemas.MintPackStockQuoteInput={type:'object',additionalProperties:false,required:['shopId','productId','quantity'],properties:{shopId:allocationAttemptId,productId:codeId,quantity:{type:'integer',minimum:1,maximum:100}}};
 schemas.MintPackStockQuote={...schemas.MintPackStockQuoteInput,required:['shopId','productId','quantity','allocationDigest'],properties:{...schemas.MintPackStockQuoteInput.properties,allocationDigest}};
-schemas.StockAllocationStatus={type:'object',additionalProperties:false,required:[...schemas.AllocationStatus.required,'shopId','command','attemptShopId'],properties:{...schemas.AllocationStatus.properties,shopId:allocationAttemptId,command:{enum:[null,'purchase','createListing']},attemptShopId:{anyOf:[allocationAttemptId,{type:'null'}]}}};
+schemas.StockAllocationStatus={type:'object',additionalProperties:false,required:[...schemas.AllocationStatus.required,'shopId','command','attemptShopId'],properties:{...schemas.AllocationStatus.properties,shopId:allocationAttemptId,command:{enum:[null,'purchase','createListing','commitExternalPurchase']},attemptShopId:{anyOf:[allocationAttemptId,{type:'null'}]}}};
 
 schemas.ListingQuoteRequest={type:'object',required:['listingId'],properties:{listingId:codeId,quantity:{type:'integer',minimum:1,maximum:1000,default:1}}};
 schemas.ListingPurchase={type:'object',required:['key','listingId','quantity','unitIds','digest'],properties:{...schemas.ListingQuoteRequest.properties,key:requestKey,unitIds:{...boundedIds,uniqueItems:true},digest:{type:'string',pattern:'^[a-f0-9]{64}$'}}};

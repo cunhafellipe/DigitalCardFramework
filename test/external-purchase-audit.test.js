@@ -118,3 +118,22 @@ test('audit verifies attributed legacy resolution against its receipt, original 
     assert.equal(t.core.audit(admin).ok,true,'An opened retained pack remains valid');
   }finally{t.core.close();}
 });
+
+test('audit checks versioned external allocation identity, pending proof and terminal attempt links',()=>{
+  const t=setup();
+  try{
+    const prepared=t.prepare(),s=t.store.read(s=>s),row=s.externalPurchases[prepared.preparationId];
+    row.terms.version=2;row.terms.quote.allocationDigest='a'.repeat(64);row.fingerprint=externalPurchaseDigest(row.terms);
+    for(const key of Object.values(s.externalPurchaseKeys))key.fingerprint=row.fingerprint;
+    const attemptId='12345678-1234-4123-8123-123456789abc',headId='test-head';row.allocationAttemptId=attemptId;
+    s.allocationAttempts={[attemptId]:{id:attemptId,headId,command:'commitExternalPurchase',preparationId:row.preparationId,userId:row.terms.userId,productId:row.terms.quote.productId,inputDigest:row.fingerprint,state:'prepared'}};
+    s.allocationHeads={[headId]:{attemptId}};
+    assert.equal(auditState(s).ok,true,JSON.stringify(auditState(s).issues));
+    const fails=(change,code)=>{const copy=structuredClone(s);change(copy);assert(auditState(copy).issues.some(i=>i.code===code),JSON.stringify(auditState(copy).issues));};
+    fails(c=>{delete c.allocationAttempts[attemptId];},'EXTERNAL_ALLOCATION_IDENTITY_INVALID');
+    fails(c=>{c.allocationHeads[headId].attemptId=null;},'EXTERNAL_ALLOCATION_STATE_INVALID');
+    fails(c=>{c.externalPurchases[row.preparationId].state='allocation_pending';},'EXTERNAL_ALLOCATION_PENDING_INVALID');
+    fails(c=>{c.allocationAttempts[attemptId].inputDigest='b'.repeat(64);},'EXTERNAL_ALLOCATION_IDENTITY_INVALID');
+    fails(c=>{c.externalPurchases[row.preparationId].state='allocation_pending';c.externalPurchases[row.preparationId].allocationPendingAt=row.preparedAt;},'EXTERNAL_PROOF_STATE_INVALID');
+  }finally{t.core.close();}
+});

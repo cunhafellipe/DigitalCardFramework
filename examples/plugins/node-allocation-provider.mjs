@@ -5,6 +5,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {createServer} from 'node:http';
 import {validateAllocationStrategyRequest,validateAllocationStrategyResponse} from '../../src/allocation-strategy-contracts.js';
 import {validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse} from '../../src/stock-allocation-strategy-contracts.js';
+import {validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse} from '../../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../../src/allocation-planner.js';
 
 const token=process.env.ALLOCATION_PROVIDER_TOKEN,providerId=process.env.ALLOCATION_PROVIDER_ID??'example.allocation';
@@ -16,6 +17,7 @@ const credential=Buffer.from('Bearer '+token),maxBody=1048576,maxResponse=262144
 const routes=new Map([
   ['/allocate-packs',[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],
   ['/allocate-stock',[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],
+  ['/allocate-external',[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse]],
 ]);
 function decode(raw){
   const text=new TextDecoder('utf-8',{fatal:true}).decode(raw);let at=0,nodes=0;

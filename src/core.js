@@ -32,6 +32,8 @@ import {TransferPolicyAdmission} from './transfer-policy-admission.js';
 import {createRemoteAllocationStrategy} from './remote-allocation-strategy.js';
 import {createRemoteStockAllocationStrategy} from './remote-stock-allocation-strategy.js';
 import {stockAllocationStrategyProtocol,validateStockAllocationStrategyRequest} from './stock-allocation-strategy-contracts.js';
+import {createRemoteExternalAllocationStrategy} from './remote-external-allocation-strategy.js';
+import {ExternalAllocationCoordinator} from './external-allocation.js';
 import {AllocationIntentService} from './allocation-intents.js';
 
 const clone = value => structuredClone(value);
@@ -44,8 +46,8 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 export class CardFramework {
-  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();#remoteAllocation;#allocationIntents;#allocationAdmissions=new WeakMap();#remoteStockAllocation;#stockAllocationIntents;#allocationActive=new Map();
-  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={},remoteAllocation=null,remoteStockAllocation=null}={}) {
+  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();#remoteAllocation;#allocationIntents;#allocationAdmissions=new WeakMap();#remoteStockAllocation;#stockAllocationIntents;#allocationActive=new Map();#remoteExternalAllocation;#externalAllocation;
+  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={},remoteAllocation=null,remoteStockAllocation=null,remoteExternalAllocation=null}={}) {
     this.#store=store; this.#clock=clock; this.#random=random;
     this.#cardPolicies=new CardPolicyService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),clock});
     this.#administration=new AdminService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),now:clock,mint:(...args)=>this.#mint(...args),open:(...args)=>this.#openCopy(...args),removePlacements:(...args)=>this.#removePlacements(...args)});
@@ -58,7 +60,7 @@ export class CardFramework {
     check(new Set(this.#subscriptions.map(x=>x.id)).size===this.#subscriptions.length,'INVALID_INPUT','Duplicate event subscription ID');
     this.#actions=new ActionService({store,clock,handlers:actionHandlers,options:actionOptions,limits:this.#limits});
     this.#codes=new CodeService({store,vault:codeVault,clock,generators:codeGenerators,...codeLimits,emit:(s,type,data,at)=>this.#event(s,type,data,at)});
-    this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
+    this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row,plan)=>this.#allocateExternalPurchase(s,row,plan),claimAllocation:(s,row)=>{check(this.#externalAllocation,'ALLOCATION_UNAVAILABLE','External allocation strategy is not configured',503);this.#externalAllocation.claim(s,row);},runAllocation:(attempt,signal,evaluate)=>this.#externalAllocation?this.#externalAllocation.run(attempt,signal,evaluate):evaluate(signal??new AbortController().signal),evaluateAllocation:(...args)=>{check(this.#externalAllocation,'ALLOCATION_UNAVAILABLE','External allocation strategy is not configured',503);return this.#externalAllocation.evaluate(...args);},validateAllocation:(s,row,evaluation)=>this.#validateExternalAllocation(s,row,evaluation),completeAllocation:(...args)=>this.#externalAllocation.complete(...args),releaseAllocation:(s,row)=>{if(row.allocationAttemptId)this.#releaseExternalAllocation(s,row);},legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
     check(remotePolicies&&typeof remotePolicies==='object'&&!Array.isArray(remotePolicies)&&(Object.getPrototypeOf(remotePolicies)===Object.prototype||Object.getPrototypeOf(remotePolicies)===null)&&Object.keys(remotePolicies).every(hook=>['canPurchase','canList','canTransfer','canTrade'].includes(hook)),'POLICY_UNSUPPORTED','Unknown remote policy hook');
     try{
       if(Object.hasOwn(remotePolicies,'canPurchase'))this.#remotePurchasePolicy=createRemotePurchasePolicy(remotePolicies.canPurchase);
@@ -67,7 +69,9 @@ export class CardFramework {
       if(Object.hasOwn(remotePolicies,'canTrade'))this.#remoteTradePolicy=createRemoteTradePolicy(remotePolicies.canTrade);
       if(remoteAllocation!==null)this.#remoteAllocation=createRemoteAllocationStrategy(remoteAllocation);
       if(remoteStockAllocation!==null)this.#remoteStockAllocation=createRemoteStockAllocationStrategy(remoteStockAllocation);
-    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#remoteAllocation?.close();this.#remoteStockAllocation?.close();throw error;}
+      if(remoteExternalAllocation!==null)this.#remoteExternalAllocation=createRemoteExternalAllocationStrategy(remoteExternalAllocation);
+    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#remoteAllocation?.close();this.#remoteStockAllocation?.close();this.#remoteExternalAllocation?.close();throw error;}
+    if(this.#remoteExternalAllocation)this.#externalAllocation=new ExternalAllocationCoordinator({provider:this.#remoteExternalAllocation,active:this.#allocationActive,clock});
     this.#transferPolicies=new TransferPolicyAdmission({canTransfer:this.#remoteTransferPolicy,canTrade:this.#remoteTradePolicy});
     if(this.#remoteAllocation)this.#allocationIntents=new AllocationIntentService({store,provider:this.#remoteAllocation,clock,active:this.#allocationActive,prepare:(...args)=>this.#prepareAllocation(...args),commit:(...args)=>this.#commitAllocation(...args),reference:(...args)=>this.#commandIntents.allocationReference(...args),abandon:(...args)=>this.#commandIntents.failAllocationWithinTransaction(...args)});
     this.#commerce=new CommerceService({
@@ -223,7 +227,7 @@ export class CardFramework {
       return {count};
     });
   }
-  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#allocationIntents?.close();this.#stockAllocationIntents?.close();this.#store.close(); }
+  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#allocationIntents?.close();this.#stockAllocationIntents?.close();this.#externalAllocation?.close();this.#store.close(); }
   audit(actor){this.#admin(actor,'audit.read');return this.#store.read(auditState);}
   #admin(actor,permission) { check(hasPermission(actor,permission),'FORBIDDEN','Operator authority required: '+permission,403); }
   #user(s,actor) {
@@ -244,7 +248,7 @@ export class CardFramework {
     for(const p of Object.values(s.packs??{}))if(!p.receipt&&(!userId||p.ownerId===userId))add(p.id,'packs',p.ownerId,['issuance']);
     for(const t of Object.values(s.trades??{}))if(t.status==='pending'&&(!userId||[t.fromUserId,t.toUserId].includes(userId)))add(t.id,'trading',t.fromUserId,workflowRequirements('trading',!!(t.give.currencies.length+t.receive.currencies.length)));
     for(const l of Object.values(s.listings??{}))if(l.status==='active'&&(!userId||l.sellerId===userId||l.entries?.[userId])){const workflow=l.kind==='mint-pack'?'packs':['mint-card','action'].includes(l.kind)?'directSales':'resale';add(l.id,workflow,l.sellerId,workflowRequirements(workflow,l.price.amount>0));}
-    for(const p of Object.values(s.externalPurchases??{}))if(['prepared','refund_required','quarantined'].includes(p.state)&&(!userId||p.terms.userId===userId))add(p.preparationId,'packs',p.terms.userId,['issuance','settlement']);
+    for(const p of Object.values(s.externalPurchases??{}))if(['prepared','allocation_pending','refund_required','quarantined'].includes(p.state)&&(!userId||p.terms.userId===userId))add(p.preparationId,'packs',p.terms.userId,['issuance','settlement']);
     return rows;
   }
   #transitionCapabilities(next,s){try{return transitionCapabilities(next,this.#obligations(s));}catch(error){check(false,'CAPABILITY_OBLIGATION',error.message,409);}}
@@ -483,6 +487,8 @@ export class CardFramework {
   }
   prepareExternalPurchase(actor,input){return this.#externalPurchases.prepare(actor,input);}
   commitExternalPurchase(actor,input){return this.#externalPurchases.commit(actor,input);}
+  commitExternalPurchaseAsync(actor,input,options){return this.#externalPurchases.commitAsync(actor,input,options);}
+  setRemoteExternalAllocationEnabled(actor,{enabled}){this.#admin(actor,'commerce.manage');check(this.#remoteExternalAllocation,'ALLOCATION_UNAVAILABLE','External allocation strategy is not configured',503);return this.#remoteExternalAllocation.setEnabled(enabled);}
   cancelExternalPurchase(actor,input){return this.#externalPurchases.cancel(actor,input);}
   confirmExternalCompensation(actor,input){return this.#externalPurchases.compensate(actor,input);}
   externalPurchaseStatus(actor,input){return this.#externalPurchases.status(actor,input);}
@@ -492,17 +498,17 @@ export class CardFramework {
   resolveLegacyExternalPurchase(actor,input){return this.#externalPurchases.resolveLegacy(actor,input);}
   #captureExternalPurchase(s,user,quote,{recovery=false}={}){
     const catalog=this.#catalog(s),base=lookup(catalog.products,quote.productId);
-    check(!base?.allocationStrategy,'ALLOCATION_UNSUPPORTED','External fulfillment of this allocation strategy is not supported',409);
     check(base&&base.enabled!==false,'UNAVAILABLE','Pack product unavailable',404);
     assertAdminPurchase(s,user.id,base);const product=effectiveProduct(s,base);this.#productTime(product);
     if(!recovery)this.#workflow(s,'packs',product.price.amount>0);
     check(quote.quantity<=product.maxQuantity,'INVALID_INPUT','Quantity exceeds product limit');
-    const expected={productId:product.id,quantity:quote.quantity,productRevision:product.revision,catalogVersion:catalog.version,adminRevision:adminRevision(s),price:{currencyId:product.price.currencyId,amount:product.price.amount*quote.quantity}};
+    const expected={productId:product.id,quantity:quote.quantity,productRevision:product.revision,catalogVersion:catalog.version,adminRevision:adminRevision(s),price:{currencyId:product.price.currencyId,amount:product.price.amount*quote.quantity},...(product.allocationStrategy?{allocationDigest:this.#allocationDigest(product,quote.quantity)}:{})};
     check(fingerprint(expected)===fingerprint(quote),'STALE_QUOTE','Get a fresh quote before buying',409);
     const maxCopies=product.slots.reduce((total,slot)=>total+slot.count,0)*quote.quantity;
     for(const [field,count,added]of [['copies',Object.keys(s.copies).length,maxCopies],['packs',Object.keys(s.packs).length,quote.quantity],['copiesPerUser',Object.values(s.copies).filter(c=>c.ownerId===user.id&&c.state!=='consumed').length,maxCopies],['packsPerUser',Object.values(s.packs).filter(p=>p.ownerId===user.id).length,quote.quantity]])if(this.#limits[field]!==undefined)check(count+added<=this.#limits[field],'INSTALLATION_CAPACITY','Purchase exceeds '+field+' capacity',507);
+    let allocation;if(product.allocationStrategy){check(!recovery,'ALLOCATION_UNSUPPORTED','Legacy weighted allocation recovery is not supported',409);check(this.#externalAllocation,'ALLOCATION_UNAVAILABLE','External allocation strategy is not configured',503);const variants=[...new Set(product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>catalog.variants.find(v=>v.id===id));allocation={context:this.#allocationContext(s,user,variants,product,quote.quantity),snapshotDigest:this.#externalAllocationDigest(s,product)};}
     this.#assertExternalAllocationReady(s,user,product,quote.quantity);
-    return {catalog:clone(catalog),product:clone(product),cardValidation:clone(s.cardValidation??{})};
+    return {catalog:clone(catalog),product:clone(product),cardValidation:clone(s.cardValidation??{}),...(allocation?{allocation}:{})};
   }
   #assertExternalAllocationReady(s,user,product,quantity){
     const catalog=this.#catalog(s),at=this.#clock(),checked=new Set(),readiness=new Map(),guaranteedCodes=new Map(),guaranteedVariants=new Map();let minimumGeneratedTotal=0;
@@ -544,18 +550,22 @@ export class CardFramework {
     this.#codes.assertAllocationReady(s,specs,at);
     if(minimumGeneratedTotal>0)this.#codes.assertGeneratedCapacity(s,minimumGeneratedTotal);
   }
-  #allocateExternalPurchase(s,row){
+  #allocateExternalPurchase(s,row,plan){
     const user=this.#user(s,{userId:row.terms.userId});
     check(!adminRestrictions(s,user.id).buyingBlocked,'ACCOUNT_RESTRICTED','This account cannot buy',403);
     check(row.snapshot,'STALE_QUOTE','Original allocation terms are unavailable',409);
     const currentCatalog=s.catalog,currentValidation=s.cardValidation;
     s.catalog=clone(row.snapshot.catalog);s.cardValidation=clone(row.snapshot.cardValidation);
+    if(plan)this.#allocationAdmissions.set(s,{productId:row.snapshot.product.id,quantity:row.terms.quote.quantity,plan,scope:'external-fulfillment'});
     try{
       const purchaseId=id(),packs=this.#allocatePacks(s,user,row.snapshot.product,row.terms.quote.quantity,{purchaseId,externalPreparationId:row.preparationId});
       this.#event(s,'packs.purchased',{userId:user.id,preparationId:row.preparationId,purchaseId});
       return {id:purchaseId,packs,paid:clone(row.terms.quote.price)};
-    }finally{s.catalog=currentCatalog;if(currentValidation===undefined)delete s.cardValidation;else s.cardValidation=currentValidation;}
+    }finally{this.#allocationAdmissions.delete(s);s.catalog=currentCatalog;if(currentValidation===undefined)delete s.cardValidation;else s.cardValidation=currentValidation;}
   }
+  #externalAllocationDigest(s,product){const ids=[...new Set(product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))];return contentDigest({product,catalogVersion:s.catalog.version,adminControls:s.adminControls,cardAuthoringRevision:s.cardAuthoring?.revision??0,supply:ids.map(id=>[id,s.supply[id]??0]),cardValidation:ids.map(id=>[id,s.cardValidation?.[id]??null])});}
+  #validateExternalAllocation(s,row,evaluation){const user=this.#user(s,{userId:row.terms.userId});check(row.snapshot,'ALLOCATION_STALE','Paid allocation snapshot is unavailable',409);assertAdminPurchase(s,user.id,row.snapshot.product);this.#workflow(s,'packs',row.snapshot.product.price.amount>0);this.#productTime(row.snapshot.product);return this.#externalAllocation.assert(s,row,evaluation,this.#externalAllocationDigest(s,row.snapshot.product));}
+  #releaseExternalAllocation(s,row){const attempt=s.allocationAttempts?.[row.allocationAttemptId];check(attempt?.preparationId===row.preparationId&&attempt.userId===row.terms.userId,'EXTERNAL_PURCHASE_INVARIANT','Paid allocation attempt differs',500);check(attempt.state==='prepared'||attempt.state==='acknowledged','EXTERNAL_PURCHASE_STATE','Delivered allocation cannot be abandoned',409);if(attempt.state==='prepared'){attempt.state='acknowledged';attempt.acknowledgedAt=this.#clock();}const head=s.allocationHeads[attempt.headId];if(head?.attemptId===attempt.id)head.attemptId=null;}
   #reconcileLegacyPurchase(s,row){
     const terms=row.terms,quote=terms.quote,token=fingerprint({providerId:terms.providerId,transactionId:terms.transactionId});
     const settlement=s.externalSettlements?.[token],request=s.requests[terms.userId+':'+row.legacy.purchaseKey];
@@ -698,7 +708,7 @@ export class CardFramework {
       return {id:purchaseId,packs,paid:{currencyId:product.price.currencyId,amount:total}};
   }
   allocationStatus(actor,input){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.status(actor,input);}
-  acknowledgeAllocation(actor,input){const command=this.#query(q=>{this.#queryUser(q,actor);const row=q.get('allocationAttempts',input.attemptId);check(row?.userId===actor.userId,'NOT_FOUND','Allocation attempt not found',404);return row.command??'purchase';}),service=command==='createListing'?this.#stockAllocationIntents:this.#allocationIntents;check(service,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return service.acknowledge(actor,input);}
+  acknowledgeAllocation(actor,input){const command=this.#query(q=>{this.#queryUser(q,actor);const row=q.get('allocationAttempts',input.attemptId);check(row?.userId===actor.userId,'NOT_FOUND','Allocation attempt not found',404);check(row.command!=='commitExternalPurchase','EXTERNAL_PURCHASE_STATE','External allocation requires verified cancellation or compensation',409);return row.command??'purchase';}),service=command==='createListing'?this.#stockAllocationIntents:this.#allocationIntents;check(service,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return service.acknowledge(actor,input);}
   setRemoteAllocationEnabled(actor,{enabled}){this.#admin(actor,'commerce.manage');check(this.#remoteAllocation,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#remoteAllocation.setEnabled(enabled);}
   #allocationDigest(product,quantity){return contentDigest({strategy:product.allocationStrategy,productId:product.id,productRevision:product.revision,slots:product.slots,quantity,adminRevision:product.adminRevision??0});}
   #allocationState(tx,actor,input){

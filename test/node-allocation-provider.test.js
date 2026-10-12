@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {request as httpRequest} from 'node:http';
 import {createRemoteAllocationStrategy,allocationStrategyProtocol,validateAllocationStrategyResponse} from '../src/remote-allocation-strategy.js';
 import {createRemoteStockAllocationStrategy,stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse} from '../src/remote-stock-allocation-strategy.js';
+import {createRemoteExternalAllocationStrategy,externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse} from '../src/remote-external-allocation-strategy.js';
 import {planAllocation} from '../src/allocation-planner.js';
 
 const executable=fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url));
@@ -47,7 +48,7 @@ async function post(receiver,value,status=200,options={}){
     request.end(body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
-  if(status===200||status===503)(resultValue.protocol===stockAllocationStrategyProtocol?validateStockAllocationStrategyResponse:validateAllocationStrategyResponse)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
+  if(status===200||status===503)(resultValue.protocol===externalAllocationStrategyProtocol?validateExternalAllocationStrategyResponse:resultValue.protocol===stockAllocationStrategyProtocol?validateStockAllocationStrategyResponse:validateAllocationStrategyResponse)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
 }
 test('Node allocation provider computes and replays actual plans through framework transport without effects',async()=>{
   const receiver=await start(),remote=createRemoteAllocationStrategy({algorithm:'weighted-deck@1',scope:'catalog-purchase',providerId,url:receiver.url,token,allowLoopbackHttp:true});
@@ -112,6 +113,29 @@ test('Node stock allocation provider plans and replays through its commerce tran
     await post(stock,Buffer.from([0xff,0xfe]),400);await post(stock,'x'.repeat(1048577),400);
     const depleted=structuredClone(request);depleted.context.variants.forEach(variant=>{variant.remaining=0;});assert.deepEqual(await post(stock,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
     const walletRequest=make();assert.deepEqual(await post(wallet,walletRequest),{...echo(walletRequest),status:'planned',allocations:planAllocation(walletRequest.context)});
+    assert.deepEqual(await remote.evaluate(request),expected);
+  }finally{remote.close();await stop(wallet);}
+});
+test('Node external fulfillment provider binds preparation identity and accepts only allocation material',async()=>{
+  const wallet=await start(),external={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-external')},stock={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-stock')};
+  const remote=createRemoteExternalAllocationStrategy({algorithm:'weighted-deck@1',scope:'external-fulfillment',providerId,url:external.url,token,allowLoopbackHttp:true});
+  try{
+    const request={...make(),...remote.grant(),protocol:externalAllocationStrategyProtocol,scope:'external-fulfillment'};request.context.preparationId='ep_'+'e'.repeat(64);
+    const snapshot=structuredClone(request),expected={...echo(request),status:'planned',allocations:planAllocation(request.context)};
+    assert.deepEqual(await remote.evaluate(request),expected);assert.deepEqual(await remote.evaluate(request),expected);assert.deepEqual(request,snapshot);
+    assert.deepEqual(await post(external,request),expected);
+    await post(wallet,request,400);await post(stock,request,400);await post(external,make(),400);
+    for(const patch of [{protocol:allocationStrategyProtocol},{protocol:stockAllocationStrategyProtocol},{scope:'catalog-purchase'},{scope:'commerce-stock'},{providerId:'other.allocation'}])await post(external,{...request,...patch},400);
+    for(const preparationId of [undefined,null,'ep_invalid','ep_'+'E'.repeat(64),request.context.preparationId+'\n']){
+      const invalid=structuredClone(request);if(preparationId===undefined)delete invalid.context.preparationId;else invalid.context.preparationId=preparationId;await post(external,invalid,400);
+    }
+    for(const field of ['payment','proof','debitReceipt','credential']){
+      await post(external,{...request,[field]:{reference:'synthetic-reference'}},400);
+      await post(external,{...request,context:{...request.context,[field]:{reference:'synthetic-reference'}}},400);
+    }
+    const body=JSON.stringify(request);await post(external,body.replace('"preparationId":','"preparationId":"ep_'+'f'.repeat(64)+'","preparationId":'),400);
+    await post(external,body,401,{headers:{'content-type':'application/json','content-length':String(Buffer.byteLength(body)),authorization:'Bearer revoked-fixture-credential'}});
+    const depleted=structuredClone(request);depleted.context.variants.forEach(variant=>{variant.remaining=0;});assert.deepEqual(await post(external,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
     assert.deepEqual(await remote.evaluate(request),expected);
   }finally{remote.close();await stop(wallet);}
 });

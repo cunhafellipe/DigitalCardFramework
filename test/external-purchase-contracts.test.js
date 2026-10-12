@@ -109,3 +109,20 @@ test('OpenAPI provides external schemas without exposing trusted payment mutatio
   const operations=Object.values(openapi.paths).flatMap(path=>Object.values(path).map(operation=>operation.operationId));
   for(const method of ['prepareExternalPurchase','commitExternalPurchase','cancelExternalPurchase','confirmExternalCompensation','reconcileLegacyExternalPurchase','resolveLegacyExternalPurchase'])assert.equal(operations.includes(method),false);
 });
+
+test('allocation intents bind versioned quotes and pending projections preserve provider-only debit references',()=>{
+  const x=setup(),request=x.input('allocation-contract');
+  const quote={...request.quote,allocationDigest:'a'.repeat(64)};
+  matches('PrepareExternalPurchase',{...request,quote});
+  const {key,...terms}=request;
+  matches('ExternalPurchaseIntent',{version:2,...terms,quote});
+  assert.equal(validate('ExternalPurchaseIntent')({version:1,...terms,quote}),false);
+  assert.equal(validate('ExternalPurchaseIntent')({version:2,...terms}),false);
+  assert.equal(validate('ExternalPurchaseQuote')({...quote,allocationDigest:'invalid'}),false);
+  const prepared=x.framework.prepareExternalPurchase(provider,request);
+  const pending={...prepared,state:'allocation_pending',allocationAttemptId:'12345678-1234-4123-8123-123456789abc',debitReference:'debit:allocation-contract'};
+  matches('ExternalPurchaseProjection',pending);
+  const beneficiary={...pending};delete beneficiary.debitReference;matches('ExternalPurchaseProjection',beneficiary);
+  for(const field of ['allocationAttemptId']){const incomplete={...pending};delete incomplete[field];assert.equal(validate('ExternalPurchaseProjection')(incomplete),false);}
+  assert.equal(validate('ExternalPurchaseProjection')({...pending,seed:'private'}),false);
+});

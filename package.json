@@ -112,7 +112,9 @@
       "default": "./src/plugin-deployment.js"
     },
     "./stock-allocation-strategy-contracts": "./src/stock-allocation-strategy-contracts.js",
-    "./remote-stock-allocation-strategy": "./src/remote-stock-allocation-strategy.js"
+    "./remote-stock-allocation-strategy": "./src/remote-stock-allocation-strategy.js",
+    "./external-allocation-strategy-contracts": "./src/external-allocation-strategy-contracts.js",
+    "./remote-external-allocation-strategy": "./src/remote-external-allocation-strategy.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

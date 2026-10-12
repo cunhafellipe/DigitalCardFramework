@@ -1,6 +1,6 @@
 # Spend an external wallet on card packs
 
-API version 0.2; external purchase contract version 1. Use this server API when another service owns the player's balance. The framework records the reviewed pack terms, then either creates the complete purchase or records that the original payment needs a refund. It never turns the external payment into a spendable intermediate framework balance.
+API version 0.2; external purchase intents version 1 (native) or 2 (allocation strategy). Use this server API when another service owns the player's balance. The framework records the reviewed pack terms, then either creates the complete purchase or records that the original payment needs a refund. It never turns the external payment into a spendable intermediate framework balance.
 
 These methods require trusted host code. The default HTTP adapter does not expose them to browsers. See [core API](core-api.md), [identity and permissions](access-and-identity.md), and [production operations](production.md).
 
@@ -64,11 +64,24 @@ Prepare validates the current quote and admission limits. It does not reserve st
 
 An exception or timeout is never permission to refund. The framework transaction may have committed despite a lost response. Read its durable status or replay the exact command until the outcome is known. Refund only a persisted `refund_required` result. The external wallet must also guarantee that refunds and payment finalization are idempotent and cannot both occur for one debit.
 
+## Use a remote allocation strategy
+
+For a product declaring `weighted-deck@1`, preserve the `allocationDigest` returned by the ordinary beneficiary quote. Configure `remoteExternalAllocation` with algorithm `weighted-deck@1`, scope `external-fulfillment`, and the provider ID, URL and credential. The Node allocation provider example serves this protocol at `/allocate-external`; see the [external allocation schema](external-allocation-strategy.schema.json).
+
+After the confirmed debit, use `await framework.commitExternalPurchaseAsync(provider,{preparationId,fingerprint,debitReceipt},{signal})`. The synchronous commit method does not start remote allocation. Preparation captures the terms and claims the beneficiary's shared product allocation attempt before payment. Wallet purchases, shop stock creation and other external transactions cannot bypass that active attempt by changing keys or providers.
+
+The asynchronous commit records the verified debit before contacting the allocation provider. A complete successful plan creates the purchase atomically. A known refusal or cancellation after debit records `refund_required`. A storage failure with an unknown outcome requires status reconciliation; do not infer a refund from a thrown error. After a crash leaves `allocation_pending`, explicitly retry with the same preparation, fingerprint and original proof. Status reads do not run allocation.
+
+Remote allocation rechecks account restrictions, workflow availability, the captured sale window, and allocation state before issuing cards. A changed catalog, policy or relevant supply can require a refund. It never substitutes new odds for the paid quote.
+
+The allocation provider receives allocation inputs and private entropy, never payment proofs or payment credentials. Generic allocation acknowledgement cannot release unresolved paid work. Verified no-debit cancellation or confirmed compensation releases its allocation attempt without advancing the unused entropy. Keep the payment recovery provider registered even when allocation is disabled.
+
 ## States and recovery
 
 | State | Next action |
 | --- | --- |
 | `prepared` | Resolve the external payment. Commit a proven debit, or cancel after a durable no-debit fence. |
+| `allocation_pending` | A debit is recorded and delivery is unresolved. Reconcile status, then resume the same asynchronous commit with the original proof. |
 | `fulfilled` | Return the original purchase. Finalize the external payment; do not debit or allocate again. |
 | `refund_required` | Refund the original account, currency and units once; confirm that refund. |
 | `cancelled` | No debit may occur. Preserve the provider's cancellation fence. |
@@ -106,7 +119,7 @@ A refund proof also contains `compensationId` and `debitReference` from the `ref
 
 One provider transaction identifies one purchase, regardless of the preparation key used to find it. A key cannot be reused for a different intent. Keep transaction namespaces unique within each database; do not reuse a provider's IDs after migration or restoration.
 
-Use the package's `externalPurchaseFingerprint(input)` and `externalPurchaseId(providerId,transactionId)` helpers when implementing another adapter. The fingerprint hashes the canonical intent with `version:1`, excluding `key`. Canonical JSON recursively sorts object keys lexicographically, preserves array order and exact strings, uses no whitespace, and is encoded as UTF-8. It does not normalize Unicode. The preparation ID is `ep_` plus the SHA-256 digest of the canonical `{providerId,transactionId}` object. A fingerprint binds terms; it does not authenticate a payment.
+Use the package's `externalPurchaseFingerprint(input)` and `externalPurchaseId(providerId,transactionId)` helpers when implementing another adapter. The fingerprint hashes the canonical intent with `version:1` for native quotes or `version:2` when the quote includes `allocationDigest`, excluding `key`. Historical native fingerprints remain unchanged. Canonical JSON recursively sorts object keys lexicographically, preserves array order and exact strings, uses no whitespace, and is encoded as UTF-8. It does not normalize Unicode. The preparation ID is `ep_` plus the SHA-256 digest of the canonical `{providerId,transactionId}` object. A fingerprint binds terms; it does not authenticate a payment.
 
 Machine-readable input and result definitions are exported by `@digital-card/framework/external-purchase-contracts` and included in the [OpenAPI components](openapi.json). Their presence does not create HTTP routes.
 

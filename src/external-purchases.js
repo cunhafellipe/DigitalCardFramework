@@ -11,20 +11,21 @@ const object = (value, fields, optional = []) => {
   check(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(key => fields.includes(key) || optional.includes(key)) && fields.every(key => Object.hasOwn(value, key)), 'INVALID_INPUT', 'Unsupported or missing purchase fields');
 };
 const identifier = (value, name) => check(typeof value === 'string' && value.trim().length > 0 && Array.from(value).length <= 128 && !/[\u0000-\u001f\u007f]/.test(value), 'INVALID_INPUT', 'Invalid ' + name);
-const states = ['prepared', 'fulfilled', 'refund_required', 'cancelled', 'compensated', 'quarantined'];
-const pending = state => ['prepared', 'refund_required', 'quarantined'].includes(state);
+const states = ['prepared', 'allocation_pending', 'fulfilled', 'refund_required', 'cancelled', 'compensated', 'quarantined'];
+const pending = state => ['prepared', 'allocation_pending', 'refund_required', 'quarantined'].includes(state);
 
 export function externalPurchaseIntent(input, {legacy = false} = {}) {
   for (const name of ['providerId', 'transactionId', 'userId', 'externalCurrency']) identifier(input[name], name);
   check(typeof input.externalUnits === 'string' && /^[1-9][0-9]{0,39}$/.test(input.externalUnits), 'INVALID_INPUT', 'Invalid external units');
   const quote = clone(input.quote);
   if (legacy && quote && !Object.hasOwn(quote, 'adminRevision')) quote.adminRevision = 0;
-  object(quote, ['productId', 'quantity', 'productRevision', 'catalogVersion', 'adminRevision', 'price']);
+  object(quote, ['productId', 'quantity', 'productRevision', 'catalogVersion', 'adminRevision', 'price'],['allocationDigest']);
+  if(quote.allocationDigest!==undefined)check(typeof quote.allocationDigest==='string'&&/^[a-f0-9]{64}(?![\s\S])/.test(quote.allocationDigest),'INVALID_INPUT','Invalid allocation digest');
   identifier(quote.productId, 'product ID');
   integer(quote.quantity, 'quantity', 1, 100);
   for (const name of ['productRevision', 'catalogVersion', 'adminRevision']) integer(quote[name], name, 0);
   object(quote.price, ['currencyId', 'amount']); identifier(quote.price.currencyId, 'currency ID'); integer(quote.price.amount, 'price');
-  return {version: 1, providerId: input.providerId, transactionId: input.transactionId, userId: input.userId, externalCurrency: input.externalCurrency, externalUnits: input.externalUnits, quote};
+  return {version: quote.allocationDigest===undefined?1:2, providerId: input.providerId, transactionId: input.transactionId, userId: input.userId, externalCurrency: input.externalCurrency, externalUnits: input.externalUnits, quote};
 }
 export const externalPurchaseFingerprint = input => externalPurchaseDigest(externalPurchaseIntent(input));
 export const externalPurchaseId = (providerId, transactionId) => {
@@ -67,7 +68,7 @@ export class ExternalPurchaseService {
   #init(s) { s.externalPurchases ??= {}; s.externalPurchaseProofs ??= {}; s.externalPurchaseKeys ??= {}; }
   #projection(row, provider = false) {
     const result = {};
-    for (const field of ['preparationId', 'fingerprint', 'state', 'terms', 'preparedAt', 'fulfilledAt', 'purchase', 'failureCode', 'compensationId', 'refundRequiredAt', 'cancelledAt', 'compensatedAt', 'quarantinedAt', 'legacyResolution']) if (row[field] !== undefined) result[field] = clone(row[field]);
+    for (const field of ['preparationId', 'fingerprint', 'allocationAttemptId', 'state', 'terms', 'preparedAt', 'fulfilledAt', 'purchase', 'failureCode', 'compensationId', 'refundRequiredAt', 'cancelledAt', 'compensatedAt', 'quarantinedAt', 'legacyResolution']) if (row[field] !== undefined) result[field] = clone(row[field]);
     if (provider && row.debitReference) result.debitReference = row.debitReference;
     return result;
   }
@@ -91,7 +92,7 @@ export class ExternalPurchaseService {
     const {providerId,limit=50}=input,after=input.after??'';
     this.#provider(actor, providerId); integer(limit, 'page limit', 1, 100); check(typeof after==='string','INVALID_INPUT','Cursor must be a string or null');if (after) identifier(after, 'cursor');
     const project = result => ({items: result.items.map(row => this.#projection(row, true)), nextCursor: result.next});
-    if (this.#b.store.query) return this.#b.store.query(q => project(q.pageExternalPurchases({providerId, states: ['prepared', 'refund_required', 'quarantined'], after, limit})));
+    if (this.#b.store.query) return this.#b.store.query(q => project(q.pageExternalPurchases({providerId, states: ['prepared', 'allocation_pending', 'refund_required', 'quarantined'], after, limit})));
     return this.#b.store.read(s => {
       const rows = Object.values(s.externalPurchases ?? {}).filter(row => row.terms.providerId === providerId && pending(row.state) && row.preparationId > after).sort((a, b) => a.preparationId.localeCompare(b.preparationId));
       return project({items: rows.slice(0, limit), next: rows.length > limit ? rows[limit - 1].preparationId : null});
@@ -140,6 +141,7 @@ export class ExternalPurchaseService {
     future.quarantinedAt = 'X'.repeat(32); future.cancelledAt = 'X'.repeat(32);
     // A UTF-16 code unit may require six JSON bytes, including escaped lone surrogates.
     const longestReference='\ud800'.repeat(128);
+    if(row.allocationAttemptId){future.allocationPendingAt='X'.repeat(32);const attempt=draft.allocationAttempts[row.allocationAttemptId];attempt.state='acknowledged';attempt.acknowledgedAt='X'.repeat(32);draft.allocationHeads[attempt.headId].attemptId=null;}
     future.compensationId = 'ec_' + 'f'.repeat(64); future.debitReference = longestReference;
     future.proofHashes = {debit: 'f'.repeat(64), refund: 'f'.repeat(64), no_debit: 'f'.repeat(64)};
     future.proofReferences = {debit: longestReference, refund: longestReference, no_debit: longestReference};
@@ -187,6 +189,7 @@ export class ExternalPurchaseService {
     const row = {preparationId, fingerprint, state: 'prepared', terms: intent, preparedAt: this.#now(), completionBytes: 0, proofHashes: {}};
     if (!legacy) row.snapshot = this.#b.capture(s, user, intent.quote);
     s.externalPurchases[preparationId] = row; s.externalPurchaseKeys[key] = {preparationId, fingerprint};
+    if(row.snapshot?.allocation)this.#b.claimAllocation(s,row);
     this.#b.capacity(s); this.#reserve(s, row);
     return {row, provider, replay: false};
   }
@@ -221,6 +224,7 @@ export class ExternalPurchaseService {
         check(['fulfilled', 'refund_required', 'compensated'].includes(row.state) && row.proofHashes.debit === proof.hash, 'EXTERNAL_PURCHASE_STATE', 'Purchase cannot accept a debit', 409);
         return this.#projection(row, true);
       }
+      check(!row.allocationAttemptId,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous external allocation fulfillment',503);
       const before=this.#measure(s), reserve=row.completionBytes;
       this.#saveProof(s, row, proof); this.#allocate(s, row);
       const current=s.externalPurchases[row.preparationId];
@@ -228,12 +232,41 @@ export class ExternalPurchaseService {
       return this.#projection(s.externalPurchases[row.preparationId], true);
     });
   }
+  async commitAsync(actor,input,{signal}={}){
+    object(input,['preparationId','fingerprint','debitReceipt']);check(signal===undefined||signal instanceof AbortSignal,'INVALID_ALLOCATION_REQUEST','External cancellation requires an AbortSignal');check(!signal?.aborted,'POLICY_ABORTED','External allocation was cancelled',503);
+    const principal=clone(actor),reviewed=clone(input),claimed=this.#b.store.transact(s=>{
+      const {row,provider}=this.#get(s,principal,reviewed),proof=this.#proof(s,row,provider,reviewed.debitReceipt,'debit');
+      if(!row.allocationAttemptId)return {native:true};
+      if(!['prepared','allocation_pending'].includes(row.state)){check(['fulfilled','refund_required','compensated'].includes(row.state)&&row.proofHashes.debit===proof.hash,'EXTERNAL_PURCHASE_STATE','Purchase cannot accept a debit',409);return {result:this.#projection(row,true)};}
+      if(row.state==='prepared'){const before=this.#measure(s),reserve=row.completionBytes;this.#saveProof(s,row,proof);row.state='allocation_pending';row.allocationPendingAt=this.#now();row.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));this.#fits(s,before.totalBytes);}
+      else check(row.proofHashes.debit===proof.hash,'SETTLEMENT_CONFLICT','Debit evidence changed',409);
+      return {attempt:clone(s.allocationAttempts[row.allocationAttemptId])};
+    });
+    if(claimed.native)return this.commit(principal,reviewed);if(claimed.result)return claimed.result;
+    return this.#b.runAllocation(claimed.attempt,signal,async combined=>{
+      let evaluation;try{evaluation=await this.#b.evaluateAllocation(claimed.attempt,combined);}catch(error){if(!(error instanceof FrameworkError))throw error;return this.#finishRemote(principal,reviewed,null,error);}
+      return this.#finishRemote(principal,reviewed,evaluation);
+    });
+  }
+  #finishRemote(actor,input,evaluation,failure){
+    return this.#b.store.transact(s=>{
+      const {row,provider}=this.#get(s,actor,input),proof=this.#proof(s,row,provider,input.debitReceipt,'debit');check(row.proofHashes.debit===proof.hash,'SETTLEMENT_CONFLICT','Debit evidence changed',409);
+      if(row.state!=='allocation_pending'){check(['fulfilled','refund_required','compensated'].includes(row.state),'EXTERNAL_PURCHASE_STATE','Paid fulfillment state changed',409);return this.#projection(row,true);}
+      const before=this.#measure(s),reserve=row.completionBytes;
+      if(failure)this.#refund(row,failure.code);else{
+        const draft=clone(s),candidate=draft.externalPurchases[row.preparationId];let plan;
+        try{plan=this.#b.validateAllocation(draft,candidate,evaluation);candidate.purchase=this.#b.allocate(draft,candidate,plan);candidate.state='fulfilled';candidate.fulfilledAt=this.#now();candidate.completionBytes=0;this.#b.completeAllocation(draft,candidate,plan,evaluation);delete candidate.snapshot;this.#b.capacity(draft);}catch(error){if(!(error instanceof FrameworkError))throw error;this.#refund(row,error.code);}
+        if(row.state==='allocation_pending'){const measured=this.#measure(draft);if(measured.totalBytes>measured.limitBytes)this.#refund(row,'STORAGE_CAPACITY');else Object.assign(s,draft);}
+      }
+      const current=s.externalPurchases[row.preparationId];if(current.state==='refund_required')current.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));this.#fits(s,before.totalBytes);return this.#projection(current,true);
+    });
+  }
   cancel(actor, input) {
     object(input, ['preparationId', 'fingerprint', 'noDebitReceipt']);
     return this.#b.store.transact(s => {
       const {row, provider} = this.#get(s, actor, input), proof = this.#proof(s, row, provider, input.noDebitReceipt, 'no_debit');
       check(row.state === 'prepared' || row.state === 'cancelled' && row.proofHashes.no_debit === proof.hash, 'EXTERNAL_PURCHASE_STATE', 'Purchase cannot be cancelled', 409);
-      if (row.state === 'prepared') { this.#saveProof(s, row, proof); row.state = 'cancelled'; row.cancelledAt = this.#now(); row.completionBytes = 0; delete row.snapshot; }
+      if (row.state === 'prepared') { check(!row.proofHashes.debit,'EXTERNAL_PURCHASE_STATE','A paid purchase cannot accept no-debit evidence',409);this.#saveProof(s, row, proof);this.#b.releaseAllocation?.(s,row);row.state = 'cancelled'; row.cancelledAt = this.#now(); row.completionBytes = 0; delete row.snapshot; }
       return this.#projection(row, true);
     });
   }
@@ -242,7 +275,7 @@ export class ExternalPurchaseService {
     return this.#b.store.transact(s => {
       const {row, provider} = this.#get(s, actor, input), proof = this.#proof(s, row, provider, input.refundReceipt, 'refund');
       check(row.state === 'refund_required' || row.state === 'compensated' && row.proofHashes.refund === proof.hash, 'EXTERNAL_PURCHASE_STATE', 'Purchase cannot be compensated', 409);
-      if (row.state === 'refund_required') { this.#saveProof(s, row, proof); row.state = 'compensated'; row.compensatedAt = this.#now(); row.completionBytes = 0; delete row.snapshot; }
+      if (row.state === 'refund_required') { this.#saveProof(s, row, proof);this.#b.releaseAllocation?.(s,row);row.state = 'compensated'; row.compensatedAt = this.#now(); row.completionBytes = 0; delete row.snapshot; }
       return this.#projection(row, true);
     });
   }
@@ -298,6 +331,7 @@ export function assertExternalPurchaseState(s) {
   for (const row of Object.values(s.externalPurchases ?? {})) {
     check(states.includes(row.state) && row.fingerprint === externalPurchaseDigest(row.terms) && row.preparationId === externalPurchaseId(row.terms.providerId, row.terms.transactionId), 'EXTERNAL_PURCHASE_INVARIANT', 'Invalid external purchase identity', 500);
     check(Number.isSafeInteger(row.completionBytes) && row.completionBytes >= 0 && (pending(row.state) || row.completionBytes === 0), 'EXTERNAL_PURCHASE_INVARIANT', 'Invalid completion reservation', 500);
+    if(row.allocationAttemptId){const attempt=s.allocationAttempts?.[row.allocationAttemptId],head=s.allocationHeads?.[attempt?.headId];check(attempt?.preparationId===row.preparationId&&attempt.userId===row.terms.userId&&attempt.inputDigest===row.fingerprint,'EXTERNAL_PURCHASE_INVARIANT','External allocation identity differs',500);check(row.state==='fulfilled'?attempt.state==='completed':['cancelled','compensated'].includes(row.state)?attempt.state==='acknowledged':attempt.state==='prepared'&&head?.attemptId===attempt.id,'EXTERNAL_PURCHASE_INVARIANT','External allocation state differs',500);if(row.state==='allocation_pending')check(row.proofHashes.debit&&row.debitReference&&s.externalPurchaseProofs[externalPurchaseDigest({providerId:row.terms.providerId,reference:row.debitReference})]?.hash===row.proofHashes.debit,'EXTERNAL_PURCHASE_INVARIANT','Paid allocation proof is missing',500);if(row.state==='cancelled')check(!row.proofHashes.debit,'EXTERNAL_PURCHASE_INVARIANT','Cancelled purchase contains a debit',500);}
     check((row.state === 'fulfilled') === !!row.purchase, 'EXTERNAL_PURCHASE_INVARIANT', 'Invalid paid delivery state', 500);
   }
 }

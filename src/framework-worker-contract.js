@@ -17,7 +17,7 @@ export const frameworkMethods = Object.freeze([
   'acknowledgeCommandIntent','me','setPreferences','directory','tradeInventory','inventoryPage',
   'collectionSummary','notifications','readNotifications','publishCatalog','operatorCatalog','previewImport',
   'commitImport','catalog','catalogVersion','userByIdentity','providerIdentity','registerUser','grantCurrency',
-  'settleExternalCredit','prepareExternalPurchase','commitExternalPurchase','cancelExternalPurchase',
+  'settleExternalCredit','prepareExternalPurchase','commitExternalPurchase','commitExternalPurchaseAsync','setRemoteExternalAllocationEnabled','cancelExternalPurchase',
   'confirmExternalCompensation','externalPurchaseStatus','lookupExternalPurchase','pendingExternalPurchases',
   'reconcileLegacyExternalPurchase','resolveLegacyExternalPurchase','wallet','history','quote','availability',
   'pityProgress','purchase','purchaseAsync','allocationStatus','quoteMintPackStock','stockAllocationStatus','setRemoteStockAllocationEnabled','acknowledgeAllocation','setRemoteAllocationEnabled','packs','packsPage','packPage','openPack','inventory','inspectCard',
@@ -28,7 +28,7 @@ export const storeMethods = Object.freeze(['storeIntegrity','storeDiagnostics','
 export const sessionMethods = Object.freeze(['sessionCreate','sessionGet','sessionConsume','sessionRevoke']);
 export const frameworkOptionNames = Object.freeze([
   'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','actionHandlers',
-  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies','remoteAllocation','remoteStockAllocation',
+  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies','remoteAllocation','remoteStockAllocation','remoteExternalAllocation',
 ]);
 export function unavailable() {
   return new FrameworkError('WORKER_UNAVAILABLE','Framework worker is unavailable; reconcile mutations using their original idempotency keys',503);

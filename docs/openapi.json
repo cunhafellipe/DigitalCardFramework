@@ -13298,7 +13298,8 @@
             "enum": [
               null,
               "purchase",
-              "createListing"
+              "createListing",
+              "commitExternalPurchase"
             ]
           },
           "attemptShopId": {
@@ -15553,6 +15554,10 @@
           },
           "price": {
             "$ref": "#/components/schemas/ExternalPurchasePrice"
+          },
+          "allocationDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           }
         },
         "required": [
@@ -15569,7 +15574,10 @@
         "additionalProperties": false,
         "properties": {
           "version": {
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "providerId": {
             "type": "string",
@@ -15611,6 +15619,39 @@
           "externalCurrency",
           "externalUnits",
           "quote"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "version": {
+                  "const": 2
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "quote": {
+                  "type": "object",
+                  "required": [
+                    "allocationDigest"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "quote": {
+                  "type": "object",
+                  "not": {
+                    "required": [
+                      "allocationDigest"
+                    ]
+                  }
+                }
+              }
+            }
+          }
         ]
       },
       "PrepareExternalPurchase": {
@@ -16334,6 +16375,7 @@
           "state": {
             "enum": [
               "prepared",
+              "allocation_pending",
               "fulfilled",
               "refund_required",
               "cancelled",
@@ -16393,6 +16435,10 @@
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "allocationAttemptId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
           }
         },
         "required": [
@@ -16403,6 +16449,20 @@
           "preparedAt"
         ],
         "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "allocation_pending"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "allocationAttemptId"
+              ]
+            }
+          },
           {
             "if": {
               "properties": {

@@ -39,7 +39,7 @@ void amount;
 async function createReviewedStock(shopId:string){
   const quote=await client.quoteMintPackStock({shopId,productId:'sample',quantity:2});
   const status=await client.stockAllocationStatus({shopId,productId:'sample'});
-  const originatingCommand:'purchase'|'createListing'|null=status.command;
+  const originatingCommand:'purchase'|'createListing'|'commitExternalPurchase'|null=status.command;
   void originatingCommand;
   return runner('createListing',{shopId,title:'Sealed packs',price:{currencyId:'credits',amount:10},items:{kind:'mint-pack',productId:quote.productId,quantity:quote.quantity},allocationDigest:quote.allocationDigest});
 }

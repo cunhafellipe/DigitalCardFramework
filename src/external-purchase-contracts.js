@@ -13,8 +13,8 @@ export function externalPurchaseDefinitions(prefix = '#/$defs/') {
   const timestamp = {type:'string',maxLength:32,description:'Parseable timestamp returned by the trusted host clock.'};
   return {
     ExternalPurchasePrice:object({currencyId:id,amount:integer(1)}),
-    ExternalPurchaseQuote:object({productId:id,quantity:{type:'integer',minimum:1,maximum:100},productRevision:integer(0),catalogVersion:integer(0),adminRevision:integer(0),price:ref('ExternalPurchasePrice')}),
-    ExternalPurchaseIntent:object({version:{const:1},...terms}),
+    ExternalPurchaseQuote:object({productId:id,quantity:{type:'integer',minimum:1,maximum:100},productRevision:integer(0),catalogVersion:integer(0),adminRevision:integer(0),price:ref('ExternalPurchasePrice'),allocationDigest:hash},['productId','quantity','productRevision','catalogVersion','adminRevision','price']),
+    ExternalPurchaseIntent:{...object({version:{enum:[1,2]},...terms}),allOf:[{if:{properties:{version:{const:2}}},then:{properties:{quote:{type:'object',required:['allocationDigest']}}},else:{properties:{quote:{type:'object',not:{required:['allocationDigest']}}}}}]},
     PrepareExternalPurchase:object({key:id,...terms}),
     ExternalDebitProof:object({kind:{const:'debit'},...proof}),
     ExternalNoDebitProof:object({kind:{const:'no_debit'},...proof}),
@@ -32,8 +32,9 @@ export function externalPurchaseDefinitions(prefix = '#/$defs/') {
     ExternalPurchaseReceipt:object({id,packs:{type:'array',minItems:1,maxItems:100,items:ref('ExternalPurchasePack')},paid:ref('ExternalPurchasePrice')}),
     ExternalPurchasePack:object({id,ownerId:id,productId:id,productRevision:integer(0),lineId:id,catalogVersion:integer(0),product:{type:'object'},purchaseId:{oneOf:[id,{type:'null'}]},batchIndex:integer(0),metadata:{type:'object'},createdAt:timestamp,openedAt:{oneOf:[timestamp,{type:'null'}]},cardCount:integer(0)}),
     ExternalPurchaseProjection:{
-      ...object({preparationId,fingerprint:hash,state:{enum:['prepared','fulfilled','refund_required','cancelled','compensated','quarantined']},terms:ref('ExternalPurchaseIntent'),preparedAt:timestamp,fulfilledAt:timestamp,purchase:ref('ExternalPurchaseReceipt'),failureCode:{type:'string',pattern:'^[A-Z0-9_]{1,64}$'},compensationId,refundRequiredAt:timestamp,cancelledAt:timestamp,compensatedAt:timestamp,quarantinedAt:timestamp,legacyResolution:ref('ExternalLegacyResolution'),debitReference:id},['preparationId','fingerprint','state','terms','preparedAt']),
+      ...object({preparationId,fingerprint:hash,state:{enum:['prepared','allocation_pending','fulfilled','refund_required','cancelled','compensated','quarantined']},terms:ref('ExternalPurchaseIntent'),preparedAt:timestamp,fulfilledAt:timestamp,purchase:ref('ExternalPurchaseReceipt'),failureCode:{type:'string',pattern:'^[A-Z0-9_]{1,64}$'},compensationId,refundRequiredAt:timestamp,cancelledAt:timestamp,compensatedAt:timestamp,quarantinedAt:timestamp,legacyResolution:ref('ExternalLegacyResolution'),debitReference:id,allocationAttemptId:{type:'string',pattern:'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}},['preparationId','fingerprint','state','terms','preparedAt']),
       allOf:[
+        {if:{properties:{state:{const:'allocation_pending'}}},then:{required:['allocationAttemptId']}},
         {if:{properties:{state:{const:'fulfilled'}}},then:{required:['fulfilledAt','purchase']},else:{not:{required:['purchase']}}},
         {if:{properties:{state:{enum:['refund_required','compensated']}}},then:{required:['failureCode','compensationId','refundRequiredAt']}},
         {if:{required:['legacyResolution']},then:{properties:{state:{const:'fulfilled'}},required:['quarantinedAt','failureCode']}},

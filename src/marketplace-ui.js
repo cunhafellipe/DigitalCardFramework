@@ -365,7 +365,7 @@ export function renderMarketplace(
         });
         const inspectStock=button('Check stock allocation attempt',async()=>{
           await action(async()=>{const version=formVersion;fence(version);updateStock();const result=await client.stockAllocationStatus({shopId:shop.value,productId:target.value});fence(version);
-            if(result.shopId!==shop.value||result.productId!==target.value||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||![null,'purchase','createListing'].includes(result.command)||result.attemptShopId!==null&&typeof result.attemptShopId!=='string'||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error('Invalid stock allocation status');
+            if(result.shopId!==shop.value||result.productId!==target.value||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||![null,'purchase','createListing','commitExternalPurchase'].includes(result.command)||result.attemptShopId!==null&&typeof result.attemptShopId!=='string'||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error('Invalid stock allocation status');
             stockAttempt=result;stockBlocked=['prepared','stale'].includes(result.state);if(stockBlocked)stockQuote=reviewedListing=null;if(result.state==='acknowledged'&&result.command==='createListing'&&result.attemptShopId===shop.value)await confirmOriginalListing(version);showStockAttempt();
           });if(!disposed)updateStock();
         });
@@ -376,11 +376,12 @@ export function renderMarketplace(
           });if(!disposed)updateStock();
         });
         const retryListing=button('Retry original listing',async()=>{
-          await action(async()=>{fence();updateStock();const original=run.pending?.('createListing');if(!original||original._confirmed)throw new Error('No unresolved listing to retry');await (run.recover?run.recover('createListing',original):run('createListing',original));fence();stockQuote=reviewedListing=null;formVersion++;if(refresh)await refresh();else await load(true);});if(!disposed)updateStock();
+          await action(async()=>{fence();updateStock();if(stockAttempt?.command==='commitExternalPurchase')throw new Error('Recover the original payment through its payment provider');const original=run.pending?.('createListing');if(!original||original._confirmed)throw new Error('No unresolved listing to retry');await (run.recover?run.recover('createListing',original):run('createListing',original));fence();stockQuote=reviewedListing=null;formVersion++;if(refresh)await refresh();else await load(true);});if(!disposed)updateStock();
         });
         async function confirmOriginalListing(version){const original=run.pending?.('createListing');if(original&&!original._confirmed&&original.shopId===shop.value&&original.items?.kind==='mint-pack'&&original.items.productId===target.value&&typeof run.confirmFailed==='function'){await run.confirmFailed('createListing',original);fence(version);}}
         function showStockAttempt(){
           const attempt=stockAttempt;if(!attempt){attemptNote.textContent='';return;}
+          if(attempt.command==='commitExternalPurchase'){attemptNote.textContent='This product’s allocation belongs to a payment-provider purchase. Use the original payment provider’s recovery flow. This stock form cannot retry or acknowledge that payment.';return;}
           if(attempt.command==='purchase'){attemptNote.textContent='This product’s allocation belongs to a wallet purchase. Return to Discover to recover or acknowledge that original purchase. This stock form cannot acknowledge it.';return;}
           if(attempt.command==='createListing'&&attempt.attemptShopId!==shop.value){attemptNote.textContent='This product’s allocation belongs to '+(own.find(item=>item.id===attempt.attemptShopId)?.name??'another shop')+'. Recover or acknowledge the original listing in that shop.';return;}
           if(attempt.state==='completed'){attemptNote.textContent='This stock allocation completed. Recover the original listing result before creating another listing.';return;}
@@ -391,7 +392,7 @@ export function renderMarketplace(
           const tickets=ticketStock(),pending=run.pending?.('createListing'),unresolved=!!pending&&!pending._confirmed;
           quoteStock.hidden=inspectStock.hidden=!tickets;quoteStock.disabled=busy||unresolved||stockBlocked||!Number.isSafeInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>100;
           inspectStock.disabled=busy;acknowledgeStock.hidden=!tickets||stockAttempt?.command!=='createListing'||stockAttempt.attemptShopId!==shop.value||!['prepared','stale'].includes(stockAttempt.state);acknowledgeStock.disabled=busy;
-          retryListing.hidden=!unresolved;retryListing.disabled=busy;
+          retryListing.hidden=!unresolved||stockAttempt?.command==='commitExternalPurchase';retryListing.disabled=busy;
           create.disabled=busy||unresolved||tickets&&(!stockQuote||stockBlocked);stockNote.hidden=attemptNote.hidden=!tickets;
           if(tickets&&!stockQuote&&!stockNote.textContent)stockNote.textContent='Ticket allocation draws this stock batch without replacement. Finite supply can reduce available tickets. Review an allocation quote before reserving the packs.';
         }

@@ -233,7 +233,7 @@ function auditEscrow(s,add){
 
 function auditExternalPurchases(s,add){
   const records=s.externalPurchases??{},proofs=s.externalPurchaseProofs??{},keys=s.externalPurchaseKeys??{};
-  const pending=new Set(['prepared','refund_required','quarantined']),terminal=new Set(['fulfilled','cancelled','compensated']);
+  const pending=new Set(['prepared','allocation_pending','refund_required','quarantined']),terminal=new Set(['fulfilled','cancelled','compensated']);
   const hex=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value),date=value=>typeof value==='string'&&Number.isFinite(Date.parse(value));
   const indexedProofs=new Map(),indexedKeys=new Set(),purchaseIds=new Set(),reversedCredits=new Map(),resolutionTokens=new Set();
   for(const entry of s.ledger)if(entry.type==='external-credit-reversed'){
@@ -254,7 +254,7 @@ function auditExternalPurchases(s,add){
     if(!row||typeof row!=='object'){add('EXTERNAL_IDENTITY_INVALID',id);continue;}
     let validTerms=true;
     try{
-      if(row.terms?.version!==1||externalPurchaseDigest(row.terms)!==row.fingerprint||externalPurchaseDigest(externalPurchaseIntent(row.terms))!==row.fingerprint||row.preparationId!==externalPurchaseId(row.terms.providerId,row.terms.transactionId)||id!==row.preparationId)validTerms=false;
+      if(![1,2].includes(row.terms?.version)||externalPurchaseDigest(row.terms)!==row.fingerprint||externalPurchaseDigest(externalPurchaseIntent(row.terms))!==row.fingerprint||row.preparationId!==externalPurchaseId(row.terms.providerId,row.terms.transactionId)||id!==row.preparationId)validTerms=false;
     }catch{validTerms=false;}
     if(!validTerms){add('EXTERNAL_IDENTITY_INVALID',id);continue;}
     const terms=row.terms,quote=terms.quote;
@@ -277,10 +277,20 @@ function auditExternalPurchases(s,add){
       const index=indexedProofs.get(JSON.stringify([id,'debit']));
       if(typeof row.debitReference!=='string'||externalPurchaseDigest(proof)!==row.proofHashes.debit||index?.token!==externalPurchaseDigest({providerId:terms.providerId,reference:row.debitReference}))add('EXTERNAL_DEBIT_INVALID',id);
     }
-    if(row.state==='prepared'){
+    if(['prepared','allocation_pending'].includes(row.state)){
       const snapshot=row.snapshot;
       if(!snapshot||snapshot.catalog?.version!==quote.catalogVersion||snapshot.product?.id!==quote.productId||snapshot.product?.revision!==quote.productRevision||snapshot.product?.price?.currencyId!==quote.price.currencyId||snapshot.product?.price?.amount*quote.quantity!==quote.price.amount)add('EXTERNAL_SNAPSHOT_INVALID',id);
     }
+    if(row.terms.version===2){
+      const attempt=s.allocationAttempts?.[row.allocationAttemptId],head=s.allocationHeads?.[attempt?.headId];
+      if(!attempt||attempt.command!=='commitExternalPurchase'||attempt.preparationId!==id||attempt.userId!==terms.userId||attempt.productId!==quote.productId||attempt.inputDigest!==row.fingerprint)add('EXTERNAL_ALLOCATION_IDENTITY_INVALID',id);
+      else {
+        const expectedState=row.state==='fulfilled'?'completed':['cancelled','compensated'].includes(row.state)?'acknowledged':'prepared';
+        if(attempt.state!==expectedState||expectedState==='prepared'&&head?.attemptId!==attempt.id||expectedState!=='prepared'&&head?.attemptId===attempt.id)add('EXTERNAL_ALLOCATION_STATE_INVALID',id);
+        if(row.state==='fulfilled'&&externalPurchaseDigest(attempt.result??null)!==externalPurchaseDigest(row.purchase??null))add('EXTERNAL_ALLOCATION_RESULT_INVALID',id);
+      }
+      if(row.state==='allocation_pending'&&!date(row.allocationPendingAt))add('EXTERNAL_ALLOCATION_PENDING_INVALID',id);
+    }else if(row.allocationAttemptId||row.state==='allocation_pending')add('EXTERNAL_ALLOCATION_IDENTITY_INVALID',id);
     if((row.state==='fulfilled')!==Boolean(row.purchase))add('EXTERNAL_DELIVERY_STATE_INVALID',id);
     if(row.purchase){
       const purchase=row.purchase;

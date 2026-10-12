@@ -23,6 +23,11 @@ export function createCurrencyGateway({
       "INVALID_PROVIDER",
       "Explicit currency mappings required",
     );
+    check(
+      provider.providerId === undefined || provider.providerId === id,
+      "INVALID_PROVIDER",
+      "Currency provider identity does not match",
+    );
     for (const mapping of Object.values(provider.currencies)) {
       text(mapping.currencyId, "currency ID", 100);
       for (const key of ["numerator", "denominator"])
@@ -53,10 +58,13 @@ export function createCurrencyGateway({
       try {
         return await Promise.race([
           (async () => {
+            provider.assertActive?.();
             const account = await provider.resolveAccount({
               userId: actor.userId,
               signal: combined,
             });
+            combined.throwIfAborted();
+            provider.assertActive?.();
             text(account, "external account", 300);
             const receipt = await provider.lookup({
               transactionId,
@@ -87,7 +95,7 @@ export function createCurrencyGateway({
             );
             check(
               typeof receipt.amountUnits === "string" &&
-                /^[1-9][0-9]{0,39}$/.test(receipt.amountUnits),
+                /^[1-9][0-9]{0,39}(?![\s\S])/.test(receipt.amountUnits),
               "INVALID_PROVIDER",
               "Provider amount must be a positive integer string",
             );
@@ -101,6 +109,9 @@ export function createCurrencyGateway({
             );
             const amount = Number(numerator / denominator);
             integer(amount, "settled amount", 1, Number.MAX_SAFE_INTEGER);
+            combined.throwIfAborted();
+            // Disabling blocks new settlement admission; admitted work may already commit.
+            provider.assertActive?.();
             // Dedicated authority is held by this server composition, never returned to a client.
             return framework.settleExternalCredit(
               { permissions: ["currency.settle"] },

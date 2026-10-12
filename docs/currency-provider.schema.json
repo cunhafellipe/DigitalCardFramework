@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/currency-settlement/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "resolve-account"
+            },
+            "userId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "userId"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "lookup"
+            },
+            "transactionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "account": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "transactionId",
+            "account"
+          ]
+        }
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "resolve-account"
+            },
+            "userId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "status": {
+              "const": "resolved"
+            },
+            "account": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "userId",
+            "status",
+            "account"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "resolve-account"
+            },
+            "userId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "not-found",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "userId",
+            "status",
+            "errorCode"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "lookup"
+            },
+            "transactionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "account": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "status": {
+              "const": "settled"
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "amountUnits": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,39}(?![\\s\\S])"
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "transactionId",
+            "account",
+            "status",
+            "currency",
+            "amountUnits"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "lookup"
+            },
+            "transactionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "account": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "status": {
+              "enum": [
+                "unknown",
+                "pending",
+                "refunded"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "transactionId",
+            "account",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-currency-settlement@1"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "operation": {
+              "const": "lookup"
+            },
+            "transactionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "account": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "not-found",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "requestId",
+            "providerId",
+            "operation",
+            "transactionId",
+            "account",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

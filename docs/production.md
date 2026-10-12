@@ -132,9 +132,33 @@ Set `PRESENTATION_ROOT` to a durable directory to enable the reference server's 
 
 `HOST_MODULE.presentationOptions` configures import limits, scan hooks, scan timeout, allowed capabilities and `performance` policy. Default performance policy warns and accepts; `mode: 'reject'` is opt-in. Use one import-store writer per directory. The endpoint accepts compiled `.dcard` packages; the public authoring APIs handle loose images, layered artwork and GIF conversion before upload. Uploaded content is data, never installation code. Published art is readable by signed-in collectors; do not embed private codes or personal data in presentation assets.
 
-For externally funded wallets, export `currencyProviders` from HOST_MODULE. The authenticated `/api/currency/reconcile` endpoint verifies the provider receipt and recipient before a durable, deduplicated credit. See [provider contract and boundaries](complex-cards/customization-and-safety.md#currency-integration-and-its-boundary) and [security boundaries](../SECURITY.md).
+For externally funded wallets, export direct `currencyProviders` or data-only `currencyProviderEndpoints` from HOST_MODULE. The authenticated `/api/currency/reconcile` endpoint verifies the provider receipt and recipient before a durable, deduplicated credit. See [provider contract and boundaries](complex-cards/customization-and-safety.md#currency-integration-and-its-boundary) and [security boundaries](../SECURITY.md).
 
 ## Code-card stock
+
+### Remote currency providers
+
+The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:
+
+```js
+export const currencyProviderEndpoints = {
+  'wallet.example': {
+    url: 'https://wallet.example/framework/settlements',
+    token: process.env.WALLET_PROVIDER_TOKEN,
+    currencies: { POINT: { currencyId: 'credits', numerator: 1, denominator: 1 } }
+  }
+};
+```
+
+The provider first resolves the authenticated framework `userId` to an external account, then looks up a transaction for that account. Both calls are authenticated POST requests. Responses must echo protocol, operation, request ID, provider ID and all request identity fields. A `resolve-account` response uses `status: "resolved"` and an `account`; a `lookup` response uses `settled`, `pending`, `refunded` or `unknown`. Only `settled` includes `currency` and a positive integer-string `amountUnits` of at most 40 digits. Use settled only for irrevocable funds; the bridge does not process payments or reverse credits after a chargeback. Account linking and authoritative settlement evidence are the provider's responsibility.
+
+Conversion mappings belong to the trusted host. Conversion must produce whole ledger units within the safe integer range. The gateway verifies account and transaction identity before submitting a durable, deduplicated credit; browser requests never supply an amount. Timeouts may leave an already-admitted credit committed: reconcile again with the same provider and transaction identity to recover it.
+
+Responses are strict flat JSON without extra or duplicate keys. Strings must also satisfy the runtime UTF-16 bounds and reject unpaired surrogates. Error replies use `status: "error"` and `errorCode`: `invalid-request`, `unauthenticated`, `not-found`, `rate-limited` or `unavailable`, paired with HTTP 400, 401, 404, 429 or 503. Successful protocol replies use HTTP 200. Provider error details are not exposed.
+
+HTTPS is required; explicit `allowLoopbackHttp: true` permits local development endpoints. Redirects, URL credentials, query strings, fragments and compressed responses are rejected. Defaults are `timeoutMs: 10000`, `maxRequestBytes: 8192`, `maxResponseBytes: 8192` and `maxConcurrent: 8`; maximum values are 120000 ms, 65536 bytes per body and 64 concurrent calls. Excess calls fail immediately. The bearer token must contain 16–4096 printable non-space ASCII characters. Endpoint credentials and mappings are server configuration and must not enter card bundles or browser code.
+
+SDK hosts can import `createCurrencyProviderRegistry` from `./remote-currency-provider`, pass its `providers` to `createCurrencyGateway`, and call `disable(providerId)` or `close()` to stop remote calls. Disabling is permanent for that registry and aborts outstanding transport requests. The production host closes its registry during shutdown. Cancellation or disabling prevents new settlement admission; it cannot retract a command already admitted by the framework worker. Direct adapters remain supported; duplicate direct and remote provider IDs are rejected.
 
 For catalogs with code attachments, configure the separate code-vault key ring and stable index key described in [code-card operations](card-types-and-codes.md#deploy-and-operate). Startup verifies existing envelopes and reconstructs missing legacy provenance from stored evidence. `HOST_MODULE` may export `codeProviders` with authenticated read-only status lookups, or data-only `codeProviderEndpoints` for the framework-owned remote HTTP bridge. Remote providers use the versioned [code-status protocol](card-types-and-codes.md#remote-code-status-providers); shutdown disables their lookups. Configure `codeLimits` for bounded inventory/request capacity. A provider confirmation is distinct from a player marking a code used. Include the vault keys in isolated restore drills; state encryption keys alone cannot recover code secrets.
 

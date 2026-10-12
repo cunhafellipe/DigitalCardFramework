@@ -4,6 +4,7 @@ import {authorizePresentation} from "../src/access.js";
 import {createCodeGateway} from '../src/code-gateway.js';
 import {createCodeProviderRegistry} from '../src/remote-code-provider.js';
 import {createCurrencyGateway} from "../src/currency-gateway.js";
+import {createCurrencyProviderRegistry} from "../src/remote-currency-provider.js";
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
@@ -25,6 +26,7 @@ const adminSubjects=JSON.parse(process.env.OPERATOR_SUBJECTS??'[]');if(!Array.is
 const dbPath=resolve(process.env.DATABASE_PATH??'data/production.sqlite');await mkdir(dirname(dbPath),{recursive:true});
 const extension=process.env.HOST_MODULE?await import(pathToFileURL(resolve(process.env.HOST_MODULE)).href):{};
 const codeProviderRegistry=createCodeProviderRegistry({codeProviders:extension.codeProviders,codeProviderEndpoints:extension.codeProviderEndpoints});
+const currencyProviderRegistry=createCurrencyProviderRegistry({currencyProviders:extension.currencyProviders,currencyProviderEndpoints:extension.currencyProviderEndpoints});
 const codeKeyConfig=await secret('CODE_VAULT_KEYS'),codeIndex=await secret('CODE_INDEX_KEY');
 const codeVaultOptions=codeKeyConfig?({activeKeyId:process.env.CODE_ACTIVE_KEY_ID,keys:Object.fromEntries(Object.entries(JSON.parse(codeKeyConfig)).map(([id,hex])=>[id,keyFromHex(hex)])),indexKey:keyFromHex(codeIndex)}):undefined;
 const workerOptions=extension.workerOptions??{};for(const name of Object.keys(workerOptions))if(!['maxPendingRequests','maxPendingBytes','startupTimeoutMs','closeTimeoutMs'].includes(name))throw new Error('Unsupported worker option '+name);
@@ -48,7 +50,7 @@ const sessions=framework.sessions,rateLimit=extension.rateLimiter??createRateLim
 if(!extension.identityProvider&&(!issuer?.startsWith('https://')||!clientId))throw new Error('Configure OIDC or a host identityProvider');
 const provider=extension.identityProvider??await createOIDCProvider({issuer,clientId,clientSecret:await secret('OIDC_CLIENT_SECRET'),origin});
 const auth=createAuthHost({framework,sessions,provider,origin,adminSubjects,resolveAccess:extension.resolveAccess,rateLimit});
-const currencyGateway=extension.currencyProviders?createCurrencyGateway({framework,providers:extension.currencyProviders}):undefined;
+const currencyGateway=Object.keys(currencyProviderRegistry.providers).length?createCurrencyGateway({framework,providers:currencyProviderRegistry.providers}):undefined;
 const api=createApiHandler({framework,currencyGateway,codeGateway,resolveIdentity:auth.resolveIdentity,allowedOrigin:origin,exposeOperators:true,requireTradeReview:true,requirePrincipal:true,rateLimit,
   onRequest:event=>{process.stdout.write(JSON.stringify({kind:'request',...event})+'\n');if(event.method==='POST')syncWorkers();}});
 const presentations=process.env.PRESENTATION_ROOT?await createPresentationStore({root:resolve(process.env.PRESENTATION_ROOT),...extension.presentationOptions,authorize:authorizePresentation,validatePublication:async(actor,input)=>{await framework.registerCardPresentation(actor,input.archive);await extension.presentationOptions?.validatePublication?.(actor,input);}}):null;
@@ -80,6 +82,6 @@ function syncWorkers(){
 }
 await syncWorkers();
 server.listen(Number(process.env.PORT??8080),process.env.BIND_ADDRESS??'127.0.0.1',()=>console.log('Framework production host ready on '+origin));
-let closing=false;function shutdown(){if(closing)return;closing=true;codeProviderRegistry.close();clearInterval(maintenance);clearInterval(actionWorker);workerAbort.abort();server.close(async()=>{try{await Promise.all([dispatching,maintaining,planning]);await presentations?.close();await framework.close();process.exit(0);}catch{process.exit(1);}});setTimeout(()=>process.exit(1),10000).unref();}
+let closing=false;function shutdown(){if(closing)return;closing=true;codeProviderRegistry.close();currencyProviderRegistry.close();clearInterval(maintenance);clearInterval(actionWorker);workerAbort.abort();server.close(async()=>{try{await Promise.all([dispatching,maintaining,planning]);await presentations?.close();await framework.close();process.exit(0);}catch{process.exit(1);}});setTimeout(()=>process.exit(1),10000).unref();}
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
-} catch(error) { codeProviderRegistry.close();await framework.terminate(); throw error; }
+} catch(error) { codeProviderRegistry.close();currencyProviderRegistry.close();await framework.terminate(); throw error; }

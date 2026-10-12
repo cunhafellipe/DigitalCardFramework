@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added authenticated remote currency account and settlement lookups with strict versioned contracts, trusted conversion mappings, bounded transport and cancellation/disable admission checks.
+
 - Added a validated production host setting for the ordinary storage payload budget, retaining the 64 MiB default and separate completion limits.
 
 - Added a versioned remote code-status provider protocol and bounded authenticated HTTP bridge with data-only host configuration, cancellation and disable controls.

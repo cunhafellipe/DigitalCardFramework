@@ -221,3 +221,8 @@ test('independent Python standard-library fixture exercises authenticated exact 
     if(child?.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}await rm(directory,{recursive:true,force:true});
   }
 });
+
+test('invalid SDK cancellation cannot consume provider capacity',async()=>{
+  const provider=createRemoteCodeProvider({...config('https://example.invalid'),maxConcurrent:1});
+  try{for(let attempt=0;attempt<2;attempt++)await assert.rejects(provider.lookup({...material,signal:{}}),error=>error.code==='CODE_PROVIDER_CONFIG');}finally{provider.disable();}
+});

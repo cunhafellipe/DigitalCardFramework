@@ -243,3 +243,8 @@ test('concurrency bounds share capacity across resolution and lookup without que
     }finally{release.resolve();provider.disable();x.core.close();}
   });
 });
+
+test('invalid SDK cancellation cannot consume provider capacity',async()=>{
+  const provider=createRemoteCurrencyProvider({...config('https://example.invalid'),maxConcurrent:1});
+  try{for(let attempt=0;attempt<2;attempt++)await assert.rejects(provider.resolveAccount({userId:'fixture',signal:{}}),error=>error.code==='CURRENCY_PROVIDER_CONFIG');}finally{provider.disable();}
+});

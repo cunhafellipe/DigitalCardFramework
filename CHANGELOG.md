@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject malformed SDK cancellation signals before reserving code or currency provider capacity.
+
 - Added remote listing purchase policy evaluation outside database transactions, with commit-time state and grant checks, asynchronous HTTP/worker routing, cancellation and durable receipt replay.
 
 - Added a read-only Python currency provider example and cross-language conformance checks for account ownership, settlement replay and malformed input.

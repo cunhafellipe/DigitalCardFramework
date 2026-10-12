@@ -44,6 +44,7 @@ export function createRemoteCodeProvider(options) {
     async lookup({providerId:requestedProvider,codeId,externalId,code,signal}) {
       assertActive();
       if(requestedProvider!==providerId)fail('INVALID_PROVIDER_REQUEST','Code status provider identity does not match',400);
+      if(signal!==undefined&&!(signal instanceof AbortSignal))fail('CODE_PROVIDER_CONFIG','Cancellation requires an AbortSignal',400);
       if(signal?.aborted)fail('CODE_PROVIDER_ABORTED','Code status lookup was cancelled',503);
       if(active.size>=maxConcurrent)fail('CODE_PROVIDER_BUSY','Code status provider is busy; retry later',503);
       const requestId=randomUUID();

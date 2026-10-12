@@ -50,6 +50,7 @@ export function createRemoteCurrencyProvider(options) {
   const assertActive=()=>{if(!enabled)fail('CURRENCY_PROVIDER_DISABLED','Currency provider is disabled',503);};
   async function exchange(operation,fields,signal) {
     assertActive();
+    if(signal!==undefined&&!(signal instanceof AbortSignal))fail('CURRENCY_PROVIDER_CONFIG','Cancellation requires an AbortSignal',400);
     if(signal?.aborted)fail('CURRENCY_PROVIDER_ABORTED','Currency verification was cancelled',503);
     if(active.size>=maxConcurrent)fail('CURRENCY_PROVIDER_BUSY','Currency provider is busy; retry later',503);
     const requestId=randomUUID();

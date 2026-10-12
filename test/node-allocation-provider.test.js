@@ -48,7 +48,10 @@ async function post(receiver,value,status=200,options={}){
       if(error.code==='EPIPE'&&status>=400){writeFailure=error;return;}reject(error);
     });
     request.on('close',()=>{if(!responseStarted)reject(writeFailure??Error('Provider closed without a response'));});
-    request.end(body);
+    // Oversized Content-Length must be rejected before reading an uploaded body.
+    // Withhold that body so an early connection close cannot race a large write.
+    // A missing or incomplete rejection still fails through the handlers above.
+    request.end(body.length>1048576?undefined:body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
   if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;

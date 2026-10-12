@@ -88,7 +88,34 @@ To restore, stop the service, preserve the damaged/current database and its SQLi
 
 ## Health and extensibility
 
-`GET /healthz` confirms the process is serving. Startup does full integrity checks; `/api/operator/audit` provides authenticated read-only diagnostics. Request logs contain request ID, path, method and status, never bodies, tokens or attached codes. Monitor these logs, latency and storage externally. Trade expiration maintenance runs each minute and relevant commands also handle expiry. SIGINT/SIGTERM stop accepting new work and close stores.
+`GET /healthz` returns 200 when the framework worker is ready and its admission queue is not saturated; otherwise it returns 503. Startup does full integrity checks; `/api/operator/audit` provides authenticated read-only diagnostics. Request logs contain request ID, path, method and status, never bodies, tokens or attached codes. Monitor these logs, latency and storage externally. Trade expiration maintenance runs each minute and relevant commands also handle expiry. SIGINT/SIGTERM stop accepting new work and close stores.
+
+Applications embedding the asynchronous service can import `FrameworkWorkerService` from `@digital-card/framework/worker`:
+
+```js
+import { FrameworkWorkerService } from "@digital-card/framework/worker";
+
+const framework = new FrameworkWorkerService({
+  filename: databasePath,
+  storeOptions: { encryptionKey },
+  extensionModule: trustedModulePath
+});
+await framework.ready;
+try {
+  const page = await framework.inventoryPage(principal, { limit: 50 });
+  // Use the page in the application.
+} finally {
+  await framework.close();
+}
+```
+
+Use plain data arguments. Functions belong in the trusted module; action dispatch supports its explicit AbortSignal cancellation bridge. The service exposes a fixed set of framework operations and selected store diagnostics, not arbitrary storage callbacks. `status()` is synchronous; framework operations return Promises. A close deadline or forced `terminate()` can leave a mutation's outcome uncertain, requiring original-key reconciliation.
+
+The production host runs CardFramework and its SQLite store in a worker thread. HTTP adapters await its results. Sessions still use synchronous SQLite on the HTTP thread, and presentation/import work has separate execution boundaries; this is not a guarantee that every request is free of blocking work. A worker failure rejects pending requests without replaying them. Recover mutations using their original idempotency keys after restarting the service.
+
+Trusted `workerOptions` may set `maxPendingRequests` (default 128), `maxPendingBytes` (default 8 MiB), `startupTimeoutMs` (default 30000) and `closeTimeoutMs` (default 10000). Queue limits apply before dispatch; overload returns 503. Admission includes serialized command overhead, so a body near the HTTP limit may require a larger worker byte budget. Shutdown stops scheduling, awaits in-flight cycles and drains the service within the shutdown deadline.
+
+The host module is loaded separately in the HTTP process and framework worker. Framework binding, policy and action callbacks execute in the worker; identity, currency/code provider gateways and static handlers execute on the HTTP side. Module-local state is not shared between them. The worker accepts named framework exports or a `createFrameworkOptions(options)` factory; a factory supplies the framework configuration in place of named exports. Its limits merge with the production defaults. Startup validates bindings and code-vault availability against the actual worker configuration. Keep import-time initialization safe in both contexts. Static handlers receive an optional third argument `{framework}` containing the asynchronous service.
 
 An ESM `HOST_MODULE` may export `bindings`, `policies`, `limits`, `sessionOptions`, `rateLimits`, `rateLimiter`, `identityProvider`, `resolveAccess`, `currencyProviders`, `presentationOptions` and `handleStatic`. These are trusted code, not imported card data. Public contracts and examples are in [customization recipes](customization-recipes.md#version-02-extension-contracts). Replace identity, storage or presentation independently. External wallets, payment processing, game reward redemption and webhook delivery require host adapters with their own transaction and recovery protocols.
 

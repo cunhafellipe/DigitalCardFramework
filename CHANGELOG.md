@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a worker-backed framework service and production host integration with bounded admission, cancellation, readiness checks and draining shutdown. Failed workers do not automatically replay mutations.
+
 - Await asynchronous framework results across API reads, login registration and code/currency reconciliation, preserving authorization checks before provider calls.
 
 - Added selected-record raffle entry, status and drawing, plus indexed automatic due selection. Draw replay preserves committed winners; automatic sweeps attempt every selected raffle before reporting a failure.

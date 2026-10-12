@@ -11,6 +11,7 @@
   "exports": {
     ".": "./src/index.js",
     "./sqlite": "./src/sqlite.js",
+    "./worker": "./src/framework-worker-service.js",
     "./ui": "./src/ui.js",
     "./client": {
       "types": "./src/client.d.ts",

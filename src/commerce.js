@@ -328,6 +328,7 @@ export class CommerceService {
       perBuyerLimit = 10,
       metadata = {},
       raffle = null,
+      allocationDigest,
     } = input;
     text(title, "listing title", 200);
     check(
@@ -386,7 +387,7 @@ export class CommerceService {
       "INVALID_INPUT",
       "Invalid stock kind",
     );
-    return {key,shopId,title,description,price:clone(price),items:clone(items),previewAt,startsAt,inputStartsAt:input.startsAt??null,endsAt,perBuyerLimit,metadata:clone(metadata),raffle:clone(raffle)};
+    return {key,shopId,title,description,price:clone(price),items:clone(items),previewAt,startsAt,inputStartsAt:input.startsAt??null,endsAt,perBuyerLimit,metadata:clone(metadata),raffle:clone(raffle),...(allocationDigest===undefined?{}:{allocationDigest})};
   }
   #creationCommandInput(reviewed){
     const {key,inputStartsAt,...input}=reviewed;return {...input,startsAt:inputStartsAt};
@@ -449,20 +450,41 @@ export class CommerceService {
     return contentDigest({input:this.#creationCommandInput(reviewed),effectiveStartsAt:reviewed.startsAt,actorId:actor.userId,shop,copies,packs,codes,counts,codeReadiness,supply:variantIds.map(id=>[id,s.supply[id]??0]),
       activeListings:recordContexts.get(s)?.activeShopListings??Object.values(s.listings).filter(l=>l.shopId===shop.id&&active(l)).length,catalogVersion:s.catalog?.version??0,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,tradingRevision:s.tradingPolicy?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0});
   }
+  stockAllocationOwner(s,actor,shopId){return this.#own(s,actor,shopId);}
+  stockAllocationTerms(s,actor,{shopId,productId,quantity}){
+    integer(quantity,'stock quantity',1,100);const shop=this.#own(s,actor,shopId);permission(actor,'commerce.manage');check(shop.kind==='admin','FORBIDDEN','Only admin shops can issue stock',403);
+    check(config(s).enabled&&shop.enabled,'SHOP_DISABLED','Listing creation is disabled',409);assertAdminShop(s,shop);this.#b.workflow(s,'packs',false);
+    const product=effectiveProduct(s,find(s.catalog.products,productId));check(product?.enabled!==false&&product?.allocationStrategy,'ALLOCATION_UNSUPPORTED','Declared stock allocation strategy required',409);
+    integer(quantity,'stock quantity',1,config(s).maxStockPerListing);check(quantity*(product.slots.reduce((n,slot)=>n+slot.count,0)*12+3)<2800,'ALLOCATION_LIMIT','Stock allocation requires a bounded listing transaction',502);
+    return {shop,product,allocationDigest:contentDigest({shop,product,quantity,catalogVersion:s.catalog.version,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0})};
+  }
+  prepareStockAllocation(s,actor,input,row){
+    const reviewed=this.#reviewListing({...input,startsAt:row?.preparation.reviewed.startsAt??input.startsAt??this.#b.now()});reviewed.inputStartsAt=input.startsAt;
+    const shop=this.#creationPreflight(s,actor,reviewed),terms=this.stockAllocationTerms(s,actor,{shopId:input.shopId,productId:input.items.productId,quantity:input.items.quantity});
+    check(input.allocationDigest===terms.allocationDigest,'ALLOCATION_STALE','Allocation terms changed; review again',409);
+    const snapshotDigest=this.#creationDependencies(s,actor,reviewed,shop),stock={kind:'mint-pack',productId:input.items.productId,quantity:input.items.quantity};
+    return {reviewed,shop,product:terms.product,snapshotDigest,policy:{phase:'create',userId:actor.userId,input:this.#creationCommandInput(reviewed),snapshotDigest,context:{actor:{id:actor.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(input.price),stock}}};
+  }
+  async evaluateStockListingPolicy(actor,row,signal){
+    if(!this.#remoteListingPolicy)return null;const proposal=this.#listingProposals.prepare({...row.preparation.policy,key:row.key});await this.#listingProposals.evaluate(proposal,{signal});return proposal;
+  }
+  admitStockListingPolicy(row,proposal,signal){return proposal?this.#listingProposals.admit(proposal,row.preparation.policy.snapshotDigest,{signal}):null;}
+  commitStockAllocation(actor,row,plan,{auxiliary,signal},tx){return this.#createListing(actor,{...row.preparation.reviewed,key:row.key},null,signal,null,{tx,plan,attemptId:row.id,policyAdmission:auxiliary});}
   async createListingAsync(actor,input,{signal}={}){
-    if(!this.#remoteListingPolicy&&!this.#transfers.configured('canTransfer'))return this.createListing(actor,input);
+    if(!this.#remoteListingPolicy&&!this.#transfers.configured('canTransfer')){try{return this.createListing(actor,input);}catch(error){if(error.code!=='ALLOCATION_ASYNC_REQUIRED'||input?.items?.kind!=='mint-pack')throw error;const principal=clone(actor),reviewed=this.#reviewListing(clone(input));return this.#b.allocateListingStock(principal,reviewed.key,this.#creationCommandInput(reviewed),{signal});}}
     const principal=clone(actor),reviewed=this.#reviewListing(clone(input)),commandInput=this.#creationCommandInput(reviewed);
     const previous=this.#b.creationReceipt(principal,reviewed.key,commandInput);if(previous.found)return previous.result;
     const prepared=this.#b.createListingRead(principal,commandInput,s=>{
       const shop=this.#creationPreflight(s,principal,reviewed),{items}=reviewed;
       const contexts=this.#creationTransfers(s,shop,items);
       const stock=['copies','packs'].includes(items.kind)?{kind:items.kind,ids:clone(items.ids)}:items.kind==='mint-card'?{kind:items.kind,variantId:items.variantId,quantity:items.quantity}:items.kind==='mint-pack'?{kind:items.kind,productId:items.productId,quantity:items.quantity}:{kind:items.kind,handler:items.handler,quantity:items.quantity};
-      return {contexts,phase:'create',userId:principal.userId,key:reviewed.key,input:commandInput,snapshotDigest:this.#creationDependencies(s,principal,reviewed,shop),context:{actor:{id:principal.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(reviewed.price),stock}};
+      return {allocationRequired:items.kind==='mint-pack'&&!!effectiveProduct(s,find(s.catalog.products,items.productId))?.allocationStrategy,contexts,phase:'create',userId:principal.userId,key:reviewed.key,input:commandInput,snapshotDigest:this.#creationDependencies(s,principal,reviewed,shop),context:{actor:{id:principal.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(reviewed.price),stock}};
     });
+    if(prepared.allocationRequired)return this.#b.allocateListingStock(principal,reviewed.key,commandInput,{signal});
     const proposal=this.#remoteListingPolicy?this.#listingProposals.prepare(prepared):null,batch=this.#transfers.prepare({...prepared,phase:'list'});await Promise.all([proposal?this.#listingProposals.evaluate(proposal,{signal}):null,this.#transfers.evaluate(batch,{signal})]);return this.#createListing(principal,reviewed,proposal,signal,batch);
   }
-  #createListing(actor,reviewed,proposal,signal,batch){
-    const {key,shopId,title,description,price,items,previewAt,startsAt,endsAt,perBuyerLimit,metadata,raffle}=reviewed,receipt={};
+  #createListing(actor,reviewed,proposal,signal,batch,allocation){
+    const {key,shopId,title,description,price,items,previewAt,startsAt,endsAt,perBuyerLimit,metadata,raffle}=reviewed,receipt={...(allocation?.policyAdmission?{policyAdmission:allocation.policyAdmission}:{})};
     return this.#b.createListingCommand(
       actor,
       key,
@@ -479,6 +501,7 @@ export class CommerceService {
         perBuyerLimit,
         metadata,
         raffle,
+        ...(reviewed.allocationDigest===undefined?{}:{allocationDigest:reviewed.allocationDigest}),
       },
       (s, u) => {
         initialize(s);
@@ -499,6 +522,7 @@ export class CommerceService {
           "Shop listing limit reached",
           507,
         );
+        if(items.kind==='mint-pack')check(!effectiveProduct(s,find(s.catalog.products,items.productId))?.allocationStrategy||allocation,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous stock allocation',503);
         const listing = {
           id: randomUUID(),
           shopId,
@@ -703,7 +727,7 @@ export class CommerceService {
         s.listings[listing.id] = listing;
         return publicListing(s, listing, this.#b.now(), u.id);
         }finally{this.#transfers.clear(s);}
-      },receipt,
+      },receipt,allocation,
     );
   }
   listings(actor, { shopId, ...options } = {}) {

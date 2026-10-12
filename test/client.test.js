@@ -119,3 +119,17 @@ test('failed-command confirmation preserves a journal changed while status is lo
   let resolve;const client={requestKey:()=> 'new',registerCommandIntent:async()=>{},executeCommandIntent:async()=>{},acknowledgeCommandIntent:async()=>{},commandIntents:()=>new Promise(done=>resolve=done)};
   const run=createCommandRunner({client,storage,namespace:'alice'}),checking=run.confirmFailed('purchase',input);storage.setItem(storageKey,JSON.stringify({[token]:{...input,key:'second'}}));resolve({items:[{command:'purchase',userId:'alice',state:'failed',input}]});assert.equal(await checking,false);assert.equal(run.pending('purchase').key,'second');assert.equal(run.pending('purchase')._confirmed,undefined);
 });
+
+test('stock allocation client validates quotes and shared-head recovery without exposing entropy',async()=>{
+  const shopId='11111111-1111-4111-8111-111111111111',attemptId='22222222-2222-4222-8222-222222222222',calls=[];
+  let result={shopId,productId:'deck',quantity:2,allocationDigest:'a'.repeat(64)};
+  const client=createClient({fetch:async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(result),{status:200});}});
+  assert.deepEqual(await client.quoteMintPackStock({shopId,productId:'deck',quantity:2}),result);
+  assert.equal(calls[0].url,'/api/allocations/stock/quote');assert.deepEqual(JSON.parse(calls[0].options.body),{shopId,productId:'deck',quantity:2});
+  for(const input of [{shopId:'bad',productId:'deck',quantity:2},{shopId,productId:'deck',quantity:101}])await assert.rejects(client.quoteMintPackStock(input),error=>error.code==='INVALID_INPUT');
+  assert.equal(calls.length,1);
+  result={shopId,productId:'deck',attemptId,state:'prepared',errorCode:null,command:'purchase',attemptShopId:null};
+  assert.deepEqual(await client.stockAllocationStatus({shopId,productId:'deck'}),result);assert.equal(calls[1].url,'/api/allocations/stock/status?shopId='+shopId+'&productId=deck');
+  result={...result,command:'createListing',attemptShopId:shopId};assert.deepEqual(await client.stockAllocationStatus({shopId,productId:'deck'}),result);
+  result={...result,seed:'private'};await assert.rejects(client.stockAllocationStatus({shopId,productId:'deck'}),error=>error.code==='INVALID_WIRE_CONTRACT');
+});

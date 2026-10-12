@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {request as httpRequest} from 'node:http';
 import {createRemoteAllocationStrategy,allocationStrategyProtocol,validateAllocationStrategyResponse} from '../src/remote-allocation-strategy.js';
+import {createRemoteStockAllocationStrategy,stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse} from '../src/remote-stock-allocation-strategy.js';
 import {planAllocation} from '../src/allocation-planner.js';
 
 const executable=fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url));
@@ -33,7 +34,7 @@ async function post(receiver,value,status=200,options={}){
     const request=httpRequest(options.url??receiver.url,{method:'POST',headers,signal:AbortSignal.timeout(10000)},response=>{const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('error',reject);response.on('end',()=>fulfill({status:response.statusCode,headers:response.headers,body:Buffer.concat(chunks)}));});request.on('error',reject);request.end(body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
-  if(status===200||status===503)validateAllocationStrategyResponse(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
+  if(status===200||status===503)(resultValue.protocol===stockAllocationStrategyProtocol?validateStockAllocationStrategyResponse:validateAllocationStrategyResponse)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
 }
 test('Node allocation provider computes and replays actual plans through framework transport without effects',async()=>{
   const receiver=await start(),remote=createRemoteAllocationStrategy({algorithm:'weighted-deck@1',scope:'catalog-purchase',providerId,url:receiver.url,token,allowLoopbackHttp:true});
@@ -75,4 +76,29 @@ test('Node allocation endpoint enforces authentication, identity, strict JSON an
 });
 test('Node allocation provider refuses absent or invalid startup authority',async()=>{
   for(const environment of [{ALLOCATION_PROVIDER_TOKEN:''},{ALLOCATION_PROVIDER_TOKEN:'short'},{ALLOCATION_PROVIDER_TOKEN:'invalid credential with spaces'},{ALLOCATION_PROVIDER_TOKEN:token+'\n'},{ALLOCATION_PROVIDER_ID:'constructor'},{ALLOCATION_PROVIDER_ID:'bad identity'},{ALLOCATION_PROVIDER_ID:providerId+'\n'}])await assert.rejects(start(environment),/Provider exited before readiness/);
+});
+test('Node stock allocation provider plans and replays through its commerce transport and isolates protocols',async()=>{
+  const wallet=await start(),stock={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-stock')};
+  const remote=createRemoteStockAllocationStrategy({algorithm:'weighted-deck@1',scope:'commerce-stock',providerId,url:stock.url,token,allowLoopbackHttp:true});
+  const makeStock=()=>{const request=make();request.protocol=stockAllocationStrategyProtocol;request.scope='commerce-stock';request.context.shop={id:randomUUID(),ownerId:'merchant'};return request;};
+  try{
+    const request={...makeStock(),...remote.grant()},snapshot=structuredClone(request),expected={...echo(request),status:'planned',allocations:planAllocation(request.context)};
+    assert.deepEqual(await remote.evaluate(request),expected);assert.deepEqual(await remote.evaluate(request),expected);assert.deepEqual(request,snapshot);
+    assert.deepEqual(await post(stock,request),expected);
+    await post(wallet,request,400);await post(stock,make(),400);
+    const walletProtocol=structuredClone(request);walletProtocol.protocol=allocationStrategyProtocol;await post(stock,walletProtocol,400);
+    const walletScope=structuredClone(request);walletScope.scope='catalog-purchase';await post(stock,walletScope,400);
+    for(const shop of [undefined,null,{id:'invalid',ownerId:'merchant'},{id:request.context.shop.id},{...request.context.shop,allocated:true}]){
+      const invalid=structuredClone(request);if(shop===undefined)delete invalid.context.shop;else invalid.context.shop=shop;await post(stock,invalid,400);
+    }
+    await post(stock,{...request,providerId:'other.allocation'},400);
+    const body=JSON.stringify(request);
+    await post(stock,body,401,{headers:{'content-type':'application/json','content-length':String(Buffer.byteLength(body)),authorization:'Bearer revoked-fixture-credential'}});
+    await post(stock,body.replace('"ownerId":"merchant"','"ownerId":"merchant","owner\\u0049d":"merchant"'),400);
+    await post(stock,body.replace('"ownerId":"merchant"','"ownerId":"\\ud800"'),400);
+    await post(stock,Buffer.from([0xff,0xfe]),400);await post(stock,'x'.repeat(1048577),400);
+    const depleted=structuredClone(request);depleted.context.variants.forEach(variant=>{variant.remaining=0;});assert.deepEqual(await post(stock,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
+    const walletRequest=make();assert.deepEqual(await post(wallet,walletRequest),{...echo(walletRequest),status:'planned',allocations:planAllocation(walletRequest.context)});
+    assert.deepEqual(await remote.evaluate(request),expected);
+  }finally{remote.close();await stop(wallet);}
 });

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added reviewed weighted-deck creation of minted pack stock, with atomic listing allocation, shared wallet/stock retry protection, explicit recovery, and a stock endpoint in the Node provider example.
+
 - Added opt-in weighted-deck allocation for supported wallet-funded catalog purchases, with deterministic provider plans, durable retry protection, state revalidation, and allocation status and acknowledgement APIs. Added a Node provider example, ticket-count explanations, separate quote review and purchase actions, and read-only confirmation of failed commands.
 
 - Added a Go transfer/trade policy provider example and compiled-provider conformance checks. Aligned Python policy numeric parsing with exact integer-valued JSON inputs.

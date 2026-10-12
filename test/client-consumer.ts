@@ -35,3 +35,12 @@ admin.stage({command:'administerCards',input:{scope:'site',reason:'Configuration
 // @ts-expect-error receipts expose integer amounts as numbers
 const amount:Promise<string>=client.purchase({key:'key',productId:'sample',quantity:1,productRevision:1,catalogVersion:1}).then(result=>result.paid.amount);
 void amount;
+
+async function createReviewedStock(shopId:string){
+  const quote=await client.quoteMintPackStock({shopId,productId:'sample',quantity:2});
+  const status=await client.stockAllocationStatus({shopId,productId:'sample'});
+  const originatingCommand:'purchase'|'createListing'|null=status.command;
+  void originatingCommand;
+  return runner('createListing',{shopId,title:'Sealed packs',price:{currencyId:'credits',amount:10},items:{kind:'mint-pack',productId:quote.productId,quantity:quote.quantity},allocationDigest:quote.allocationDigest});
+}
+void createReviewedStock;

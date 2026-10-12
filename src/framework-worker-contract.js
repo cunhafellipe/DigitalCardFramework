@@ -20,7 +20,7 @@ export const frameworkMethods = Object.freeze([
   'settleExternalCredit','prepareExternalPurchase','commitExternalPurchase','cancelExternalPurchase',
   'confirmExternalCompensation','externalPurchaseStatus','lookupExternalPurchase','pendingExternalPurchases',
   'reconcileLegacyExternalPurchase','resolveLegacyExternalPurchase','wallet','history','quote','availability',
-  'pityProgress','purchase','purchaseAsync','allocationStatus','acknowledgeAllocation','setRemoteAllocationEnabled','packs','packsPage','packPage','openPack','inventory','inspectCard',
+  'pityProgress','purchase','purchaseAsync','allocationStatus','quoteMintPackStock','stockAllocationStatus','setRemoteStockAllocationEnabled','acknowledgeAllocation','setRemoteAllocationEnabled','packs','packsPage','packPage','openPack','inventory','inspectCard',
   'consumeBinding','convert','tradeUp','proposeTrade','counterTrade','sweepExpiredTrades','trades','acceptTrade',
   'cancelTrade','saveAlbum','albums','viewAlbum','publicAlbums','bindings','events',
 ]);
@@ -28,7 +28,7 @@ export const storeMethods = Object.freeze(['storeIntegrity','storeDiagnostics','
 export const sessionMethods = Object.freeze(['sessionCreate','sessionGet','sessionConsume','sessionRevoke']);
 export const frameworkOptionNames = Object.freeze([
   'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','actionHandlers',
-  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies','remoteAllocation',
+  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies','remoteAllocation','remoteStockAllocation',
 ]);
 export function unavailable() {
   return new FrameworkError('WORKER_UNAVAILABLE','Framework worker is unavailable; reconcile mutations using their original idempotency keys',503);

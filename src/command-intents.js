@@ -62,15 +62,15 @@ export class CommandIntentService{
     }));
   }
   #accounting(tx){let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_MIGRATION_REQUIRED','Record accounting is not prepared',503);return accounting;}
-  allocationReference(tx,actor,key,inputDigest){
-    const head=tx.get('commandIntentHeads',actor.userId)?.purchase,row=head?tx.get('commandIntents',head):null;if(row?.userId!==actor.userId||row.command!=='purchase'||row.state!=='pending'||row.input.key!==key)return null;
-    const {productId,quantity=1,productRevision,catalogVersion,adminRevision,allocationDigest}=row.input,input={productId,quantity,productRevision,catalogVersion,...(adminRevision===undefined?{}:{adminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
+  allocationReference(tx,actor,key,inputDigest,command='purchase'){
+    const head=tx.get('commandIntentHeads',actor.userId)?.[command],row=head?tx.get('commandIntents',head):null;if(row?.userId!==actor.userId||row.command!==command||row.state!=='pending'||row.input.key!==key)return null;
+    let input;if(command==='createListing'){const {shopId,title,description='',price,items,previewAt=null,startsAt=null,endsAt=null,perBuyerLimit=10,metadata={},raffle=null,allocationDigest}=row.input;input={shopId,title,description,price,items,previewAt,startsAt,endsAt,perBuyerLimit,metadata,raffle,...(allocationDigest===undefined?{}:{allocationDigest})};}else{const {productId,quantity=1,productRevision,catalogVersion,adminRevision,allocationDigest}=row.input;input={productId,quantity,productRevision,catalogVersion,...(adminRevision===undefined?{}:{adminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};}
     return contentDigest(input)===inputDigest?{id:row.id,inputDigest:contentDigest(row.input)}:null;
   }
   failAllocationWithinTransaction(tx,actor,allocation){
-    const reference=this.allocationReference(tx,actor,allocation.key,allocation.inputDigest);if(!reference)return false;
+    const reference=this.allocationReference(tx,actor,allocation.key,allocation.inputDigest,allocation.command??'purchase');if(!reference)return false;
     if(allocation.intentReference?.id===reference.id)check(allocation.intentReference.inputDigest===reference.inputDigest,'INVALID_STATE','Allocation command intent input changed',500);
-    return this.finishWithinTransaction(tx,actor,reference.id,row=>{check(contentDigest(row.input)===reference.inputDigest,'INVALID_STATE','Allocation command intent input changed',500);row.state='failed';row.completedAt=this.#clock();row.error={code:'ALLOCATION_ACKNOWLEDGED',message:'Allocation attempt was abandoned; review a new purchase',status:409};return true;},true);
+    return this.finishWithinTransaction(tx,actor,reference.id,row=>{check(contentDigest(row.input)===reference.inputDigest,'INVALID_STATE','Allocation command intent input changed',500);row.state='failed';row.completedAt=this.#clock();row.error={code:'ALLOCATION_ACKNOWLEDGED',message:'Allocation attempt was abandoned; review a new command',status:409};return true;},true);
   }
   finishWithinTransaction(tx,actor,id,fn,pendingOnly=false){
       const accounting=this.#accounting(tx),row=tx.get('commandIntents',id);check(row?.userId===actor.userId,'NOT_FOUND','Command intent not found',404);

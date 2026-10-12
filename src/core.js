@@ -30,6 +30,8 @@ import {createRemoteTransferPolicy} from './remote-transfer-policy.js';
 import {createRemoteTradePolicy} from './remote-trade-policy.js';
 import {TransferPolicyAdmission} from './transfer-policy-admission.js';
 import {createRemoteAllocationStrategy} from './remote-allocation-strategy.js';
+import {createRemoteStockAllocationStrategy} from './remote-stock-allocation-strategy.js';
+import {stockAllocationStrategyProtocol,validateStockAllocationStrategyRequest} from './stock-allocation-strategy-contracts.js';
 import {AllocationIntentService} from './allocation-intents.js';
 
 const clone = value => structuredClone(value);
@@ -42,8 +44,8 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 export class CardFramework {
-  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();#remoteAllocation;#allocationIntents;#allocationAdmissions=new WeakMap();
-  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={},remoteAllocation=null}={}) {
+  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();#remoteAllocation;#allocationIntents;#allocationAdmissions=new WeakMap();#remoteStockAllocation;#stockAllocationIntents;#allocationActive=new Map();
+  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={},remoteAllocation=null,remoteStockAllocation=null}={}) {
     this.#store=store; this.#clock=clock; this.#random=random;
     this.#cardPolicies=new CardPolicyService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),clock});
     this.#administration=new AdminService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),now:clock,mint:(...args)=>this.#mint(...args),open:(...args)=>this.#openCopy(...args),removePlacements:(...args)=>this.#removePlacements(...args)});
@@ -64,17 +66,19 @@ export class CardFramework {
       if(Object.hasOwn(remotePolicies,'canTransfer'))this.#remoteTransferPolicy=createRemoteTransferPolicy(remotePolicies.canTransfer);
       if(Object.hasOwn(remotePolicies,'canTrade'))this.#remoteTradePolicy=createRemoteTradePolicy(remotePolicies.canTrade);
       if(remoteAllocation!==null)this.#remoteAllocation=createRemoteAllocationStrategy(remoteAllocation);
-    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#remoteAllocation?.close();throw error;}
+      if(remoteStockAllocation!==null)this.#remoteStockAllocation=createRemoteStockAllocationStrategy(remoteStockAllocation);
+    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#remoteAllocation?.close();this.#remoteStockAllocation?.close();throw error;}
     this.#transferPolicies=new TransferPolicyAdmission({canTransfer:this.#remoteTransferPolicy,canTrade:this.#remoteTradePolicy});
-    if(this.#remoteAllocation)this.#allocationIntents=new AllocationIntentService({store,provider:this.#remoteAllocation,clock,prepare:(...args)=>this.#prepareAllocation(...args),commit:(...args)=>this.#commitAllocation(...args),reference:(...args)=>this.#commandIntents.allocationReference(...args),abandon:(...args)=>this.#commandIntents.failAllocationWithinTransaction(...args)});
+    if(this.#remoteAllocation)this.#allocationIntents=new AllocationIntentService({store,provider:this.#remoteAllocation,clock,active:this.#allocationActive,prepare:(...args)=>this.#prepareAllocation(...args),commit:(...args)=>this.#commitAllocation(...args),reference:(...args)=>this.#commandIntents.allocationReference(...args),abandon:(...args)=>this.#commandIntents.failAllocationWithinTransaction(...args)});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
       raffleCommand:(actor,key,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn),
       raffleOperator:(actor,key,permission,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn,'draw'),
       raffleRead:(actor,input,fn)=>this.#raffleRecords(actor,null,null,input,fn,'read'),
       cancelListingCommand:(actor,key,type,input,fn)=>this.#cancelListingRecords(actor,key,input,fn),
-      createListingCommand:(actor,key,type,input,fn,receipt)=>this.#createListingRecords(actor,key,input,fn,true,receipt),
+      createListingCommand:(actor,key,type,input,fn,receipt,allocation)=>this.#createListingRecords(actor,key,input,fn,true,receipt,allocation),
       createListingRead:(actor,input,fn)=>this.#createListingRecords(actor,null,input,fn,false),
+      allocateListingStock:(actor,key,input,options)=>{check(this.#stockAllocationIntents,'ALLOCATION_UNAVAILABLE','Stock allocation strategy is not configured',503);return this.#stockAllocationIntents.purchase(actor,key,input,options);},
       creationReceipt:(actor,key,input)=>this.#purchaseReceipt(actor,key,input,'listing.created'),
       listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn,receipt)=>this.#listingRecords(actor,key,input,fn,true,receipt),
       purchaseReceipt:(actor,key,input)=>this.#purchaseReceipt(actor,key,input),
@@ -94,6 +98,7 @@ export class CardFramework {
       canList:policies.canList,canPurchase:policies.canPurchase,
     },{random:raffleRandom,remotePolicy:this.#remotePurchasePolicy,policyCoordinator:this.#remotePurchasePolicy?new PolicyProposalCoordinator(this.#remotePurchasePolicy):undefined,
       remoteListingPolicy:this.#remoteListingPolicy,listingPolicyCoordinator:this.#remoteListingPolicy?new PolicyProposalCoordinator(this.#remoteListingPolicy,{protocol:listingPolicyProtocol,operation:'canList',validateRequest:validateListingPolicyRequest}):undefined,transferPolicies:this.#transferPolicies});
+    if(this.#remoteStockAllocation)this.#stockAllocationIntents=new AllocationIntentService({store,provider:this.#remoteStockAllocation,clock,active:this.#allocationActive,command:'createListing',protocol:stockAllocationStrategyProtocol,scope:'commerce-stock',validate:validateStockAllocationStrategyRequest,transaction:{allocationListing:true},prepare:(...args)=>this.#prepareStockAllocation(...args),beforeEvaluate:(...args)=>this.#commerce.evaluateStockListingPolicy(...args),beforePlan:(...args)=>this.#commerce.admitStockListingPolicy(...args),commit:(tx,actor,row,plan,options)=>this.#commerce.commitStockAllocation(actor,row,plan,options,tx),reference:(tx,actor,key,inputDigest)=>this.#commandIntents.allocationReference(tx,actor,key,inputDigest,'createListing'),abandon:(tx,actor,row)=>{this.#stockAllocationOwner(tx,actor,row.input.shopId);return this.#commandIntents.failAllocationWithinTransaction(tx,actor,row);}});
     this.#commandIntents=new CommandIntentService({store,clock,limits:this.#limits,admit:(s,completion)=>this.#capacity(s,completion),execute:(actor,command,input)=>this[command==='preferences'?'setPreferences':command](actor,input),executeAsync:(actor,command,input,options)=>this[command==='purchase'?'purchaseAsync':command==='buyListing'?'buyListingAsync':command==='createListing'?'createListingAsync':['proposeTrade','counterTrade','acceptTrade'].includes(command)?command+'Async':command==='preferences'?'setPreferences':command](actor,input,options),completion:(s,actor,command,input)=>!!(input.key&&(s.requests[actor.userId+':'+input.key]||s.operatorRequests?.[actor.userId+':'+input.key]))||command==='openPack'&&Object.hasOwn(s.packs,input.packId)&&s.packs[input.packId]&&!s.packs[input.packId].receipt||['acceptTrade','cancelTrade'].includes(command)&&s.trades[input.tradeId]?.status==='pending'||command==='cancelListing'&&s.listings?.[input.listingId]?.status==='active'});
 
   }
@@ -218,7 +223,7 @@ export class CardFramework {
       return {count};
     });
   }
-  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#allocationIntents?.close();this.#store.close(); }
+  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#allocationIntents?.close();this.#stockAllocationIntents?.close();this.#store.close(); }
   audit(actor){this.#admin(actor,'audit.read');return this.#store.read(auditState);}
   #admin(actor,permission) { check(hasPermission(actor,permission),'FORBIDDEN','Operator authority required: '+permission,403); }
   #user(s,actor) {
@@ -693,7 +698,7 @@ export class CardFramework {
       return {id:purchaseId,packs,paid:{currencyId:product.price.currencyId,amount:total}};
   }
   allocationStatus(actor,input){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.status(actor,input);}
-  acknowledgeAllocation(actor,input){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.acknowledge(actor,input);}
+  acknowledgeAllocation(actor,input){const command=this.#query(q=>{this.#queryUser(q,actor);const row=q.get('allocationAttempts',input.attemptId);check(row?.userId===actor.userId,'NOT_FOUND','Allocation attempt not found',404);return row.command??'purchase';}),service=command==='createListing'?this.#stockAllocationIntents:this.#allocationIntents;check(service,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return service.acknowledge(actor,input);}
   setRemoteAllocationEnabled(actor,{enabled}){this.#admin(actor,'commerce.manage');check(this.#remoteAllocation,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#remoteAllocation.setEnabled(enabled);}
   #allocationDigest(product,quantity){return contentDigest({strategy:product.allocationStrategy,productId:product.id,productRevision:product.revision,slots:product.slots,quantity,adminRevision:product.adminRevision??0});}
   #allocationState(tx,actor,input){
@@ -703,16 +708,26 @@ export class CardFramework {
     for(const variant of variants){state.supply[variant.id]=tx.get('supply',variant.id)??0;const validation=tx.get('cardValidation',variant.id);if(validation)state.cardValidation[variant.id]=validation;}
     return {state,user,variants,product:effectiveProduct(state,base)};
   }
+  setRemoteStockAllocationEnabled(actor,{enabled}){this.#admin(actor,'commerce.manage');check(this.#remoteStockAllocation,'ALLOCATION_UNAVAILABLE','Stock allocation strategy is not configured',503);return this.#remoteStockAllocation.setEnabled(enabled);}
+  #stockAllocationOwner(tx,actor,shopId){const user=this.#queryUser(tx,actor),shop=tx.get('shops',shopId);return this.#commerce.stockAllocationOwner({users:{[user.id]:user},shops:shop?{[shopId]:shop}:{},commerceSettings:tx.value('commerceSettings'),adminControls:tx.value('adminControls')},actor,shopId);}
+  quoteMintPackStock(actor,{shopId,productId,quantity}){return this.#createListingRecords(actor,null,{shopId,items:{kind:'mint-pack',productId,quantity}},s=>{const terms=this.#commerce.stockAllocationTerms(s,actor,{shopId,productId,quantity}),variants=[...new Set(terms.product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>s.catalog.variants.find(v=>v.id===id));this.#allocationContext(s,{id:actor.userId},variants,terms.product,quantity);return {shopId,productId,quantity,allocationDigest:terms.allocationDigest};},false);}
+  stockAllocationStatus(actor,{shopId,productId}){return this.#query(q=>{this.#stockAllocationOwner(q,actor,shopId);text(productId,'product ID',100);const head=q.get('allocationHeads',contentDigest({userId:actor.userId,productId,algorithm:'weighted-deck@1'})),row=head?.lastAttemptId?q.get('allocationAttempts',head.lastAttemptId):null;return {shopId,productId,attemptId:row?.id??null,state:row?.state??'idle',errorCode:row?.errorCode??null,command:row?(row.command??'purchase'):null,attemptShopId:row?.command==='createListing'?row.input.shopId:null};});}
+  #prepareStockAllocation(tx,actor,input,row){return this.#createListingRecords(actor,null,input,s=>{const prepared=this.#commerce.prepareStockAllocation(s,actor,input,row),variants=[...new Set(prepared.product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>s.catalog.variants.find(v=>v.id===id)),context={...this.#allocationContext(s,{id:actor.userId},variants,prepared.product,input.items.quantity),shop:{id:prepared.shop.id,ownerId:prepared.shop.ownerId}};return {context,preparation:prepared,snapshotDigest:contentDigest({listing:prepared.snapshotDigest,product:prepared.product,adminControls:s.adminControls,supply:s.supply,cardValidation:s.cardValidation})};},false,null,{tx});}
   #prepareAllocation(tx,actor,input){
     const {state,user,variants,product}=this.#allocationState(tx,actor,input);assertAdminPurchase(state,user.id,product);this.#workflow(state,'packs',product.price.amount>0);this.#productTime(product);
     check(product.enabled!==false&&product.revision===input.productRevision&&state.catalog.version===input.catalogVersion&&adminRevision(state)===(input.adminRevision??0)&&this.#allocationDigest(product,input.quantity)===input.allocationDigest,'ALLOCATION_STALE','Allocation state changed; review again',409);
     check(!product.pity&&product.duplicatePolicy.scope==='none'&&variants.every(v=>!v.codes?.length&&!Object.values(v.bindings).some(b=>b.factory)),'ALLOCATION_UNSUPPORTED','Allocation strategy does not yet support pity, duplicate filters, codes or binding factories',409);
     check(input.quantity<=product.maxQuantity,'INVALID_INPUT','Quantity exceeds product limit');const total=product.price.amount*input.quantity;integer(total,'total');check((state.balances[user.id][product.price.currencyId]??0)>=total,'INSUFFICIENT_FUNDS','Insufficient purchase currency',409);
-    check(product.slots.reduce((n,s)=>n+s.count,0)*input.quantity<=2000,'ALLOCATION_LIMIT','Allocation batch exceeds 2000 cards',502);
-    const remaining=new Map(variants.map(v=>[v.id,v.enabled===false?0:v.supplyLimit===undefined?null:Math.max(0,v.supplyLimit-state.supply[v.id])])),seenFinite=new Set();
-    const slots=product.slots.map(slot=>{for(const e of slot.pool)if(remaining.get(e.variantId)!==null){check(!seenFinite.has(e.variantId),'ALLOCATION_UNSUPPORTED','Overlapping finite-supply slot pools are not supported',409);seenFinite.add(e.variantId);}const pool=slot.pool.map(e=>({...e,weight:remaining.get(e.variantId)===null?e.weight:Math.min(e.weight,remaining.get(e.variantId))})).filter(e=>e.weight>0);check(pool.reduce((n,e)=>n+e.weight,0)>=(slot.probability?.numerator===0?0:slot.count*input.quantity),'ALLOCATION_STALE','Allocation state changed; review again',409);return {id:slot.id,role:slot.role,count:slot.count,probability:slot.probability??{numerator:1,denominator:1},pool};});
-    const context={userId:user.id,product:{id:product.id,revision:product.revision,strategy:product.allocationStrategy,slots},quantity:input.quantity,variants:variants.map(v=>({id:v.id,remaining:remaining.get(v.id)}))};
+    const context=this.#allocationContext(state,user,variants,product,input.quantity);
     return {context,snapshotDigest:contentDigest({product,catalogVersion:state.catalog.version,adminControls:state.adminControls,cardAuthoringRevision:state.cardAuthoring?.revision??0,supply:state.supply,cardValidation:state.cardValidation})};
+  }
+  #allocationContext(state,user,variants,product,quantity){
+    check(!product.pity&&product.duplicatePolicy.scope==='none'&&variants.every(v=>!v.codes?.length&&!Object.values(v.bindings).some(b=>b.factory)),'ALLOCATION_UNSUPPORTED','Allocation strategy does not yet support pity, duplicate filters, codes or binding factories',409);
+    check(product.slots.reduce((n,s)=>n+s.count,0)*quantity<=2000,'ALLOCATION_LIMIT','Allocation batch exceeds 2000 cards',502);
+    const remaining=new Map(variants.map(v=>[v.id,v.enabled===false?0:v.supplyLimit===undefined?null:Math.max(0,v.supplyLimit-state.supply[v.id])])),seenFinite=new Set();
+    const slots=product.slots.map(slot=>{for(const e of slot.pool)if(remaining.get(e.variantId)!==null){check(!seenFinite.has(e.variantId),'ALLOCATION_UNSUPPORTED','Overlapping finite-supply slot pools are not supported',409);seenFinite.add(e.variantId);}const pool=slot.pool.map(e=>({...e,weight:remaining.get(e.variantId)===null?e.weight:Math.min(e.weight,remaining.get(e.variantId))})).filter(e=>e.weight>0);check(pool.reduce((n,e)=>n+e.weight,0)>=(slot.probability?.numerator===0?0:slot.count*quantity),'ALLOCATION_STALE','Allocation state changed; review again',409);return {id:slot.id,role:slot.role,count:slot.count,probability:slot.probability??{numerator:1,denominator:1},pool};});
+    const context={userId:user.id,product:{id:product.id,revision:product.revision,strategy:product.allocationStrategy,slots},quantity:quantity,variants:variants.map(v=>({id:v.id,remaining:remaining.get(v.id)}))};
+    return context;
   }
   #commitAllocation(tx,actor,row,plan){
     const {state,user,product}=this.#allocationState(tx,actor,row.input);let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_MIGRATION_REQUIRED','Prepare revision-bound record accounting',503);
@@ -763,7 +778,7 @@ export class CardFramework {
   }
   #allocatePacks(s,user,product,quantity,source={},personalized=true){
     const c=this.#catalog(s),purchaseId=source.purchaseId??null,admission=this.#allocationAdmissions.get(s);
-    if(product.allocationStrategy)check(personalized&&admission?.productId===product.id&&admission.quantity===quantity,'ALLOCATION_UNSUPPORTED','This allocation strategy requires its asynchronous wallet purchase path',409);
+    if(product.allocationStrategy)check((personalized||admission?.scope==='commerce-stock')&&admission?.productId===product.id&&admission.quantity===quantity,'ALLOCATION_UNSUPPORTED','This allocation strategy requires its asynchronous wallet purchase path',409);
       const packs=[];
       s.pity??={};s.pity[user.id]??={};
       for (let n=0;n<quantity;n++) {
@@ -1073,10 +1088,10 @@ export class CardFramework {
       }finally{recordContexts.delete(state);}
     },{raffle:true,raffleDraw:drawing});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
   }
-  #createListingRecords(actor,key,input,fn,creating=true,receipt){
+  #createListingRecords(actor,key,input,fn,creating=true,receipt,allocation){
     const type='listing.created',fallback=()=>creating?this.#command(actor,key,type,input,fn,receipt):this.#store.read(s=>fn(s,this.#user(s,actor)));if(creating)text(key,'idempotency key',128);
     if(!this.#store.transactRecords)return fallback();let invoked=false;
-    const run=creating?(fn,options)=>this.#store.transactRecords(fn,options):fn=>this.#query(q=>fn({...q,ownerCounts:id=>q.collectionCounts(id)}));
+    const run=allocation?(fn)=>fn(allocation.tx):creating?(fn,options)=>this.#store.transactRecords(fn,options):fn=>this.#query(q=>fn({...q,ownerCounts:id=>q.collectionCounts(id)}));
     try{return run(tx=>{
       const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input}),previous=tx.get('requests',token);
       if(creating&&previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
@@ -1102,11 +1117,12 @@ export class CardFramework {
       check(copyIds.size*5+draws*12+Object.keys(state.codes).length*2+quantity*3<2800&&Buffer.byteLength(JSON.stringify(state))<4*1024*1024,'RECORD_PATH_UNAVAILABLE','Listing creation requires compatibility scope',409);
       const codeCount=(creating?tx.count('codes'):accounting.counts.codes??0)-Object.keys(state.codes).length,activeShopListings=shop?(tx.get('_shopListingCounts',shop.id)??0):0;
       recordContexts.set(state,{accounting,ownerCountsById,activeShopListings,codeCount,codeIdentityExists:(fingerprint,providerId,externalId)=>!!tx.get('_codeIdentities',JSON.stringify(['fingerprint',fingerprint]))||!!(externalId&&tx.get('_codeIdentities',JSON.stringify(['external',providerId,externalId])))});
-      try{invoked=true;const result=fn(state,user);if(!creating)return result;this.#reserve(state,'listing',result.id);state.requests[token]={hash,result:clone(result),...(receipt?.policyAdmission?{policyAdmission:clone(receipt.policyAdmission)}:{}),...(receipt?.policyAdmissions?{policyAdmissions:clone(receipt.policyAdmissions)}:{})};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
+      if(allocation?.plan)this.#allocationAdmissions.set(state,{productId:items.productId,quantity:items.quantity,plan:allocation.plan,scope:'commerce-stock'});
+      try{invoked=true;const result=fn(state,user);if(!creating)return result;this.#reserve(state,'listing',result.id);state.requests[token]={hash,result:clone(result),...(allocation?.attemptId?{allocationAttemptId:allocation.attemptId}:{}),...(receipt?.policyAdmission?{policyAdmission:clone(receipt.policyAdmission)}:{}),...(receipt?.policyAdmissions?{policyAdmissions:clone(receipt.policyAdmissions)}:{})};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
         for(const field of ['supply','pity','copies','packs','codes','listings','requests','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);
         for(const row of state.events)tx.append('events',row);return result;
-      }finally{recordContexts.delete(state);}
-    },creating?{listingCreation:true}:{});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+      }finally{this.#allocationAdmissions.delete(state);recordContexts.delete(state);}
+    },creating?{listingCreation:true}:{});}catch(error){if(allocation&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))check(false,'ALLOCATION_LIMIT','Stock allocation requires a bounded listing transaction',502);if(!allocation&&!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
   }
   #listingRecords(actor,key,input,fn,purchasing=true,receipt){
     const type='shop.purchased';

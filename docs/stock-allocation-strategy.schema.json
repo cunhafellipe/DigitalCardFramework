@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/commerce-stock-allocation/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "digital-card-commerce-stock-allocation@1"
+        },
+        "operation": {
+          "const": "allocatePacks"
+        },
+        "scope": {
+          "const": "commerce-stock"
+        },
+        "phase": {
+          "const": "allocate"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "attemptId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "providerId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+        },
+        "grantId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "commandId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "userId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+            },
+            "product": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "strategy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "algorithm": {
+                      "const": "weighted-deck@1"
+                    },
+                    "version": {
+                      "const": 1
+                    },
+                    "deckScope": {
+                      "const": "purchase-slot"
+                    }
+                  },
+                  "required": [
+                    "algorithm",
+                    "version",
+                    "deckScope"
+                  ]
+                },
+                "slots": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                      },
+                      "role": {
+                        "enum": [
+                          "card",
+                          "insert"
+                        ]
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100
+                      },
+                      "probability": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "numerator": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2147483647
+                          },
+                          "denominator": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2147483647
+                          }
+                        },
+                        "required": [
+                          "numerator",
+                          "denominator"
+                        ]
+                      },
+                      "pool": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "variantId": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                            },
+                            "weight": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2147483647
+                            }
+                          },
+                          "required": [
+                            "variantId",
+                            "weight"
+                          ]
+                        },
+                        "maxItems": 2000
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "role",
+                      "count",
+                      "probability",
+                      "pool"
+                    ]
+                  },
+                  "maxItems": 100,
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "id",
+                "revision",
+                "strategy",
+                "slots"
+              ]
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "variants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                  },
+                  "remaining": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "remaining"
+                ]
+              },
+              "maxItems": 2000
+            },
+            "entropy": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "seed": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                },
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "seed",
+                "cursor"
+              ]
+            },
+            "shop": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "ownerId"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                },
+                "ownerId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                }
+              }
+            }
+          },
+          "required": [
+            "userId",
+            "product",
+            "quantity",
+            "variants",
+            "entropy",
+            "shop"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "operation",
+        "scope",
+        "phase",
+        "requestId",
+        "attemptId",
+        "providerId",
+        "grantId",
+        "generation",
+        "commandId",
+        "inputDigest",
+        "snapshotDigest",
+        "deadline",
+        "context"
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-commerce-stock-allocation@1"
+            },
+            "operation": {
+              "const": "allocatePacks"
+            },
+            "scope": {
+              "const": "commerce-stock"
+            },
+            "phase": {
+              "const": "allocate"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "attemptId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "planned"
+            },
+            "allocations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "packIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 99
+                  },
+                  "slotId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                  },
+                  "variantIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+                    },
+                    "maxItems": 100
+                  }
+                },
+                "required": [
+                  "packIndex",
+                  "slotId",
+                  "variantIds"
+                ]
+              },
+              "maxItems": 2000
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "attemptId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "allocations"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-commerce-stock-allocation@1"
+            },
+            "operation": {
+              "const": "allocatePacks"
+            },
+            "scope": {
+              "const": "commerce-stock"
+            },
+            "phase": {
+              "const": "allocate"
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "attemptId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "commandId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "snapshotDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "scope",
+            "phase",
+            "requestId",
+            "attemptId",
+            "providerId",
+            "grantId",
+            "generation",
+            "commandId",
+            "inputDigest",
+            "snapshotDigest",
+            "deadline",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

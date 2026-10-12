@@ -4,6 +4,7 @@
 import {timingSafeEqual} from 'node:crypto';
 import {createServer} from 'node:http';
 import {validateAllocationStrategyRequest,validateAllocationStrategyResponse} from '../../src/allocation-strategy-contracts.js';
+import {validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse} from '../../src/stock-allocation-strategy-contracts.js';
 import {planAllocation} from '../../src/allocation-planner.js';
 
 const token=process.env.ALLOCATION_PROVIDER_TOKEN,providerId=process.env.ALLOCATION_PROVIDER_ID??'example.allocation';
@@ -12,6 +13,10 @@ if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}(?![\s\S])/.test(providerId)||['constructo
 const port=process.argv[2]??'0';
 if(process.argv.length>3||!/^\d+(?![\s\S])/.test(port)||!Number.isInteger(Number(port))||Number(port)>65535)throw Error('Invalid loopback port');
 const credential=Buffer.from('Bearer '+token),maxBody=1048576,maxResponse=262144;
+const routes=new Map([
+  ['/allocate-packs',[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],
+  ['/allocate-stock',[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],
+]);
 function decode(raw){
   const text=new TextDecoder('utf-8',{fatal:true}).decode(raw);let at=0,nodes=0;
   const invalid=()=>{throw Error('Invalid JSON');};
@@ -55,16 +60,18 @@ const server=createServer({maxHeaderSize:8192,requestTimeout:5000,headersTimeout
   const supplied=Buffer.from(request.headers.authorization??'');
   if(values('authorization')!==1||supplied.length!==credential.length||!timingSafeEqual(supplied,credential)){request.resume();reply(response,401,{});return;}
   const length=request.headers['content-length'];
-  if(request.method!=='POST'||request.url!=='/allocate-packs'||request.headers['transfer-encoding']||values('content-length')!==1||values('content-type')!==1||!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type']??'')||!/^\d+$/.test(length??'')||Number(length)<1||Number(length)>maxBody){request.resume();reply(response,400,{});return;}
+  const validators=routes.get(request.url);
+  if(request.method!=='POST'||!validators||request.headers['transfer-encoding']||values('content-length')!==1||values('content-type')!==1||!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type']??'')||!/^\d+$/.test(length??'')||Number(length)<1||Number(length)>maxBody){request.resume();reply(response,400,{});return;}
+  const [validateRequest,validateResponse]=validators;
   let value;
   try{
     const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>maxBody)throw Error('Request limit');chunks.push(chunk);}if(size!==Number(length))throw Error('Request length');
-    value=validateAllocationStrategyRequest(decode(Buffer.concat(chunks)));
+    value=validateRequest(decode(Buffer.concat(chunks)));
     if(value.providerId!==providerId)throw Error('Provider identity');
   }catch{if(!response.destroyed)reply(response,400,{});return;}
   const identity=Object.fromEntries(Object.entries(value).filter(([key])=>key!=='context'));
-  try{reply(response,200,validateAllocationStrategyResponse({...identity,status:'planned',allocations:planAllocation(value.context)}));}
-  catch{reply(response,503,validateAllocationStrategyResponse({...identity,status:'error',errorCode:'unavailable'}));}
+  try{reply(response,200,validateResponse({...identity,status:'planned',allocations:planAllocation(value.context)}));}
+  catch{reply(response,503,validateResponse({...identity,status:'error',errorCode:'unavailable'}));}
 });
 server.maxConnections=32;server.maxRequestsPerSocket=1;server.keepAliveTimeout=1;
 server.on('error',()=>{process.stderr.write('Allocation provider unavailable\n');process.exitCode=1;});

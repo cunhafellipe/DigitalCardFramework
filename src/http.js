@@ -61,7 +61,7 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/trading-policy':()=>framework.tradingPolicy(),'/api/commerce-settings':()=>framework.commerceSettings(),'/api/shops':()=>framework.shops(actor,options),'/api/listings':()=>framework.listings(actor,{...options,...(url.searchParams.has('shopId')?{shopId:url.searchParams.get('shopId')}:{})}),'/api/orders':()=>framework.orders(actor,options),'/api/fulfillments':()=>framework.fulfillments(actor,options),'/api/operator/actions':()=>framework.actionJobs(actor,options),
           '/api/capabilities':()=>framework.capabilities(actor),
           '/api/catalog':()=>framework.catalog(), '/api/me':async()=>({...await framework.me(actor),role:actor.role==='admin'?'admin':'player',permissions:publicPermissions(actor)}),
-          '/api/availability':()=>framework.availability(),'/api/pity':()=>framework.pityProgress(actor),'/api/allocations/status':()=>framework.allocationStatus(actor,{productId:url.searchParams.get('productId')}),
+          '/api/availability':()=>framework.availability(),'/api/pity':()=>framework.pityProgress(actor),'/api/allocations/stock/status':()=>framework.stockAllocationStatus(actor,{shopId:url.searchParams.get('shopId'),productId:url.searchParams.get('productId')}),'/api/allocations/status':()=>framework.allocationStatus(actor,{productId:url.searchParams.get('productId')}),
           '/api/wallet':()=>framework.wallet(actor), '/api/history':()=>framework.history(actor),
           '/api/inventory':()=>url.searchParams.has('limit')?framework.inventoryPage(actor,options):framework.inventory(actor), '/api/packs':()=>framework.packs(actor),
           '/api/users':()=>framework.directory(actor,options),'/api/notifications':()=>framework.notifications(actor,options),
@@ -82,7 +82,7 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/operator/admin/settings':'configureAdmin',
           '/api/operator/admin/cards':'administerCards',
           '/api/operator/trading':'configureTrading','/api/operator/card-lock':'setCardTransferLock','/api/operator/actions/retry':'retryAction','/api/operator/commerce':'configureCommerce','/api/operator/shop-status':'setShopEnabled','/api/operator/raffles/draw':'drawRaffle','/api/shops':'createShop','/api/listings':'createListing','/api/listings/quote':'quoteListing','/api/listings/buy':'buyListing','/api/listings/cancel':'cancelListing','/api/raffles/enter':'enterRaffle','/api/raffles/status':'raffleStatus','/api/cards/open':'openCard',
-          '/api/allocations/acknowledge':'acknowledgeAllocation','/api/quote':'quote','/api/purchase':'purchase','/api/open':'openPack','/api/convert':'convert',
+          '/api/allocations/stock/quote':'quoteMintPackStock','/api/allocations/acknowledge':'acknowledgeAllocation','/api/quote':'quote','/api/purchase':'purchase','/api/open':'openPack','/api/convert':'convert',
           '/api/trade-up':'tradeUp','/api/albums':'saveAlbum','/api/trades':'proposeTrade',
           '/api/trades/review-transfer':'reviewTransfer','/api/trades/accept':'acceptTrade','/api/trades/cancel':'cancelTrade','/api/bindings/use':'consumeBinding'
           ,'/api/trades/counter':'counterTrade','/api/preferences':'setPreferences','/api/notifications/read':'readNotifications',

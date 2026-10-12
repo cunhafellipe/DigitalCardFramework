@@ -110,7 +110,9 @@
     "./plugin-deployment": {
       "types": "./src/plugin-deployment.d.ts",
       "default": "./src/plugin-deployment.js"
-    }
+    },
+    "./stock-allocation-strategy-contracts": "./src/stock-allocation-strategy-contracts.js",
+    "./remote-stock-allocation-strategy": "./src/remote-stock-allocation-strategy.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

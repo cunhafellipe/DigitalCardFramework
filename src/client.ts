@@ -16,6 +16,8 @@ export interface QueryOptions {
   [key:string]:string|number|boolean|null|undefined;
 }
 export interface Client extends DirectMethods,QueryMethods {
+  quoteMintPackStock(input:Operations['quoteMintPackStock']['request']):Promise<Operations['quoteMintPackStock']['response']>;
+  stockAllocationStatus(options:{shopId:string;productId:string}):Promise<Operations['stockAllocationStatus']['response']>;
   allocationStatus(options:{productId:string}):Promise<Operations['allocationStatus']['response']>;
   acknowledgeAllocation(input:Operations['acknowledgeAllocation']['request']):Promise<Operations['acknowledgeAllocation']['response']>;
   capabilities():Promise<Schemas['CapabilityAvailability']>;
@@ -80,6 +82,7 @@ export function createClient({baseUrl='/api',fetch:request=globalThis.fetch}:{ba
   return {
     capabilities:()=>call('capabilities',undefined),commandIntents:options=>call('commandIntents',undefined,{query:options}),
     registerCommandIntent:input=>call('registerCommandIntent',input),executeCommandIntent:input=>call('executeCommandIntent',input),acknowledgeCommandIntent:input=>call('acknowledgeCommandIntent',input),
+    quoteMintPackStock:input=>call('quoteMintPackStock',input),stockAllocationStatus:options=>call('stockAllocationStatus',undefined,{query:options}),
     allocationStatus:options=>call('allocationStatus',undefined,{query:options}),acknowledgeAllocation:input=>call('acknowledgeAllocation',input),
     adminOverview:()=>call('adminOverview',undefined),adminUsers:options=>call('adminUsers',undefined,{query:options}),adminUser:options=>call('adminUser',undefined,{query:options}),adminHistory:options=>call('adminHistory',undefined,{query:options}),configureAdmin:input=>call('configureAdmin',input),administerCards:input=>call('administerCards',input),
     cardPolicies:()=>call('cardPolicies',undefined),effectiveCardPolicy:input=>call('effectiveCardPolicy',input),saveCardPolicy:input=>call('saveCardPolicy',input),previewCardPolicy:input=>call('previewCardPolicy',input),activateCardPolicy:input=>call('activateCardPolicy',input),retireCardPolicy:input=>call('retireCardPolicy',input),restoreCardPolicy:input=>call('restoreCardPolicy',input),saveCardResource:input=>call('saveCardResource',input),retireCardResource:input=>call('retireCardResource',input),restoreCardResource:input=>call('restoreCardResource',input),updateCopyStats:input=>call('updateCopyStats',input),

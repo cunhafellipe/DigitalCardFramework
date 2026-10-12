@@ -15,6 +15,11 @@ export interface QueryOptions {
     [key: string]: string | number | boolean | null | undefined;
 }
 export interface Client extends DirectMethods, QueryMethods {
+    quoteMintPackStock(input: Operations['quoteMintPackStock']['request']): Promise<Operations['quoteMintPackStock']['response']>;
+    stockAllocationStatus(options: {
+        shopId: string;
+        productId: string;
+    }): Promise<Operations['stockAllocationStatus']['response']>;
     allocationStatus(options: {
         productId: string;
     }): Promise<Operations['allocationStatus']['response']>;

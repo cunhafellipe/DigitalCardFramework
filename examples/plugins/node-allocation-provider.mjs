@@ -3,9 +3,9 @@
 // Plans are deterministic and read-only. The framework owns inventory and settlement.
 import {timingSafeEqual} from 'node:crypto';
 import {createServer} from 'node:http';
-import {validateAllocationStrategyRequest,validateAllocationStrategyResponse} from '../../src/allocation-strategy-contracts.js';
-import {validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse} from '../../src/stock-allocation-strategy-contracts.js';
-import {validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse} from '../../src/external-allocation-strategy-contracts.js';
+import {allocationStrategyProtocol,allocationStrategyV2Protocol,validateAllocationStrategyRequest,validateAllocationStrategyResponse,validateAllocationStrategyV2Request,validateAllocationStrategyV2Response} from '../../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyProtocol,stockAllocationStrategyV2Protocol,validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse,validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response} from '../../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyProtocol,externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse,validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response} from '../../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../../src/allocation-planner.js';
 
 const token=process.env.ALLOCATION_PROVIDER_TOKEN,providerId=process.env.ALLOCATION_PROVIDER_ID??'example.allocation';
@@ -15,9 +15,9 @@ const port=process.argv[2]??'0';
 if(process.argv.length>3||!/^\d+(?![\s\S])/.test(port)||!Number.isInteger(Number(port))||Number(port)>65535)throw Error('Invalid loopback port');
 const credential=Buffer.from('Bearer '+token),maxBody=1048576,maxResponse=262144;
 const routes=new Map([
-  ['/allocate-packs',[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],
-  ['/allocate-stock',[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],
-  ['/allocate-external',[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse]],
+  ['/allocate-packs',new Map([[allocationStrategyProtocol,[validateAllocationStrategyRequest,validateAllocationStrategyResponse]],[allocationStrategyV2Protocol,[validateAllocationStrategyV2Request,validateAllocationStrategyV2Response]]])],
+  ['/allocate-stock',new Map([[stockAllocationStrategyProtocol,[validateStockAllocationStrategyRequest,validateStockAllocationStrategyResponse]],[stockAllocationStrategyV2Protocol,[validateStockAllocationStrategyV2Request,validateStockAllocationStrategyV2Response]]])],
+  ['/allocate-external',new Map([[externalAllocationStrategyProtocol,[validateExternalAllocationStrategyRequest,validateExternalAllocationStrategyResponse]],[externalAllocationStrategyV2Protocol,[validateExternalAllocationStrategyV2Request,validateExternalAllocationStrategyV2Response]]])],
 ]);
 function decode(raw){
   const text=new TextDecoder('utf-8',{fatal:true}).decode(raw);let at=0,nodes=0;
@@ -62,13 +62,13 @@ const server=createServer({maxHeaderSize:8192,requestTimeout:5000,headersTimeout
   const supplied=Buffer.from(request.headers.authorization??'');
   if(values('authorization')!==1||supplied.length!==credential.length||!timingSafeEqual(supplied,credential)){request.resume();reply(response,401,{});return;}
   const length=request.headers['content-length'];
-  const validators=routes.get(request.url);
-  if(request.method!=='POST'||!validators||request.headers['transfer-encoding']||values('content-length')!==1||values('content-type')!==1||!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type']??'')||!/^\d+$/.test(length??'')||Number(length)<1||Number(length)>maxBody){request.resume();reply(response,400,{});return;}
-  const [validateRequest,validateResponse]=validators;
-  let value;
+  const protocols=routes.get(request.url);
+  if(request.method!=='POST'||!protocols||request.headers['transfer-encoding']||values('content-length')!==1||values('content-type')!==1||!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type']??'')||!/^\d+$/.test(length??'')||Number(length)<1||Number(length)>maxBody){request.resume();reply(response,400,{});return;}
+  let value,validateResponse;
   try{
     const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>maxBody)throw Error('Request limit');chunks.push(chunk);}if(size!==Number(length))throw Error('Request length');
-    value=validateRequest(decode(Buffer.concat(chunks)));
+    value=decode(Buffer.concat(chunks));const validators=protocols.get(value?.protocol);if(!validators)throw Error('Unsupported allocation protocol');
+    value=validators[0](value);validateResponse=validators[1];
     if(value.providerId!==providerId)throw Error('Provider identity');
   }catch{if(!response.destroyed)reply(response,400,{});return;}
   const identity=Object.fromEntries(Object.entries(value).filter(([key])=>key!=='context'));

@@ -293,3 +293,19 @@ Configure `remoteExternalAllocation` with `scope: 'external-fulfillment'`, `algo
 Use the [external purchase lifecycle](external-purchases.md) to prepare before charging, then call `commitExternalPurchaseAsync` with verified debit evidence. This flow records the debit before remote allocation and reserves completion space before charging. Status may report `allocation_pending`; resume with the exact original proof after reconciling an uncertain result. A durable `refund_required` outcome must be compensated at the original payment source and cannot later fulfill.
 
 Wallet, stock and external allocation share the beneficiary's product attempt. Generic acknowledgement cannot release paid work. Verified no-debit cancellation or refund compensation releases the attempt while preserving unused entropy. These recovery operations do not require the allocation provider, but do require the trusted payment provider to verify the evidence. Include pending paid allocations in operational recovery passes and preserve all allocation records in backups.
+
+### Conditional tickets, duplicate rules and pity
+
+Version 2 protocol references: [wallet](allocation-strategy-v2.schema.json), [stock](stock-allocation-strategy-v2.schema.json), and [external payment](external-allocation-strategy-v2.schema.json).
+
+SQLite schema 7 adds an ownership index for candidate-card lookups. Back up the store and stop older writers before upgrading. Opening a schema 6 store with writable access installs the index transactionally while preserving its records and history. Read-only schema 6 inspection remains available, but the new ownership query requires writable migration. Keep the matching application version and backup available for rollback; do not open an upgraded store with an older writer.
+
+Select `allocationStrategy: {algorithm: 'weighted-deck@2', version: 2, deckScope: 'purchase-slot'}` to combine ticket allocation with duplicate rules and pity. Configure the corresponding wallet, stock or external allocation transport with `algorithm: 'weighted-deck@2'`. A v2-capable provider must also accept v1 requests for retained attempts. Existing v1 products and receipts keep their original distribution; changing the catalog does not reinterpret an active attempt.
+
+Version 2 filters the remaining tickets by the configured duplicate and pity rules before drawing. Ticket counts alone are therefore not final draw probabilities. Duplicate rules compare card IDs across variants. Pack scope resets for each pack; personalized inventory scope also considers owned and sealed cards and earlier packs in the batch. Inserts bypass duplicate filtering. An `allow` fallback can permit duplicates when the eligible pool is empty; it cannot restore exhausted tickets or supply.
+
+Personalized pity applies to the first draw of the first card slot when its counter is due. The catalog requires that first pity slot to be guaranteed. A qualifying noninsert card resets the counter; otherwise it advances after the pack. Minted shop stock ignores the seller's personal inventory and pity, while retaining within-pack duplicate filtering when configured.
+
+The framework validates the returned choices and derives the resulting pity counter. Providers cannot supply authoritative counter updates. Ownership or pity changes during an outstanding request invalidate the captured allocation state. A failed attempt retains unused entropy, including across strategy versions; changing a request key does not reroll it. Paid failures follow the external purchase refund lifecycle.
+
+Code-bearing variants, binding factories and overlapping finite-supply pools remain unsupported by these remote strategies. Do not remove their admission checks or route them through a native fallback.

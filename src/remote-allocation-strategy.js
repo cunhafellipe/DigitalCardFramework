@@ -1,8 +1,8 @@
 import {FrameworkError} from './catalog.js';
 import {createRemotePolicyTransport} from './remote-policy-transport.js';
-import {allocationStrategyProtocol,allocationStrategySchema,validateAllocationStrategyRequest,validateAllocationStrategyResponse} from './allocation-strategy-contracts.js';
-export {allocationStrategyProtocol,allocationStrategySchema,validateAllocationStrategyRequest,validateAllocationStrategyResponse};
+import {allocationStrategyProtocol,allocationStrategySchema,validateAllocationStrategyRequest,validateAllocationStrategyResponse,allocationStrategyV2Protocol,allocationStrategyV2Schema,validateAllocationStrategyV2Request,validateAllocationStrategyV2Response} from './allocation-strategy-contracts.js';
+export {allocationStrategyProtocol,allocationStrategySchema,validateAllocationStrategyRequest,validateAllocationStrategyResponse,allocationStrategyV2Protocol,allocationStrategyV2Schema,validateAllocationStrategyV2Request,validateAllocationStrategyV2Response};
 export function createRemoteAllocationStrategy(options){
-  if(!options||options.algorithm!=='weighted-deck@1')throw new FrameworkError('ALLOCATION_CONFIG','Unsupported remote allocation algorithm',400);
-  const {algorithm,...transport}=options;transport.maxResponseBytes??=262144;return createRemotePolicyTransport(transport,{scope:'catalog-purchase',requestBytes:1048576,responseBytes:262144,validateRequest:validateAllocationStrategyRequest,validateResponse:validateAllocationStrategyResponse});
+  if(!options||!['weighted-deck@1','weighted-deck@2'].includes(options.algorithm))throw new FrameworkError('ALLOCATION_CONFIG','Unsupported remote allocation algorithm',400);
+  const {algorithm,...transport}=options;transport.maxResponseBytes??=262144;const supportsAlgorithm=value=>value==='weighted-deck@1'||algorithm==='weighted-deck@2'&&value==='weighted-deck@2';const validateRequest=value=>{if(!supportsAlgorithm(value?.context?.product?.strategy?.algorithm))throw new FrameworkError('ALLOCATION_UNAVAILABLE','Configured allocation provider cannot evaluate this version',503);return value.protocol===allocationStrategyV2Protocol?validateAllocationStrategyV2Request(value):validateAllocationStrategyRequest(value);};const validateResponse=value=>value.protocol===allocationStrategyV2Protocol?validateAllocationStrategyV2Response(value):validateAllocationStrategyResponse(value);const provider=createRemotePolicyTransport(transport,{scope:'catalog-purchase',requestBytes:1048576,responseBytes:262144,validateRequest,validateResponse});return {...provider,supportsAlgorithm};
 }

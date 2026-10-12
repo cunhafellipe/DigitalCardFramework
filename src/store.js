@@ -37,6 +37,7 @@ export class MemoryStore {
         ownerCounts:ownerId=>memoryQueries(state).collectionCounts(ownerId),
         availableCodeStock:(poolId,limit,at,charge)=>Object.values(state.codes??{}).filter(row=>row.poolId===poolId&&row.status==='available'&&(!row.expiresAt||Date.parse(row.expiresAt)>Date.parse(at))).slice(0,limit).map(row=>{charge(bytes(row));return structuredClone(row);}),
         notificationOverflow:(ownerId,keep,charge)=>{const rows=(state.notifications??[]).filter(row=>row.userId===ownerId);charge(0);return rows.slice(0,Math.max(0,rows.length-keep)).map(row=>{charge(bytes(row));return {key:row.id};});},
+        ownedCardCounts:(ownerId,cardIds)=>{const wanted=new Set(cardIds),counts=new Map();for(const row of Object.values(state.copies??{}))if(row.ownerId===ownerId&&['owned','sealed'].includes(row.state)&&wanted.has(row.cardId))counts.set(row.cardId,(counts.get(row.cardId)??0)+1);return counts;},
         ownedVariantCount:(ownerId,variantIds)=>Object.values(state.copies??{}).filter(row=>row.ownerId===ownerId&&row.state==='owned'&&variantIds.includes(row.variantId)).length,
       },options);
       this.#recordActive=true;

@@ -1,14 +1,14 @@
 import {randomBytes,randomUUID} from 'node:crypto';
 import {check} from './catalog.js';
 import {contentDigest} from './importer.js';
-import {allocationStrategyProtocol,validateAllocationStrategyRequest} from './allocation-strategy-contracts.js';
+import {allocationStrategyProtocol,validateAllocationStrategyRequest,validateAllocationStrategyV2Request} from './allocation-strategy-contracts.js';
 import {planAllocation} from './allocation-planner.js';
 import {validRecordAccounting,recordAccountingField} from './record-accounting.js';
 
 /** Private durable preparation records never expose entropy or uncommitted outcomes. */
 export class AllocationIntentService{
-  #store;#provider;#prepare;#commit;#clock;#reference;#abandon;#active;#command;#protocol;#scope;#validate;#before;#transaction;#beforePlan;
-  constructor({store,provider,prepare,commit,clock,reference,abandon,active=new Map(),command='purchase',protocol=allocationStrategyProtocol,scope='catalog-purchase',validate=validateAllocationStrategyRequest,beforeEvaluate,beforePlan,transaction={allocationPurchase:true}}){this.#store=store;this.#provider=provider;this.#prepare=prepare;this.#commit=commit;this.#clock=clock;this.#reference=reference;this.#abandon=abandon;this.#active=active;this.#command=command;this.#protocol=protocol;this.#scope=scope;this.#validate=validate;this.#before=beforeEvaluate;this.#beforePlan=beforePlan;this.#transaction=transaction;}
+  #store;#provider;#prepare;#commit;#clock;#reference;#abandon;#active;#command;#protocol;#scope;#validate;#before;#transaction;#beforePlan;#validateV2;
+  constructor({store,provider,prepare,commit,clock,reference,abandon,active=new Map(),command='purchase',protocol=allocationStrategyProtocol,scope='catalog-purchase',validate=validateAllocationStrategyRequest,validateV2=validateAllocationStrategyV2Request,beforeEvaluate,beforePlan,transaction={allocationPurchase:true}}){this.#store=store;this.#provider=provider;this.#prepare=prepare;this.#commit=commit;this.#clock=clock;this.#reference=reference;this.#abandon=abandon;this.#active=active;this.#command=command;this.#protocol=protocol;this.#scope=scope;this.#validate=validate;this.#validateV2=validateV2;this.#before=beforeEvaluate;this.#beforePlan=beforePlan;this.#transaction=transaction;}
   #user(tx,actor){check(actor?.disabled!==true&&typeof actor?.userId==='string'&&tx.get('users',actor.userId),'UNAUTHENTICATED','A verified account is required',401);}
   #records(fn,options={allocationJournal:true}){const run=()=>this.#store.transactRecords(tx=>{let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_MIGRATION_REQUIRED','Prepare revision-bound allocation accounting',503);return fn(tx);},options);try{return run();}catch(error){if(error.code!=='RECORD_MIGRATION_REQUIRED')throw error;this.#store.prepareRecordTransactions();return run();}}
   #head(userId,productId){return contentDigest({userId,productId,algorithm:'weighted-deck@1'});}
@@ -20,12 +20,13 @@ export class AllocationIntentService{
     const claimed=this.#records(tx=>{
       this.#user(tx,principal);const previous=tx.get('requests',principal.userId+':'+key);if(previous){check(previous.hash===receiptHash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return {result:previous.result};}
       const keyId=contentDigest({userId:principal.userId,key}),fence=tx.get('allocationKeys',keyId);if(fence){const prior=tx.get('allocationAttempts',fence.attemptId);check(prior?.inputDigest===inputDigest&&(prior.command??'purchase')===this.#command,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);check(prior.state!=='acknowledged','ALLOCATION_ACKNOWLEDGED','Allocation attempt was abandoned; review a new purchase',409);}
-      const prepared=this.#prepare(tx,principal,clean),headId=this.#head(principal.userId,productId),head=tx.get('allocationHeads',headId)??{userId:principal.userId,productId,cursor:0,seed:null,attemptId:null,lastAttemptId:null};
+      const headId=this.#head(principal.userId,productId),head=tx.get('allocationHeads',headId)??{userId:principal.userId,productId,cursor:0,seed:null,attemptId:null,lastAttemptId:null};
       if(head.attemptId){const row=tx.get('allocationAttempts',head.attemptId);check(row.key===key&&row.inputDigest===inputDigest&&(row.command??'purchase')===this.#command,'ALLOCATION_PENDING','Recover or acknowledge the existing allocation attempt',409);check(row.state==='prepared','ALLOCATION_STALE','Allocation state changed; acknowledge and review again',409);return {row};}
+      const prepared=this.#prepare(tx,principal,clean);check(this.#provider.supportsAlgorithm(prepared.context.product.strategy.algorithm),'ALLOCATION_UNAVAILABLE','Configured allocation provider cannot evaluate this version',503);
       check(tx.count('allocationAttempts')<100000,'ALLOCATION_CAPACITY','Allocation journal capacity reached',507);
       const grant=this.#provider.grant();head.seed??=randomBytes(32).toString('hex');const id=randomUUID(),context={...prepared.context,entropy:{seed:head.seed,cursor:head.cursor}};
       const row={id,headId,userId:principal.userId,productId,key,input:clean,inputDigest,...(this.#command==='purchase'?{}:{command:this.#command,preparation:prepared.preparation}),intentReference:this.#reference?.(tx,principal,key,inputDigest)??null,receiptHash,snapshotDigest:prepared.snapshotDigest,context,entropyCursor:head.cursor,state:'prepared',errorCode:null,createdAt:this.#clock()};
-      this.#validate(this.#request(row,grant));check(Buffer.byteLength(JSON.stringify(row))<=1048576,'ALLOCATION_LIMIT','Allocation preparation exceeds the journal byte limit',502);
+      this.#request(row,grant);check(Buffer.byteLength(JSON.stringify(row))<=1048576,'ALLOCATION_LIMIT','Allocation preparation exceeds the journal byte limit',502);
       tx.put('allocationAttempts',id,row);tx.put('allocationKeys',keyId,{userId:principal.userId,attemptId:id});head.attemptId=id;head.lastAttemptId=id;tx.put('allocationHeads',headId,head);return {row};
     });
     if(Object.hasOwn(claimed,'result'))return claimed.result;
@@ -33,10 +34,10 @@ export class AllocationIntentService{
     const controller=new AbortController(),combined=signal===undefined?controller.signal:AbortSignal.any([signal,controller.signal]);
     const promise=this.#evaluate(principal,row,combined).finally(()=>this.#active.delete(row.id));this.#active.set(row.id,{controller,promise});return promise;
   }
-  #request(row,grant){return {protocol:this.#protocol,operation:'allocatePacks',scope:this.#scope,phase:'allocate',requestId:randomUUID(),attemptId:row.id,...grant,commandId:contentDigest({userId:row.userId,productId:row.productId,entropyCursor:row.entropyCursor,inputDigest:row.inputDigest}),inputDigest:row.inputDigest,snapshotDigest:row.snapshotDigest,deadline:Date.now()+this.#provider.timeoutMs,context:row.context};}
+  #request(row,grant){const v2=row.context.product.strategy.algorithm==='weighted-deck@2';check(this.#provider.supportsAlgorithm(row.context.product.strategy.algorithm),'ALLOCATION_UNAVAILABLE','Configured allocation provider cannot evaluate this version',503);return (v2?this.#validateV2:this.#validate)({protocol:v2?this.#protocol.replace(/@1$/, '@2'):this.#protocol,operation:'allocatePacks',scope:this.#scope,phase:'allocate',requestId:randomUUID(),attemptId:row.id,...grant,commandId:contentDigest({userId:row.userId,productId:row.productId,entropyCursor:row.entropyCursor,inputDigest:row.inputDigest}),inputDigest:row.inputDigest,snapshotDigest:row.snapshotDigest,deadline:Date.now()+this.#provider.timeoutMs,context:row.context});}
   async #evaluate(actor,row,signal){
     try{
-      let auxiliary=await this.#before?.(actor,row,signal);const request=this.#validate(this.#request(row,this.#provider.grant())),response=await this.#provider.evaluate(request,{signal});
+      let auxiliary=await this.#before?.(actor,row,signal);const request=this.#request(row,this.#provider.grant()),response=await this.#provider.evaluate(request,{signal});
       return this.#records(tx=>{
         this.#user(tx,actor);const previous=tx.get('requests',actor.userId+':'+row.key);if(previous){check(previous.hash===row.receiptHash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
         const current=tx.get('allocationAttempts',row.id),head=tx.get('allocationHeads',row.headId);check(current?.state==='prepared'&&head?.attemptId===row.id,'ALLOCATION_STALE','Allocation state changed; review again',409);

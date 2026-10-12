@@ -8,10 +8,10 @@ import {ApiError} from '../src/client.js';
 const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setImmediate(resolve));};
 const find=(root,label)=>[...root.querySelectorAll('button')].find(button=>button.textContent.startsWith(label));
 const click=(root,label)=>{const button=find(root,label);assert(button,'Missing '+label);assert(!button.hidden&&!button.disabled,'Unavailable '+label);button.click();return button;};
-function setup({tickets=true}={}){
+function setup({tickets=true,version=1}={}){
   const window=new Window({url:'http://localhost/'});globalThis.document=window.document;globalThis.sessionStorage=window.sessionStorage;
   const x=fixture(),catalog=structuredClone(x.core.catalog()),product=catalog.products.find(product=>product.id==='common');catalog.products=[product];
-  if(tickets)product.allocationStrategy={algorithm:'weighted-deck@1',version:1,deckScope:'purchase-slot'};
+  if(tickets)product.allocationStrategy={algorithm:'weighted-deck@'+version,version,deckScope:'purchase-slot'};
   const calls={quotes:[],purchases:[],statuses:[],acknowledgements:[]};let principal='collector',keys=0,digest='a'.repeat(64),allocationState='idle';
   const client={principal:()=>principal,requestKey:()=> 'purchase-'+(++keys),catalog:async()=>catalog,me:async()=>({userId:principal,displayName:'Collector'}),wallet:async()=>({credits:1000000,gems:1000000}),inventory:async()=>[],packs:async()=>[],albums:async()=>[],trades:async()=>[],availability:async()=>({variants:[],products:[]}),pity:async()=>({}),
     quote:async input=>{calls.quotes.push(input);return {productId:product.id,quantity:input.quantity,productRevision:product.revision,catalogVersion:catalog.version,adminRevision:0,price:{currencyId:product.price.currencyId,amount:product.price.amount*input.quantity},...(tickets?{allocationDigest:digest}:{})};},
@@ -23,8 +23,8 @@ function setup({tickets=true}={}){
   return {window,root,client,calls,product,catalog,async mount(){mounted=mountFramework(root,{client,sections:['shop']});await mounted.ready;return mounted;},setPrincipal(value){principal=value;},setDigest(value){digest=value;},setAllocation(value){allocationState=value;},close(){mounted?.dispose();x.core.close();window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}};
 }
 
-test('ticket packs explain changing batch draws and preserve the whole reviewed quote',async()=>{
-  const x=setup();try{await x.mount();const rates=x.root.querySelector('.dc-rates');assert.match(rates.textContent,/configured tickets/);assert.match(rates.textContent,/without replacement/);assert.match(rates.textContent,/chances change between draws/);assert.match(rates.textContent,/Finite remaining supply can reduce/);assert.match(rates.textContent,/quote checks the current eligible supply/);assert(!rates.textContent.includes('%'));assert(!rates.textContent.includes('duplicate protection'));
+for(const version of [1,2])test('ticket packs v'+version+' explain changing batch draws and preserve the whole reviewed quote',async()=>{
+  const x=setup({version});try{await x.mount();const rates=x.root.querySelector('.dc-rates');assert.match(rates.textContent,/configured tickets/);assert.match(rates.textContent,/without replacement/);assert.match(rates.textContent,/chances change between draws/);assert.match(rates.textContent,/Finite remaining supply can reduce/);assert.match(rates.textContent,/quote checks the current eligible supply/);assert(!rates.textContent.includes('%'));assert(!rates.textContent.includes('duplicate protection'));
     click(x.root,'Review purchase');await settle();assert.equal(x.calls.quotes.length,1);assert.equal(x.calls.purchases.length,0);assert.match(x.root.textContent,/Review 1 pack/);click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases.length,1);assert.equal(x.calls.purchases[0].allocationDigest,'a'.repeat(64));assert.equal(x.calls.purchases[0].key,'purchase-1');assert.equal(x.calls.purchases[0].productRevision,x.product.revision);assert.equal(x.calls.purchases[0].catalogVersion,x.catalog.version);
   }finally{x.close();}
 });
@@ -34,16 +34,30 @@ test('ordinary packs keep independent base-rate display and the existing purchas
   }finally{x.close();}
 });
 
-test('quantity edits discard the prior reviewed allocation quote',async()=>{
-  const x=setup();try{await x.mount();click(x.root,'Review purchase');await settle();const quantity=x.root.querySelector('.dc-purchase-row input');quantity.value='2';quantity.dispatchEvent(new x.window.Event('input'));assert(find(x.root,'Review purchase'));assert(!find(x.root,'Buy reviewed packs'));x.setDigest('b'.repeat(64));click(x.root,'Review purchase');await settle();assert.equal(x.calls.purchases.length,0);click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases[0].quantity,2);assert.equal(x.calls.purchases[0].allocationDigest,'b'.repeat(64));
+for(const version of [1,2])test('quantity edits discard the prior reviewed v'+version+' allocation quote',async()=>{
+  const x=setup({version});try{await x.mount();click(x.root,'Review purchase');await settle();const quantity=x.root.querySelector('.dc-purchase-row input');quantity.value='2';quantity.dispatchEvent(new x.window.Event('input'));assert(find(x.root,'Review purchase'));assert(!find(x.root,'Buy reviewed packs'));x.setDigest('b'.repeat(64));click(x.root,'Review purchase');await settle();assert.equal(x.calls.purchases.length,0);click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases[0].quantity,2);assert.equal(x.calls.purchases[0].allocationDigest,'b'.repeat(64));
   }finally{x.close();}
 });
 
-test('stale allocation recovery inspects and acknowledges without buying, then requires a new review',async()=>{
-  const x=setup();try{let fail=true;const purchase=x.client.purchase;x.client.purchase=async input=>{if(fail){x.calls.purchases.push(input);x.setAllocation('stale');throw new ApiError('ALLOCATION_STALE','Allocation changed',409);}return purchase(input);};await x.mount();click(x.root,'Review purchase');await settle();click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases.length,1);assert.match(x.root.textContent,/allocation attempt needs review/);
+for(const version of [1,2])test('stale v'+version+' allocation recovery inspects and acknowledges without buying, then requires a new review',async()=>{
+  const x=setup({version});try{let fail=true;const purchase=x.client.purchase;x.client.purchase=async input=>{if(fail){x.calls.purchases.push(input);x.setAllocation('stale');throw new ApiError('ALLOCATION_STALE','Allocation changed',409);}return purchase(input);};await x.mount();click(x.root,'Review purchase');await settle();click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases.length,1);assert.match(x.root.textContent,/allocation attempt needs review/);
     click(x.root,'Check allocation attempt');await settle();assert.equal(x.calls.statuses.length,1);assert.equal(x.calls.purchases.length,1);assert.match(x.root.textContent,/allocation is stale/);assert(find(x.root,'Review purchase').disabled);click(x.root,'Acknowledge allocation attempt');await settle();assert.deepEqual(x.calls.acknowledgements,[{attemptId:'attempt'}]);assert.equal(x.calls.quotes.length,1);assert.equal(x.calls.purchases.length,1);
     fail=false;x.setDigest('b'.repeat(64));click(x.root,'Review purchase');await settle();assert.equal(x.calls.quotes.length,2);assert.equal(x.calls.purchases.length,1);click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases.length,2);assert.equal(x.calls.purchases[1].allocationDigest,'b'.repeat(64));assert.notEqual(x.calls.purchases[0].key,x.calls.purchases[1].key);
   }finally{x.close();}
+});
+
+test('v2 inventory protection explains conditional eligibility, inserts and permissive fallback',async()=>{
+  const x=setup({version:2});try{x.product.duplicatePolicy={scope:'inventory',fallback:'allow'};await x.mount();assert.match(x.root.textContent,/card identities you already own/);assert.match(x.root.textContent,/earlier packs of this purchase, including inserts in those earlier packs/);assert.match(x.root.textContent,/ordinary card identities within the current pack/);assert.match(x.root.textContent,/Special inserts bypass duplicate filtering/);assert.match(x.root.textContent,/fallback allows a repeat/);assert.match(x.root.querySelector('.dc-rates').textContent,/Duplicate eligibility and personal pity/);assert(!x.root.querySelector('.dc-rates').textContent.includes('%'));
+  }finally{x.close();}
+});
+
+test('v2 pack protection and pity explain resets, qualifying ordinary cards and optional slots',async()=>{
+  const x=setup({version:2});try{x.product.duplicatePolicy={scope:'pack',fallback:'reject'};x.product.pity={rarityId:'rare',after:5};await x.mount();assert.match(x.root.textContent,/check resets for the next pack/);assert.match(x.root.textContent,/protected draw, the purchase fails/);const pity=x.root.querySelector('.dc-pity-note');assert.match(pity.textContent,/qualifying ordinary card resets pity; special inserts do not/);assert.match(pity.textContent,/first draw in the first ordinary-card slot/);assert.match(pity.textContent,/absent optional slot is skipped/);assert.match(pity.textContent,/Sealed packs count/);
+  }finally{x.close();}
+});
+
+test('allocation review recognizes only matching version and purchase-slot selectors',async()=>{
+  for(const strategy of [{algorithm:'weighted-deck@2',version:1,deckScope:'purchase-slot'},{algorithm:'weighted-deck@2',version:2,deckScope:'pack'},{algorithm:'weighted-deck@2',version:2,deckScope:'purchase-slot',extra:true}]){const x=setup();try{x.product.allocationStrategy=strategy;await x.mount();assert(!find(x.root,'Review purchase'));assert(!find(x.root,'Check allocation attempt'));assert(find(x.root,'Buy ·'));}finally{x.close();}}
 });
 
 test('acknowledging a prepared attempt preserves an ambiguous purchase and its original key',async()=>{

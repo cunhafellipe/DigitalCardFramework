@@ -11,3 +11,25 @@ export const allocationStrategySchema={$schema:'https://json-schema.org/draft/20
 const compiler=new Ajv2020({strict:true});compiler.addSchema(allocationStrategySchema);const request=compiler.compile({$ref:allocationStrategySchema.$id+'#/$defs/request'}),response=compiler.compile({$ref:allocationStrategySchema.$id+'#/$defs/response'});
 export function validateAllocationStrategyRequest(value){if(!request(value)||value.context.product.slots.reduce((n,s)=>n+s.count,0)*value.context.quantity>2000||new Set(value.context.variants.map(v=>v.id)).size!==value.context.variants.length||new Set(value.context.product.slots.map(s=>s.id)).size!==value.context.product.slots.length||value.context.product.slots.some(s=>s.probability.numerator>s.probability.denominator||s.probability.numerator>0&&s.pool.length===0||new Set(s.pool.map(e=>e.variantId)).size!==s.pool.length||s.pool.some(e=>!value.context.variants.some(v=>v.id===e.variantId))||s.pool.reduce((n,e)=>n+e.weight,0)>2147483647))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation strategy request',400);return value;}
 export function validateAllocationStrategyResponse(value){if(!response(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}
+
+export const allocationStrategyV2Protocol='digital-card-pack-allocation@2';
+export const allocationStrategyV2Schema=structuredClone(allocationStrategySchema);
+allocationStrategyV2Schema.$id='https://digital-card.invalid/pack-allocation/v2';
+for(const schema of [allocationStrategyV2Schema.$defs.request,...allocationStrategyV2Schema.$defs.response.oneOf])schema.properties.protocol.const=allocationStrategyV2Protocol;
+const contextV2=allocationStrategyV2Schema.$defs.request.properties.context;
+contextV2.properties.product.properties.strategy.properties.algorithm.const='weighted-deck@2';contextV2.properties.product.properties.strategy.properties.version.const=2;
+Object.assign(contextV2.properties.product.properties,{duplicatePolicy:object({scope:{enum:['none','pack','inventory']},fallback:{enum:['allow','reject']}}),pity:{anyOf:[{type:'null'},object({after:number(1,1000),rarityId:id,minimumRank:number(0)})]}});contextV2.properties.product.required.push('duplicatePolicy','pity');
+Object.assign(contextV2.properties,{mode:{const:'personalized'},ownedCards:array(object({cardId:id,owned:{type:'boolean'}}),2000),pityCount:number(0)});contextV2.required.push('mode','ownedCards','pityCount');
+Object.assign(contextV2.properties.variants.items.properties,{cardId:id,rarityRank:number(0)});contextV2.properties.variants.items.required.push('cardId','rarityRank');
+compiler.addSchema(allocationStrategyV2Schema);const requestV2=compiler.compile({$ref:allocationStrategyV2Schema.$id+'#/$defs/request'}),responseV2=compiler.compile({$ref:allocationStrategyV2Schema.$id+'#/$defs/response'});
+export function validateAllocationStrategyV2Request(value){
+  if(!requestV2(value))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation strategy request',400);
+  return validateAllocationEligibility(value);
+}
+export function validateAllocationEligibility(value){
+  const {mode,ownedCards,pityCount,...base}=value.context,{duplicatePolicy,pity,...product}=base.product;
+  validateAllocationStrategyRequest({...value,protocol:allocationStrategyProtocol,context:{...base,product:{...product,strategy:{algorithm:'weighted-deck@1',version:1,deckScope:'purchase-slot'}},variants:base.variants.map(({id,remaining})=>({id,remaining}))}});
+  const cards=new Set(base.variants.map(v=>v.cardId)),owned=new Set(ownedCards.map(v=>v.cardId)),requiresOwned=mode==='personalized'&&duplicatePolicy.scope==='inventory';
+  if(owned.size!==ownedCards.length||ownedCards.some(v=>!cards.has(v.cardId))||requiresOwned&&(owned.size!==cards.size)||!requiresOwned&&ownedCards.length||mode==='stock'&&pityCount!==0||!pity&&pityCount!==0)throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation eligibility snapshot',400);return value;
+}
+export function validateAllocationStrategyV2Response(value){if(!responseV2(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}

@@ -1,7 +1,8 @@
+import {ownedCardIds} from './storage-query.js';
 import {check} from './catalog.js';
 import {projection, queryOptions} from './storage-query.js';
 
-export const STORAGE_SCHEMA = 6;
+export const STORAGE_SCHEMA = 7;
 export const schemaSqlV2 = `
 CREATE TABLE framework_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL,codec_check TEXT NOT NULL) STRICT;
 CREATE TABLE framework_fields(name TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('object','array','scalar')),payload TEXT) STRICT;
@@ -45,7 +46,9 @@ CREATE TABLE framework_expiration_work(collection TEXT NOT NULL CHECK(collection
  PRIMARY KEY(collection,entity_key),FOREIGN KEY(collection,entity_key) REFERENCES framework_entities(collection,entity_key) ON DELETE CASCADE) STRICT;
 CREATE INDEX framework_expiration_due ON framework_expiration_work(collection,due_at,ordinal,entity_key) WHERE due_at IS NOT NULL;
 `;
-export const schemaSql = schemaSqlV5 + expirationSchemaSql;
+export const schemaSqlV6 = schemaSqlV5 + expirationSchemaSql;
+export const ownedCardSchemaSql = 'CREATE INDEX framework_owner_card_state ON framework_entities(collection,owner_id,card_id,state);';
+export const schemaSql = schemaSqlV6 + ownedCardSchemaSql;
 
 const fieldName = value => {
   check(typeof value === 'string' && value.length <= 200 && !['__proto__','constructor','prototype'].includes(value), 'INVALID_STATE', 'Invalid state field', 500);
@@ -213,6 +216,7 @@ export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {
   };
   const count=(collection,column,id,extra='')=>db.prepare(`SELECT COUNT(*) AS count FROM framework_entities WHERE collection=? AND ${column}=?${extra}`).get(collection,id).count;
   return {get,value,
+    ownedCardPresence(ownerId,cardIds){const ids=ownedCardIds(ownerId,cardIds),counts=sqliteOwnedCardCounts(db,ownerId,ids);return ids.map(cardId=>({cardId,owned:(counts.get(cardId)??0)>0}));},
     availableCodeStock(poolId,limit,at){
       check(typeof poolId==='string'&&Number.isSafeInteger(limit)&&limit>=1&&limit<=1000&&Number.isFinite(Date.parse(at)),'RECORD_PATH_UNAVAILABLE','Code stock scope requires bounded allocation',409);
       const rows=db.prepare("SELECT variant_id FROM framework_entities INDEXED BY framework_pool_status WHERE collection='_codeStock' AND pool_id=? AND status='available' AND (created_at='' OR created_at>?) ORDER BY ordinal LIMIT ?").all(poolId,new Date(at).toISOString(),limit);
@@ -251,3 +255,5 @@ export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {
     pageCopies:input=>page('copies',{state:'owned',...input}),pagePacks:input=>page('packs',input),pageCodes:input=>page('codes',input),pageExternalPurchases:input=>page('externalPurchases',input),
   };
 }
+
+export function sqliteOwnedCardCounts(db,ownerId,ids){check(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='framework_owner_card_state'").get(),'RECORD_MIGRATION_REQUIRED','Owned card queries require writable storage migration',503);const counts=new Map();for(let start=0;start<ids.length;start+=500){const chunk=ids.slice(start,start+500);for(const row of db.prepare("SELECT card_id AS cardId,COUNT(*) AS n FROM framework_entities INDEXED BY framework_owner_card_state WHERE collection='copies' AND owner_id=? AND state IN ('owned','sealed') AND card_id IN ("+chunk.map(()=>'?').join(',')+") GROUP BY card_id").all(ownerId,...chunk))counts.set(row.cardId,row.n);}return counts;}

@@ -8,6 +8,9 @@ import {request as httpRequest} from 'node:http';
 import {createRemoteAllocationStrategy,allocationStrategyProtocol,validateAllocationStrategyResponse} from '../src/remote-allocation-strategy.js';
 import {createRemoteStockAllocationStrategy,stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse} from '../src/remote-stock-allocation-strategy.js';
 import {createRemoteExternalAllocationStrategy,externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse} from '../src/remote-external-allocation-strategy.js';
+import {allocationStrategyV2Protocol,validateAllocationStrategyV2Response} from '../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response} from '../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response} from '../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../src/allocation-planner.js';
 
 const executable=fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url));
@@ -48,7 +51,7 @@ async function post(receiver,value,status=200,options={}){
     request.end(body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
-  if(status===200||status===503)(resultValue.protocol===externalAllocationStrategyProtocol?validateExternalAllocationStrategyResponse:resultValue.protocol===stockAllocationStrategyProtocol?validateStockAllocationStrategyResponse:validateAllocationStrategyResponse)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
+  if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
 }
 test('Node allocation provider computes and replays actual plans through framework transport without effects',async()=>{
   const receiver=await start(),remote=createRemoteAllocationStrategy({algorithm:'weighted-deck@1',scope:'catalog-purchase',providerId,url:receiver.url,token,allowLoopbackHttp:true});
@@ -138,4 +141,33 @@ test('Node external fulfillment provider binds preparation identity and accepts 
     const depleted=structuredClone(request);depleted.context.variants.forEach(variant=>{variant.remaining=0;});assert.deepEqual(await post(external,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
     assert.deepEqual(await remote.evaluate(request),expected);
   }finally{remote.close();await stop(wallet);}
+});
+test('Node v2 allocation endpoints preserve deterministic pity and duplicate plans without authoritative counters',async()=>{
+  const wallet=await start(),stock={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-stock')},external={...wallet,url:wallet.url.replace('/allocate-packs','/allocate-external')};
+  const makeV2=()=>{
+    const request=make();request.protocol=allocationStrategyV2Protocol;
+    Object.assign(request.context,{mode:'personalized',quantity:1,ownedCards:[{cardId:'blue-card',owned:true},{cardId:'red-card',owned:false}],pityCount:1});
+    Object.assign(request.context.product,{strategy:{algorithm:'weighted-deck@2',version:2,deckScope:'purchase-slot'},duplicatePolicy:{scope:'inventory',fallback:'reject'},pity:{after:2,rarityId:'rare',minimumRank:3}});
+    request.context.variants=request.context.variants.map((variant,index)=>({...variant,cardId:index?'red-card':'blue-card',rarityRank:index?3:1}));return request;
+  };
+  const checkPlan=async(receiver,request)=>{
+    const snapshot=structuredClone(request),expected={...echo(request),status:'planned',allocations:planAllocation(request.context)};
+    const result=await post(receiver,request);assert.deepEqual(result,expected);assert.deepEqual(await post(receiver,request),result);assert.deepEqual(request,snapshot);
+    const factory=request.scope==='commerce-stock'?createRemoteStockAllocationStrategy:request.scope==='external-fulfillment'?createRemoteExternalAllocationStrategy:createRemoteAllocationStrategy;
+    const remote=factory({algorithm:'weighted-deck@2',scope:request.scope,providerId,url:receiver.url,token,allowLoopbackHttp:true});
+    try{const transported={...request,...remote.grant()},original=structuredClone(transported);assert.deepEqual(await remote.evaluate(transported),{...echo(transported),status:'planned',allocations:expected.allocations});assert.deepEqual(transported,original);}finally{remote.close();}
+    assert(!Object.hasOwn(result,'pityCount'));assert(!Object.hasOwn(result,'ownedCards'));return result;
+  };
+  try{
+    const pity=makeV2(),result=await checkPlan(wallet,pity);assert.deepEqual(result.allocations[0].variantIds,['red']);
+    const duplicate=makeV2();duplicate.context.product.pity=null;duplicate.context.pityCount=0;duplicate.context.product.duplicatePolicy.scope='pack';duplicate.context.product.slots[0].count=2;duplicate.context.ownedCards=[];
+    const distinct=await checkPlan(wallet,duplicate);assert.equal(new Set(distinct.allocations[0].variantIds).size,2);
+    const stocked=structuredClone(duplicate);stocked.protocol=stockAllocationStrategyV2Protocol;stocked.scope='commerce-stock';stocked.context.mode='stock';stocked.context.ownedCards=[];stocked.context.pityCount=0;stocked.context.shop={id:randomUUID(),ownerId:'merchant'};await checkPlan(stock,stocked);
+    const paid=makeV2();paid.protocol=externalAllocationStrategyV2Protocol;paid.scope='external-fulfillment';paid.context.preparationId='ep_'+'e'.repeat(64);await checkPlan(external,paid);
+    for(const [receiver,request] of [[stock,pity],[external,pity],[wallet,stocked],[wallet,paid]])await post(receiver,request,400);
+    await post(wallet,{...pity,protocol:allocationStrategyProtocol},400);await post(wallet,{...make(),protocol:allocationStrategyV2Protocol},400);
+    for(const mutate of [value=>{delete value.context.mode;},value=>{value.context.mode='unknown';},value=>{delete value.context.ownedCards;},value=>{value.context.pityCount=-1;},value=>{value.context.product.strategy.version=1;},value=>{value.context.product.duplicatePolicy.fallback='unknown';},value=>{delete value.context.variants[0].cardId;},value=>{value.context.authoritativePityCount=0;}]){const invalid=makeV2();mutate(invalid);await post(wallet,invalid,400);}
+    const forbiddenCounter={...result,pityCount:0};assert.throws(()=>validateAllocationStrategyV2Response(forbiddenCounter));
+    await checkPlan(wallet,pity);
+  }finally{await stop(wallet);}
 });

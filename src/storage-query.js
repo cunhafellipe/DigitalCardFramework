@@ -88,6 +88,9 @@ export function memoryQueries(state) {
   };
   return {
     get,
+    ownedCardPresence(ownerId,cardIds){
+      const ids=ownedCardIds(ownerId,cardIds),wanted=new Set(ids),present=new Set();for(const row of Object.values(state.copies??{}))if(row.ownerId===ownerId&&['owned','sealed'].includes(row.state)&&wanted.has(row.cardId))present.add(row.cardId);return ids.map(cardId=>({cardId,owned:present.has(cardId)}));
+    },
     availableCodeStock(poolId,limit,at){
       check(typeof poolId==='string'&&Number.isSafeInteger(limit)&&limit>=1&&limit<=1000&&Number.isFinite(Date.parse(at)),'RECORD_PATH_UNAVAILABLE','Code stock scope requires bounded allocation',409);
       return structuredClone(Object.values(state.codes??{}).filter(row=>row.poolId===poolId&&row.status==='available'&&(!row.expiresAt||Date.parse(row.expiresAt)>Date.parse(at))).slice(0,limit));
@@ -131,3 +134,5 @@ export function memoryQueries(state) {
     pageExternalPurchases: input => page('externalPurchases', input),
   };
 }
+
+export function ownedCardIds(ownerId,cardIds){check(typeof ownerId==='string'&&ownerId.length<=2048&&Array.isArray(cardIds)&&cardIds.length<=2000&&cardIds.every(id=>typeof id==='string'&&id.length<=2048),'INVALID_INPUT','Invalid owned card query');return [...new Set(cardIds)];}

@@ -11,9 +11,9 @@ const find=(root,text)=>[...root.querySelectorAll('button')].find(button=>button
 const click=(root,text)=>{const button=find(root,text);assert(button,'Missing '+text);assert(!button.hidden&&!button.disabled,'Unavailable '+text);button.click();return button;};
 const field=(root,text)=>{const label=[...root.querySelectorAll('label')].find(label=>label.querySelector('span')?.textContent===text);assert(label,'Missing '+text);return label.querySelector('input,textarea,select');};
 const stable=value=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])])):Array.isArray(value)?value.map(stable):value;
-function setup(){
+function setup({version=1}={}){
   const window=new Window({url:'http://localhost/'});globalThis.document=window.document;globalThis.sessionStorage=window.sessionStorage;const x=fixture(),catalog=structuredClone(x.core.catalog());
-  catalog.products.find(product=>product.id==='common').allocationStrategy={algorithm:'weighted-deck@1',version:1,deckScope:'purchase-slot'};
+  catalog.products.find(product=>product.id==='common').allocationStrategy={algorithm:'weighted-deck@'+version,version,deckScope:'purchase-slot'};
   const model={me:{userId:'collector',role:'admin'},catalog,inventory:[{id:'owned-copy',definition:{name:'Owned card'}}],packs:[]};
   const calls={quotes:[],listings:[],statuses:[],acknowledgements:[]};let principal='collector',keys=0,digest='a'.repeat(64),attempt={state:'idle',attemptId:null,command:null,attemptShopId:null,errorCode:null};
   const client={principal:()=>principal,requestKey:()=> 'listing-'+(++keys),listings:async()=>({items:[],next:null,total:0}),shops:async()=>({items:[{id:shopId,name:'First shop',mine:true},{id:otherShopId,name:'Second shop',mine:true}]}),commerceSettings:async()=>({settings:{playerShops:true,packResale:true},revision:0}),
@@ -27,8 +27,8 @@ function setup(){
   return {window,model,client,calls,get root(){return root;},setField,setPrincipal(value){principal=value;},setDigest(value){digest=value;},setAttempt(value){attempt=value;},async mount(){view=renderMarketplace(model,{client});root=view.node;document.body.append(root);await view.ready;setField('Stock source','mint-pack');setField('Stock item','common');setField('Listing title','Sealed stock');setField('Unit price','10');return view;},close(){view?.dispose();x.core.close();window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}};
 }
 
-test('strategy stock requires a quote review and sends the digest at listing level',async()=>{
-  const x=setup();try{await x.mount();assert(find(x.root,'Reserve stock and publish listing').disabled);assert.match(x.root.textContent,/stock batch without replacement/);click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,0);assert.deepEqual(x.calls.quotes,[{shopId,productId:'common',quantity:1}]);assert.match(x.root.textContent,/Review 1 sealed pack for First shop/);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,1);assert.equal(x.calls.listings[0].allocationDigest,'a'.repeat(64));assert.deepEqual(x.calls.listings[0].items,{kind:'mint-pack',productId:'common',quantity:1});assert.equal(x.calls.listings[0].title,'Sealed stock');assert.deepEqual(x.calls.listings[0].price,{currencyId:'credits',amount:10});
+for(const version of [1,2])test('strategy v'+version+' stock requires a quote review and sends the digest at listing level',async()=>{
+  const x=setup({version});try{await x.mount();assert(find(x.root,'Reserve stock and publish listing').disabled);assert.match(x.root.textContent,/stock batch without replacement/);click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,0);assert.deepEqual(x.calls.quotes,[{shopId,productId:'common',quantity:1}]);assert.match(x.root.textContent,/Review 1 sealed pack for First shop/);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,1);assert.equal(x.calls.listings[0].allocationDigest,'a'.repeat(64));assert.deepEqual(x.calls.listings[0].items,{kind:'mint-pack',productId:'common',quantity:1});assert.equal(x.calls.listings[0].title,'Sealed stock');assert.deepEqual(x.calls.listings[0].price,{currencyId:'credits',amount:10});
   }finally{x.close();}
 });
 
@@ -54,8 +54,18 @@ test('other-shop attempts are identified and explicit retry preserves the origin
   }finally{x.close();}
 });
 
-test('same-shop stale acknowledgement does not create stock and requires a fresh review',async()=>{
-  const x=setup();try{let fail=true;const create=x.client.createListing;x.client.createListing=async input=>{if(fail){x.calls.listings.push(input);x.setAttempt({state:'stale',attemptId:'attempt',command:'createListing',attemptShopId:shopId,errorCode:'ALLOCATION_STALE'});throw new ApiError('ALLOCATION_STALE','Stock allocation changed',409);}return create(input);};await x.mount();click(x.root,'Review stock allocation');await settle();click(x.root,'Reserve stock and publish listing');await settle();click(x.root,'Check stock allocation attempt');await settle();assert.match(x.root.textContent,/stock allocation is stale/);click(x.root,'Acknowledge stock allocation attempt');await settle();assert.equal(x.calls.acknowledgements.length,1);assert.equal(x.calls.listings.length,1);assert.equal(x.calls.quotes.length,1);assert(find(x.root,'Reserve stock and publish listing').disabled);fail=false;x.setDigest('b'.repeat(64));click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,1);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,2);assert.equal(x.calls.listings[1].allocationDigest,'b'.repeat(64));
+for(const version of [1,2])test('same-shop stale v'+version+' acknowledgement does not create stock and requires a fresh review',async()=>{
+  const x=setup({version});try{let fail=true;const create=x.client.createListing;x.client.createListing=async input=>{if(fail){x.calls.listings.push(input);x.setAttempt({state:'stale',attemptId:'attempt',command:'createListing',attemptShopId:shopId,errorCode:'ALLOCATION_STALE'});throw new ApiError('ALLOCATION_STALE','Stock allocation changed',409);}return create(input);};await x.mount();click(x.root,'Review stock allocation');await settle();click(x.root,'Reserve stock and publish listing');await settle();click(x.root,'Check stock allocation attempt');await settle();assert.match(x.root.textContent,/stock allocation is stale/);click(x.root,'Acknowledge stock allocation attempt');await settle();assert.equal(x.calls.acknowledgements.length,1);assert.equal(x.calls.listings.length,1);assert.equal(x.calls.quotes.length,1);assert(find(x.root,'Reserve stock and publish listing').disabled);fail=false;x.setDigest('b'.repeat(64));click(x.root,'Review stock allocation');await settle();assert.equal(x.calls.listings.length,1);click(x.root,'Reserve stock and publish listing');await settle();assert.equal(x.calls.listings.length,2);assert.equal(x.calls.listings[1].allocationDigest,'b'.repeat(64));
+  }finally{x.close();}
+});
+
+for(const fallback of ['allow','reject'])test('v2 stock explains nonpersonalized within-pack protection with '+fallback+' fallback',async()=>{
+  const x=setup({version:2});try{const product=x.model.catalog.products.find(product=>product.id==='common');product.duplicatePolicy={scope:'inventory',fallback};product.pity={rarityId:'rare',after:5};await x.mount();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.match(x.root.textContent,/card identities within each pack/);assert.match(x.root.textContent,/special inserts bypass this check/);assert.match(x.root.textContent,fallback==='allow'?/fallback allows a repeat/:/Stock creation fails/);click(x.root,'Review stock allocation');await settle();assert.match(x.root.textContent,/Stock ignores personal inventory and pity/);assert.equal(x.calls.listings.length,0);
+  }finally{x.close();}
+});
+
+test('stock review requires an exact supported strategy selector',async()=>{
+  const x=setup();try{x.model.catalog.products.find(product=>product.id==='common').allocationStrategy={algorithm:'weighted-deck@2',version:1,deckScope:'purchase-slot'};await x.mount();assert(find(x.root,'Review stock allocation').hidden);assert(!find(x.root,'Reserve stock and publish listing').disabled);assert.equal(x.calls.quotes.length,0);
   }finally{x.close();}
 });
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a versioned conditional ticket strategy for pity and duplicate rules, with reviewed purchase and stock flows, private eligibility snapshots, and compatible Node provider endpoints.
+
 - Added weighted-deck allocation for external pack payments, with asynchronous fulfillment, durable payment recovery, shared allocation retry protection, reserved refund capacity, and an external endpoint in the Node provider example.
 
 - Added reviewed weighted-deck creation of minted pack stock, with atomic listing allocation, shared wallet/stock retry protection, explicit recovery, and a stock endpoint in the Node provider example.

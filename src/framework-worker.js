@@ -66,7 +66,7 @@ try {
         if (closing) throw new FrameworkError('WORKER_UNAVAILABLE','Framework worker is closing',503);
         const {method,args} = deserialize(message.payload);
         if (!commands.has(method)) throw new FrameworkError('WORKER_METHOD','Unsupported framework operation');
-        if (['dispatchActions','purchaseAsync','commitExternalPurchaseAsync','quoteListingAsync','buyListingAsync','createListingAsync','proposeTradeAsync','counterTradeAsync','acceptTradeAsync','reviewTransferAsync','executeCommandIntentAsync'].includes(method)) {
+        if (['recoverCodeIssuance','dispatchActions','purchaseAsync','commitExternalPurchaseAsync','quoteListingAsync','buyListingAsync','createListingAsync','proposeTradeAsync','counterTradeAsync','acceptTradeAsync','reviewTransferAsync','executeCommandIntentAsync'].includes(method)) {
           if (message.aborted) controller.abort();
           const index=method==='dispatchActions'?1:2;
           args[index] = {...args[index],signal:controller.signal};

@@ -468,8 +468,9 @@ export class CommerceService {
   async evaluateStockListingPolicy(actor,row,signal){
     if(!this.#remoteListingPolicy)return null;const proposal=this.#listingProposals.prepare({...row.preparation.policy,key:row.key});await this.#listingProposals.evaluate(proposal,{signal});return proposal;
   }
+  assertStockListingPolicy(row,proposal,signal){if(proposal)this.#listingProposals.assert(proposal,row.preparation.policy.snapshotDigest,{signal});}
   admitStockListingPolicy(row,proposal,signal){return proposal?this.#listingProposals.admit(proposal,row.preparation.policy.snapshotDigest,{signal}):null;}
-  commitStockAllocation(actor,row,plan,{auxiliary,signal,codeAssignments},tx){return this.#createListing(actor,{...row.preparation.reviewed,key:row.key},null,signal,null,{tx,plan,attemptId:row.id,policyAdmission:auxiliary,codeSnapshot:row.codeSnapshot,codeAssignments});}
+  commitStockAllocation(actor,row,plan,{auxiliary,signal,codeAssignments,generated},tx){return this.#createListing(actor,{...row.preparation.reviewed,key:row.key},null,signal,null,{tx,plan,attemptId:row.id,policyAdmission:auxiliary,codeSnapshot:row.codeSnapshot,codeAssignments,generated});}
   async createListingAsync(actor,input,{signal}={}){
     if(!this.#remoteListingPolicy&&!this.#transfers.configured('canTransfer')){try{return this.createListing(actor,input);}catch(error){if(error.code!=='ALLOCATION_ASYNC_REQUIRED'||input?.items?.kind!=='mint-pack')throw error;const principal=clone(actor),reviewed=this.#reviewListing(clone(input));return this.#b.allocateListingStock(principal,reviewed.key,this.#creationCommandInput(reviewed),{signal});}}
     const principal=clone(actor),reviewed=this.#reviewListing(clone(input)),commandInput=this.#creationCommandInput(reviewed);

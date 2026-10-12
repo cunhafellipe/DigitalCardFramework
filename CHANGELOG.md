@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added generated-code issuance for versioned allocation, with durable per-occurrence identities, encrypted result custody, bounded operator recovery, and a restart-safe Node issuer example.
+
 - Added versioned imported-code allocation with shared pool eligibility, private code selection, and reviewed purchase and stock flows.
 
 - Added a versioned conditional ticket strategy for pity and duplicate rules, with reviewed purchase and stock flows, private eligibility snapshots, and compatible Node provider endpoints.

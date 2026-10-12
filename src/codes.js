@@ -101,7 +101,7 @@ export function allocateCodes(s, copy, specs, at, generate, emit = event,selectI
 
 /** Uses the same transaction store as pack allocation. No raw codes in projections or retry records. */
 export class CodeService {
-  #allocationCodes=new WeakMap();#store; #vault; #clock; #maxCodes; #maxRequests; #generators; #emit;
+  #allocationCodes=new WeakMap();#store; #vault; #clock; #maxCodes; #maxRequests; #generators; #emit;#issuers;#custody;
   constructor({ store, vault, clock, generators = {}, maxCodes = 50000, maxRequests = 200000, emit = event }) {
     integer(maxCodes, 'code capacity', 1, 1000000); integer(maxRequests, 'code request capacity', 1, 10000000);
     this.#store = store; this.#vault = vault; this.#clock = clock; this.#generators = generators;
@@ -144,7 +144,7 @@ export class CodeService {
       requiredCodes += count;
       if (pool.generator) {
         const generator = Object.hasOwn(this.#generators, pool.generator) && this.#generators[pool.generator];
-        check(typeof generator === 'function', 'MISSING_CODE_GENERATOR', 'Code generator unavailable', 503);
+        if(s.allocationIssuanceReady&&this.#issuers?.[pool.generator]){generatedCodes+=count;continue;}check(typeof generator === 'function', 'MISSING_CODE_GENERATOR', 'Code generator unavailable', 503);
         check(!types.isAsyncFunction(generator) && !types.isGeneratorFunction(generator) && !['[object AsyncFunction]', '[object GeneratorFunction]', '[object AsyncGeneratorFunction]'].includes(Object.prototype.toString.call(generator)), 'INVALID_PROVIDER', 'Code generator must return synchronously');
         generatedCodes += count;
         continue;
@@ -168,10 +168,12 @@ export class CodeService {
   }
 
   allocateGenerated(s, pool, copy, at) {
+    const admission=this.#allocationCodes.get(s),issued=admission?.generated?.find(row=>row.poolId===pool.id&&row.copyId===copy.id&&!admission.used.has(row.issuanceId));
+    if(admission?.generated){check(issued,'CODE_ISSUANCE_PENDING','Selected generated attachment is unavailable',503);admission.used.add(issued.issuanceId);}
     const generator = this.#generators[pool.generator];
-    check(typeof generator === 'function', 'MISSING_CODE_GENERATOR', 'Code generator unavailable', 503);
+    check(issued||typeof generator === 'function', 'MISSING_CODE_GENERATOR', 'Code generator unavailable', 503);
     check((recordContexts.get(s)?.codeCount??0)+Object.keys(s.codes ?? {}).length < this.#maxCodes, 'INSTALLATION_CAPACITY', 'Code capacity reached', 507);
-    const value = generator({ copy: structuredClone(copy), pool: structuredClone(pool) });
+    const value = issued?issued.result:generator({ copy: structuredClone(copy), pool: structuredClone(pool) });
     if(value && typeof value.then==='function')Promise.resolve(value).catch(()=>{});
     check(value && !value.then, 'INVALID_PROVIDER', 'Code generator must return synchronously');
     text(value.code, 'generated code', 512);
@@ -181,26 +183,29 @@ export class CodeService {
     const vault = this.#checkVault(s), fingerprint = vault.fingerprint({providerId:pool.providerId,code});
     check(!recordContexts.get(s)?.codeIdentityExists?.(fingerprint,pool.providerId,value.externalId)&&!Object.values(s.codes).some(row=>row.fingerprint===fingerprint || (value.externalId && row.providerId===pool.providerId && row.externalId===value.externalId)), 'DUPLICATE_CODE', 'Generated identity collision', 409);
     if(value.externalId !== undefined)text(value.externalId,'external code reference',300);
-    const row={id:randomUUID(),poolId:pool.id,providerId:pool.providerId,fingerprint,batchId:null,importedAt:at,
+    const row={id:issued?.codeId??randomUUID(),poolId:pool.id,providerId:pool.providerId,fingerprint,batchId:null,importedAt:at,
       externalId:value.externalId??null,expiresAt:null,metadata:jsonObject(value.metadata??{}),status:'available',
       copyId:null,holderId:null,holderHistory:[],allocatedAt:null,revealedAt:null,revealedBy:null,
       reportedUsed:false,redeemedAt:null,revokedAt:null,history:[]};
-    row.secret=vault.seal(code,context(row));s.codes[row.id]=row;if(!recordContexts.has(s))initializeCodeImportOrder(s);return row;
+    row.secret=vault.seal(code,context(row));s.codes[row.id]=row;if(!recordContexts.has(s))initializeCodeImportOrder(s);if(issued)admission.assignments.push({packIndex:copy.source.packIndex,slotId:copy.source.slotId,ordinal:copy.source.slotOrdinal,attachmentId:issued.attachmentId,codeId:row.id,copyId:copy.id});return row;
   }
   allocate(s,copy,specs,at) {const admission=this.#allocationCodes.get(s);return allocateCodes(s,copy,specs,at,(pool)=>this.allocateGenerated(s,pool,copy,at),this.#emit,admission?(pool,spec)=>{const queue=admission.queues.get(pool.id),codeId=queue?.shift(),row=s.codes?.[codeId];check(row&&row.poolId===pool.id&&row.status==='available'&&!expired(row,at),'ALLOCATION_STALE','Imported code allocation changed',409);admission.assignments.push({packIndex:copy.source.packIndex,slotId:copy.source.slotId,ordinal:copy.source.slotOrdinal,attachmentId:spec.id,codeId,copyId:copy.id});return row;}:undefined); }
   prepareAllocation(s,product,quantity,at,select){
-    const variants=[...new Set(product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>s.catalog.variants.find(v=>v.id===id)),resources=variants.map(v=>({id:v.id,codeDemand:importedVariantDemand(v)})),demand=allocationCodeDemand(product,resources,quantity),pools=[],codePools=[],seenOrders=new Set();let validUntil=null;const cursor=s._codeImportOrder?.['@cursor']??0;
+    const variants=[...new Set(product.slots.flatMap(slot=>slot.pool.map(e=>e.variantId)))].map(id=>s.catalog.variants.find(v=>v.id===id)),resources=variants.map(v=>({id:v.id,codeDemand:importedVariantDemand(v)})),demand=allocationCodeDemand(product,resources,quantity),pools=[],generated=[],codePools=[],seenOrders=new Set();let validUntil=null;const cursor=s._codeImportOrder?.['@cursor']??0;
     if(demand.size){const vault=this.#keys();check(!s.codeIndexCheck||s.codeIndexCheck===vault.fingerprint({purpose:'digital-card-code-index-v1'}),'CODE_KEYS','Code index key does not match stored inventory',503);}
     for(const [poolId,maximum]of [...demand].sort(([a],[b])=>a<b?-1:a>b?1:0)){
-      const pool=s.codePools?.[poolId];check(pool,'CODE_POOL_UNAVAILABLE','Code pool is unavailable',409);check(!pool.generator,'ALLOCATION_UNSUPPORTED','Generated code allocation requires its strategy extension',409);
+      const pool=s.codePools?.[poolId];check(pool,'CODE_POOL_UNAVAILABLE','Code pool is unavailable',409);if(pool.generator){const issuer=this.#issuers?.[pool.generator];check(issuer?.providerId===pool.providerId,'MISSING_CODE_GENERATOR','Allocation code issuer unavailable',503);issuer.grant();generated.push({poolId,revision:s._codePoolRevisions?.[poolId]??0,issuerName:pool.generator,providerId:pool.providerId,kind:issuer.kind,available:pool.enabled?maximum:0});codePools.push({id:poolId,available:pool.enabled?maximum:0});continue;}
       const entries=pool.enabled&&maximum?select(poolId,maximum,at):[],prefix=[];
       for(const {row,ordinal}of entries){this.verifyImported(s,pool,row,at);check(Number.isSafeInteger(ordinal)&&ordinal>=0&&ordinal<cursor&&!seenOrders.has(ordinal)&&typeof row.id==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\s\S])/.test(row.id),'CODE_INTEGRITY','Imported code stock cannot be verified',500);seenOrders.add(ordinal);prefix.push({codeId:row.id,ordinal,expiresAt:row.expiresAt});if(row.expiresAt!==null&&(validUntil===null||Date.parse(row.expiresAt)<Date.parse(validUntil)))validUntil=new Date(row.expiresAt).toISOString();}
       const revision=s._codePoolRevisions?.[poolId]??0;check(Number.isSafeInteger(revision)&&revision>=0,'CODE_INTEGRITY','Imported code stock cannot be verified',500);pools.push({poolId,revision,prefix});codePools.push({id:poolId,available:entries.length});
     }
-    return {codeSnapshot:{pools,validUntil},codePools,resources};
+    if(generated.length)check((s.allocationCodeCount??Object.keys(s.codes??{}).length)+(s.allocationCodeReserved??0)+generated.reduce((n,p)=>n+p.available,0)<=this.#maxCodes,
+"INSTALLATION_CAPACITY","Generated code capacity reached",507);return {codeSnapshot:{pools,validUntil,...(generated.length?{generated}: {})},codePools,resources};
   }
   verifyImported(s,pool,row,at){const vault=this.#keys();try{check(row?.poolId===pool.id&&row.providerId===pool.providerId&&row.status==='available'&&(row.expiresAt===null||typeof row.expiresAt==='string'&&Number.isFinite(Date.parse(row.expiresAt))&&Date.parse(row.expiresAt)>Date.parse(at)),'CODE_INTEGRITY','Imported code stock cannot be verified',500);const value=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code:value}),'CODE_INTEGRITY','Imported code stock cannot be verified',500);}catch{throw new FrameworkError('CODE_INTEGRITY','Imported code stock cannot be verified',500);}}
-  admitAllocation(s,snapshot){if(!snapshot)return null;const admission={queues:new Map(snapshot.pools.map(p=>[p.poolId,p.prefix.map(e=>e.codeId)])),assignments:[]};this.#allocationCodes.set(s,admission);return admission;}
+  admitAllocation(s,snapshot,generated){if(!snapshot)return null;const admission={queues:new Map(snapshot.pools.map(p=>[p.poolId,p.prefix.map(e=>e.codeId)])),assignments:[],generated:generated?.results,used:new Set()};this.#allocationCodes.set(s,admission);return admission;}
+  setAllocationIssuers(issuers){this.#issuers=issuers;}
+  setIssuanceCustody(custody){this.#custody=custody;}
   releaseAllocation(s){this.#allocationCodes.delete(s);}
 
   transfer(s,copy,from,to,tradeId,at) { return transferCodes(s,copy,from,to,tradeId,at,this.#emit); }
@@ -218,7 +223,7 @@ export class CodeService {
     operator(actor, 'codes.manage');
     const clean = safeData(pool); check(clean && typeof clean==='object' && !Array.isArray(clean),'INVALID_INPUT','Pool must be an object');
     identifier(clean.id, 'pool ID'); identifier(clean.providerId, 'provider ID'); text(clean.name, 'pool name');
-    if(clean.generator!==undefined){identifier(clean.generator,'generator ID');check(typeof this.#generators[clean.generator]==='function','MISSING_CODE_GENERATOR','Install the configured code generator',503);}
+    if(clean.generator!==undefined){identifier(clean.generator,'generator ID');check(typeof this.#generators[clean.generator]==='function'||!!this.#issuers?.[clean.generator],'MISSING_CODE_GENERATOR','Install the configured code generator',503);}
     clean.normalization ??= 'exact'; clean.enabled ??= true; clean.metadata = jsonObject(clean.metadata ?? {});
     clean.instructions ??= ''; clean.redeemUrl ??= null;
     check(['exact', 'upper-trim'].includes(clean.normalization) && typeof clean.enabled === 'boolean', 'INVALID_INPUT', 'Invalid pool policy');
@@ -368,13 +373,13 @@ export class CodeService {
       const vault=this.#checkVault(s);
       let count = 0;
       for (const row of Object.values(s.codes ?? {})) { row.secret = vault.seal(vault.open(row.secret, context(row)), context(row)); count++; }
-      this.#emit(s, 'code.keys-rotated', { count, actorId: actor.userId ?? null }, this.#clock());
+      count+=this.#custody?.(s,vault,{rotate:true})??0;this.#emit(s, 'code.keys-rotated', { count, actorId: actor.userId ?? null }, this.#clock());
       return { count };
     });
   }
   verifyVault(actor) {
     operator(actor,'codes.manage');
-    return this.#store.read(s=>{if(!Object.keys(s.codes??{}).length)return {count:0};const vault=this.#checkVault(s);for(const row of Object.values(s.codes)){const code=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code}),'CODE_INTEGRITY','Code lookup fingerprint does not match its encrypted value',500);}return {count:Object.keys(s.codes).length};});
+    return this.#store.read(s=>{if(!Object.keys(s.codes??{}).length&&!Object.keys(s.codeIssuances??{}).length)return {count:0};const vault=this.#checkVault(s);for(const row of Object.values(s.codes)){const code=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code}),'CODE_INTEGRITY','Code lookup fingerprint does not match its encrypted value',500);}return {count:Object.keys(s.codes??{}).length+(this.#custody?.(s,vault)??0)};});
   }
 }
 

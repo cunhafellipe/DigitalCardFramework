@@ -21,6 +21,7 @@ export function createClient({ baseUrl = '/api', fetch: request = globalThis.fet
         }
     }
     return {
+        codeIssuanceStatus: options => call('codeIssuanceStatus', undefined, { query: options }), recoverCodeIssuance: input => call('recoverCodeIssuance', input),
         capabilities: () => call('capabilities', undefined), commandIntents: options => call('commandIntents', undefined, { query: options }),
         registerCommandIntent: input => call('registerCommandIntent', input), executeCommandIntent: input => call('executeCommandIntent', input), acknowledgeCommandIntent: input => call('acknowledgeCommandIntent', input),
         quoteMintPackStock: input => call('quoteMintPackStock', input), stockAllocationStatus: options => call('stockAllocationStatus', undefined, { query: options }),

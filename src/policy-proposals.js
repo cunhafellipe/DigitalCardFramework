@@ -20,14 +20,17 @@ export class PolicyProposalCoordinator{
     if(response.status==='denied')throw new FrameworkError('POLICY_DENIED','Remote policy rejected this account',403);
     this.#proposals.get(proposal).allowed=true;return proposal;
   }
-  admit(proposal,snapshotDigest,{signal}={}){
+  assert(proposal,snapshotDigest,{signal}={}){
     const row=this.#proposals.get(proposal);
     check(row?.allowed&&!row.admitted,'POLICY_PROPOSAL','Remote policy proposal is invalid or already admitted',409);
     check(!signal?.aborted,'POLICY_ABORTED','Remote policy evaluation was cancelled',503);
     this.#provider.assertGrant(proposal);
     check(Date.now()<proposal.deadline,'POLICY_TIMEOUT','Remote policy proposal expired; retry later',504);
     check(proposal.snapshotDigest===snapshotDigest,'POLICY_STALE','Policy state changed during policy evaluation; review again',409);
-    row.admitted=true;
+    return;
+  }
+  admit(proposal,snapshotDigest,options={}){
+    this.assert(proposal,snapshotDigest,options);this.#proposals.get(proposal).admitted=true;
     return {providerId:proposal.providerId,grantId:proposal.grantId,generation:proposal.generation,commandId:proposal.commandId,inputDigest:proposal.inputDigest,snapshotDigest:proposal.snapshotDigest,requestId:proposal.requestId};
   }
 }

@@ -10765,6 +10765,231 @@
           }
         }
       }
+    },
+    "/operator/code-issuance/status": {
+      "get": {
+        "operationId": "codeIssuanceStatus",
+        "description": "Requires codes.manage. Read-only issuance progress; never contacts an issuer or reveals generated material.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batchId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeIssuanceStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/code-issuance/recover": {
+      "post": {
+        "operationId": "recoverCodeIssuance",
+        "description": "Requires codes.manage. Look up retained issuance identities or complete terminal cancellation. New issuance requires resuming the original purchase command.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-DC-Principal",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required by the production host; must match the verified session principal."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeIssuanceCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeIssuanceStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11416,6 +11641,10 @@
           "errorCode"
         ],
         "properties": {
+          "codeIssuanceBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          },
           "productId": {
             "type": "string",
             "minLength": 1,
@@ -13259,6 +13488,10 @@
           "attemptShopId"
         ],
         "properties": {
+          "codeIssuanceBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          },
           "productId": {
             "type": "string",
             "minLength": 1,
@@ -16364,6 +16597,10 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "codeIssuanceBatchId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
           "preparationId": {
             "type": "string",
             "pattern": "^ep_[a-f0-9]{64}$"
@@ -21126,6 +21363,96 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/CapabilityProfile"
+          }
+        }
+      },
+      "CodeIssuanceCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+          }
+        }
+      },
+      "CodeIssuanceStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId",
+          "state",
+          "counts",
+          "errorCode"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "issued",
+              "attached",
+              "cancel_pending",
+              "cancelled",
+              "quarantined"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "pending",
+              "issued",
+              "attached",
+              "cancelled"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "issued": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "attached": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            }
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Z][A-Z0-9_]*(?![\\s\\S])"
+              }
+            ]
           }
         }
       }

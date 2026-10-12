@@ -1524,7 +1524,7 @@ const allocationDigest={type:'string',pattern:'^[a-f0-9]{64}$'};
 schemas.Quote.properties.allocationDigest=allocationDigest;
 schemas.Purchase.properties.allocationDigest=allocationDigest;
 const allocationAttemptId={type:'string',pattern:'^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'};
-schemas.AllocationStatus={type:'object',additionalProperties:false,required:['productId','attemptId','state','errorCode'],properties:{productId:{type:'string',minLength:1,maxLength:100},attemptId:{anyOf:[allocationAttemptId,{type:'null'}]},state:{enum:['idle','prepared','stale','completed','acknowledged']},errorCode:{enum:[null,'ALLOCATION_STALE']}}};
+schemas.AllocationStatus={type:'object',additionalProperties:false,required:['productId','attemptId','state','errorCode'],properties:{codeIssuanceBatchId:allocationAttemptId,productId:{type:'string',minLength:1,maxLength:100},attemptId:{anyOf:[allocationAttemptId,{type:'null'}]},state:{enum:['idle','prepared','stale','completed','acknowledged']},errorCode:{enum:[null,'ALLOCATION_STALE']}}};
 schemas.AllocationAcknowledgementInput={type:'object',additionalProperties:false,required:['attemptId'],properties:{attemptId:allocationAttemptId}};
 schemas.AllocationAcknowledgement={type:'object',additionalProperties:false,required:['attemptId','state'],properties:{attemptId:allocationAttemptId,state:{const:'acknowledged'}}};
 schemas.Page={type:'object',required:['items','total','next'],properties:{items:{type:'array',maxItems:200,items:{type:'object'}},total:{type:'integer',minimum:0},next:{type:['string','null']}}};
@@ -1783,6 +1783,11 @@ schemas.PublicCatalog={...schemas.CatalogManifest,required:[...schemas.CatalogMa
 openapi.paths['/catalog'].get.responses['200'].content['application/json'].schema=ref('PublicCatalog');
 schemas.ImportPreviewRequest.properties.source.oneOf[1]={type:'object',properties:{capabilities:ref('CapabilityInput')}};
 openapi.paths['/capabilities']=route('get','capabilities',ref('CapabilityAvailability'),{description:'Authenticated workflow hints for the current account. Configured workflows and current coarse availability are distinct; resource checks remain authoritative. Draining names identify only this account\'s accepted pending work.'});
+const issuanceBatchId={type:'string',pattern:'^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])'};
+schemas.CodeIssuanceCommand={type:'object',additionalProperties:false,required:['batchId'],properties:{batchId:issuanceBatchId}};
+schemas.CodeIssuanceStatus={type:'object',additionalProperties:false,required:['batchId','state','counts','errorCode'],properties:{batchId:issuanceBatchId,state:{enum:['pending','issued','attached','cancel_pending','cancelled','quarantined']},counts:{type:'object',additionalProperties:false,required:['total','pending','issued','attached','cancelled'],properties:Object.fromEntries(['total','pending','issued','attached','cancelled'].map(key=>[key,{type:'integer',minimum:0,maximum:1000}]))},errorCode:{anyOf:[{type:'null'},{type:'string',minLength:1,maxLength:100,pattern:'^[A-Z][A-Z0-9_]*(?![\\s\\S])'}]}}};
+openapi.paths['/operator/code-issuance/status']=route('get','codeIssuanceStatus',ref('CodeIssuanceStatus'),{parameters:[{name:'batchId',in:'query',required:true,schema:issuanceBatchId}],description:'Requires codes.manage. Read-only issuance progress; never contacts an issuer or reveals generated material.'});
+openapi.paths['/operator/code-issuance/recover']=route('post','recoverCodeIssuance',ref('CodeIssuanceStatus'),{requestSchema:ref('CodeIssuanceCommand'),description:'Requires codes.manage. Look up retained issuance identities or complete terminal cancellation. New issuance requires resuming the original purchase command.'});
 // All documented failure statuses use the same JSON envelope.
 for(const item of Object.values(openapi.paths))for(const operation of Object.values(item)){
   for(const [status,response]of Object.entries(operation.responses??{}))if(Number(status)>=400)response.content={'application/json':{schema:ref('Error')}};

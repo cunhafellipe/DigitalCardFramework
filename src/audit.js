@@ -49,6 +49,7 @@ export function auditState(s){
   const identities=new Set();for(const u of Object.values(s.users)){const identity=JSON.stringify([u.provider,u.subject]);if(identities.has(identity))add('IDENTITY_DUPLICATE',u.id);identities.add(identity);}
   auditRelationships(s,add);
   auditExternalPurchases(s,add);
+  auditCodeIssuance(s,add);
   const intents=Object.entries(s.commandIntents??{}),heads=s.commandIntentHeads??{};
   if((s.commandIntentCount??0)!==intents.length)add('COMMAND_INTENT_COUNT','Retained command intent count differs');
   for(const [id,row]of intents){
@@ -359,5 +360,30 @@ function auditLegacyAdoption(s,row,purchaseKey,purchase,add){
     const pack=s.packs[view.id];
     if(!pack||view.purchaseId!==purchase.id||pack.purchaseId!==purchase.id||pack.productId!==quote.productId||pack.productRevision!==quote.productRevision||pack.catalogVersion!==quote.catalogVersion||!same(view.product,pack.product)||!Array.isArray(pack.copyIds)||view.cardCount!==pack.copyIds.length||pack.product?.price?.currencyId!==currencyId||pack.product?.price?.amount*quote.quantity!==amount){add('EXTERNAL_RESOLUTION_DELIVERY_INVALID',id);continue;}
     for(const copyId of pack.copyIds){const copy=s.copies[copyId];if(!copy||copy.source?.packId!==pack.id||copy.source?.purchaseId!==purchase.id||(copy.codeIds??[]).some(codeId=>s.codes?.[codeId]?.copyId!==copyId))add('EXTERNAL_RESOLUTION_DELIVERY_INVALID',id);}
+  }
+}
+
+function auditCodeIssuance(s,add){
+  const reservations=s.codeIssuanceReservations??{},batches=s.codeIssuanceBatches??{};
+  let reserved=0;
+  for(const [attemptId,row] of Object.entries(reservations)){
+    if(!row||row.attemptId!==attemptId||typeof row.batchId!=='string'||!Number.isSafeInteger(row.count)||row.count<0||row.count>1000||!Number.isSafeInteger(row.bytes)||row.bytes<1||!['reserved','released'].includes(row.state)){
+      add('CODE_ISSUANCE_RESERVATION_INVALID',attemptId);continue;
+    }
+    if(row.state==='reserved')reserved+=row.count;
+    const obligation=s.completionObligations?.['code-issuance:'+row.batchId];
+    if(obligation?.kind!=='code-issuance'||obligation.entityId!==row.batchId||obligation.status!==(row.state==='reserved'?'reserved':'completed'))add('CODE_ISSUANCE_OBLIGATION_INVALID',attemptId);
+    const batch=batches[row.batchId];
+    if(batch&&(batch.attemptId!==attemptId||batch.id!==row.batchId||(['attached','cancelled'].includes(batch.state))!==(row.state==='released')))add('CODE_ISSUANCE_RELEASE_INVALID',attemptId);
+    if(!batch&&row.state==='released')add('CODE_ISSUANCE_RELEASE_INVALID',attemptId);
+  }
+  const quota=s.codeIssuanceQuota?.global?.reserved??0;
+  if(!Number.isSafeInteger(quota)||quota<0||quota!==reserved)add('CODE_ISSUANCE_QUOTA_INVALID','Reserved issuance capacity differs');
+  for(const [id,batch] of Object.entries(batches)){
+    if(!batch||reservations[batch.attemptId]?.batchId!==id)add('CODE_ISSUANCE_BATCH_RESERVATION_INVALID',id);
+  }
+  const reservedBatches=new Set(Object.values(reservations).filter(Boolean).map(row=>row.batchId));
+  for(const [id,obligation] of Object.entries(s.completionObligations??{})){
+    if(obligation?.kind==='code-issuance'&&(!reservedBatches.has(obligation.entityId)||id!=='code-issuance:'+obligation.entityId))add('CODE_ISSUANCE_OBLIGATION_ORPHAN',id);
   }
 }

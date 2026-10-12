@@ -20,14 +20,14 @@ export const frameworkMethods = Object.freeze([
   'settleExternalCredit','prepareExternalPurchase','commitExternalPurchase','commitExternalPurchaseAsync','setRemoteExternalAllocationEnabled','cancelExternalPurchase',
   'confirmExternalCompensation','externalPurchaseStatus','lookupExternalPurchase','pendingExternalPurchases',
   'reconcileLegacyExternalPurchase','resolveLegacyExternalPurchase','wallet','history','quote','availability',
-  'pityProgress','purchase','purchaseAsync','allocationStatus','quoteMintPackStock','stockAllocationStatus','setRemoteStockAllocationEnabled','acknowledgeAllocation','setRemoteAllocationEnabled','packs','packsPage','packPage','openPack','inventory','inspectCard',
+  'codeIssuanceStatus','recoverCodeIssuance','pityProgress','purchase','purchaseAsync','allocationStatus','quoteMintPackStock','stockAllocationStatus','setRemoteStockAllocationEnabled','acknowledgeAllocation','setRemoteAllocationEnabled','packs','packsPage','packPage','openPack','inventory','inspectCard',
   'consumeBinding','convert','tradeUp','proposeTrade','counterTrade','sweepExpiredTrades','trades','acceptTrade',
   'cancelTrade','saveAlbum','albums','viewAlbum','publicAlbums','bindings','events',
 ]);
 export const storeMethods = Object.freeze(['storeIntegrity','storeDiagnostics','prepareRecordTransactions','runtimeCapabilities']);
 export const sessionMethods = Object.freeze(['sessionCreate','sessionGet','sessionConsume','sessionRevoke']);
 export const frameworkOptionNames = Object.freeze([
-  'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','actionHandlers',
+  'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','allocationCodeIssuers','actionHandlers',
   'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies','remoteAllocation','remoteStockAllocation','remoteExternalAllocation',
 ]);
 export function unavailable() {

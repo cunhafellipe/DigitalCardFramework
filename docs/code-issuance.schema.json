@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/code-issuance/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "digital-card-code-issuance@1"
+        },
+        "operation": {
+          "enum": [
+            "issue",
+            "lookup",
+            "cancel"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+        },
+        "grantId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "batchId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entries": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "issuanceId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "inputDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                  },
+                  "attemptId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "codeId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "poolId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "variantId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "packIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 99
+                  },
+                  "slotId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "slotOrdinal": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 99
+                  },
+                  "attachmentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "attachmentIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 7
+                  }
+                },
+                "required": [
+                  "issuanceId",
+                  "inputDigest",
+                  "attemptId",
+                  "codeId",
+                  "copyId",
+                  "userId",
+                  "poolId",
+                  "variantId",
+                  "packIndex",
+                  "slotId",
+                  "slotOrdinal",
+                  "attachmentId",
+                  "attachmentIndex"
+                ]
+              }
+            }
+          },
+          "required": [
+            "entries"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "operation",
+        "requestId",
+        "providerId",
+        "grantId",
+        "generation",
+        "batchId",
+        "inputDigest",
+        "deadline",
+        "context"
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-code-issuance@1"
+            },
+            "operation": {
+              "enum": [
+                "issue",
+                "lookup",
+                "cancel"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "batchId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "processed"
+            },
+            "results": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "issuanceId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "codeId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "poolId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "variantId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "attachmentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "attachmentIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 7
+                      },
+                      "state": {
+                        "const": "issued"
+                      },
+                      "result": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 512
+                          },
+                          "externalId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          },
+                          "metadata": {
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "code"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "issuanceId",
+                      "inputDigest",
+                      "attemptId",
+                      "codeId",
+                      "copyId",
+                      "userId",
+                      "poolId",
+                      "variantId",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "attachmentId",
+                      "attachmentIndex",
+                      "state",
+                      "result"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "issuanceId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "codeId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "poolId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "variantId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "attachmentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "attachmentIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 7
+                      },
+                      "state": {
+                        "enum": [
+                          "pending",
+                          "not-issued",
+                          "cancelled"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "issuanceId",
+                      "inputDigest",
+                      "attemptId",
+                      "codeId",
+                      "copyId",
+                      "userId",
+                      "poolId",
+                      "variantId",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "attachmentId",
+                      "attachmentIndex",
+                      "state"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "issuanceId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "codeId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "poolId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "variantId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "attachmentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "attachmentIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 7
+                      },
+                      "state": {
+                        "const": "error"
+                      },
+                      "errorCode": {
+                        "enum": [
+                          "unavailable",
+                          "conflict",
+                          "invalid-request"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "issuanceId",
+                      "inputDigest",
+                      "attemptId",
+                      "codeId",
+                      "copyId",
+                      "userId",
+                      "poolId",
+                      "variantId",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "attachmentId",
+                      "attachmentIndex",
+                      "state",
+                      "errorCode"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "batchId",
+            "inputDigest",
+            "deadline",
+            "status",
+            "results"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-code-issuance@1"
+            },
+            "operation": {
+              "enum": [
+                "issue",
+                "lookup",
+                "cancel"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "batchId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "batchId",
+            "inputDigest",
+            "deadline",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

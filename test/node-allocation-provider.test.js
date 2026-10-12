@@ -31,7 +31,20 @@ async function post(receiver,value,status=200,options={}){
   let headers=options.headers??{'content-type':'application/json',authorization:'Bearer '+token,'content-length':String(body.length)};
   if(Array.isArray(headers))headers=['Host',new URL(receiver.url).host,...headers];
   const result=await new Promise((fulfill,reject)=>{
-    const request=httpRequest(options.url??receiver.url,{method:'POST',headers,signal:AbortSignal.timeout(10000)},response=>{const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('error',reject);response.on('end',()=>fulfill({status:response.statusCode,headers:response.headers,body:Buffer.concat(chunks)}));});request.on('error',reject);request.end(body);
+    let responseStarted=false,writeFailure;
+    const request=httpRequest(options.url??receiver.url,{method:'POST',headers,signal:AbortSignal.timeout(10000)},response=>{
+      responseStarted=true;const chunks=[];let size=0;
+      response.on('data',chunk=>{size+=chunk.length;if(size>262144){response.destroy(Error('Provider response exceeds limit'));return;}chunks.push(chunk);});
+      response.on('error',reject);
+      response.on('end',()=>{if(!response.complete){reject(Error('Incomplete provider response'));return;}fulfill({status:response.statusCode,headers:response.headers,body:Buffer.concat(chunks)});});
+    });
+    request.on('error',error=>{
+      // An early HTTP rejection can close the connection while its body is still uploading.
+      // Accept only a complete response whose status and JSON are checked below.
+      if(error.code==='EPIPE'&&status>=400){writeFailure=error;return;}reject(error);
+    });
+    request.on('close',()=>{if(!responseStarted)reject(writeFailure??Error('Provider closed without a response'));});
+    request.end(body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
   if(status===200||status===503)(resultValue.protocol===stockAllocationStrategyProtocol?validateStockAllocationStrategyResponse:validateAllocationStrategyResponse)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;

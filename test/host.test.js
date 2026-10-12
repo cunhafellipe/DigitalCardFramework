@@ -8,6 +8,8 @@ import {createServer} from 'node:net';
 import {randomBytes} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {sampleCatalog} from '../examples/catalog.js';
+import {DatabaseSync} from 'node:sqlite';
+import {setTimeout as delay} from 'node:timers/promises';
 
 test('actual production entrypoint initializes encrypted state, serves authenticated UI/API and excludes demo login',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'card-host-')),portProbe=createServer();await new Promise(r=>portProbe.listen(0,'127.0.0.1',r));const port=portProbe.address().port;await new Promise(r=>portProbe.close(r));
@@ -24,6 +26,15 @@ test('actual production entrypoint initializes encrypted state, serves authentic
     const before=await (await request('/fixture/storage-diagnostics')).json();
     const write={method:'POST',headers:{cookie:session,origin:'https://cards.test','Content-Type':'application/json','X-DC-Principal':me.userId},body:JSON.stringify({key:'private',inventoryVisibility:'private'})};assert.equal((await request('/api/preferences',write)).status,200);
     const after=await (await request('/fixture/storage-diagnostics')).json();assert.equal(after.compatibilityMaterializations,before.compatibilityMaterializations);assert(after.decodedQueryRecords-before.decodedQueryRecords<20);assert.equal((await request('/api/operator/audit',{headers:{cookie:session}})).status,200);assert(!output.includes('SYNTHETIC'));
+    const writer=new DatabaseSync(database);writer.exec('BEGIN IMMEDIATE');
+    let loginComplete=false,queuedLogin;
+    try{
+      queuedLogin=request('/auth/login').finally(()=>{loginComplete=true;});await delay(80);
+      const begun=performance.now(),health=await request('/healthz');assert.equal(health.status,200);assert(performance.now()-begun<300);assert.equal(loginComplete,false);
+    }finally{writer.exec('ROLLBACK');writer.close();}
+    assert.equal((await queuedLogin).status,303);
+    assert.equal((await request('/auth/logout',{method:'POST',headers:{cookie:session,origin:'https://cards.test'}})).status,204);
+    assert.equal((await request('/api/me',{headers:{cookie:session}})).status,401);
     assert.equal((await request('/fixture/stop-worker')).status,200);const health=await request('/healthz');assert.equal(health.status,503);assert.deepEqual(await health.json(),{ok:false});const unavailable=await request('/api/me',{headers:{cookie:session}});assert.equal(unavailable.status,503);assert.equal((await unavailable.json()).code,'WORKER_UNAVAILABLE');
   }finally{if(child.exitCode===null){child.kill();await new Promise(r=>child.once('exit',r));}rmSync(dir,{recursive:true,force:true});}
 });

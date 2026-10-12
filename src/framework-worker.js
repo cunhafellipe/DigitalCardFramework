@@ -4,9 +4,10 @@ import {CardFramework} from './core.js';
 import {SQLiteStore} from './sqlite.js';
 import {createCodeVault} from './code-vault.js';
 import {FrameworkError} from './catalog.js';
+import {SessionStore} from './auth.js';
 import {frameworkMethods,frameworkOptionNames,encodeTransport,serializeError} from './framework-worker-contract.js';
 
-let framework,store,closing = false;
+let framework,store,sessions,closing = false;
 const active = new Map();
 try {
   const config = deserialize(workerData);
@@ -30,6 +31,7 @@ try {
     limits:{...config.frameworkOptions.limits,...extensions.limits},
     ...(config.codeVaultOptions ? {codeVault:createCodeVault(config.codeVaultOptions)} : {}),store};
   framework = new CardFramework(options);
+  if (config.sessionOptions !== undefined) sessions = new SessionStore(config.filename,config.sessionOptions);
   // Capture the reviewed dispatch targets once; never resolve arbitrary properties from an incoming method.
   const commands = new Map(frameworkMethods.map(method => [method,CardFramework.prototype[method].bind(framework)]));
   commands.set('storeIntegrity',() => store.integrity());
@@ -40,12 +42,18 @@ try {
     actionHandlers:Object.values(options.actionHandlers ?? {}).some(handler => typeof handler === 'function'),
     codeVault:!!options.codeVault,
   }));
+  if (sessions) {
+    commands.set('sessionCreate',(kind,data,ttl) => sessions.create(kind,data,ttl));
+    commands.set('sessionGet',(secret,kind) => sessions.get(secret,kind));
+    commands.set('sessionConsume',(secret,kind) => sessions.get(secret,kind,{consume:true}));
+    commands.set('sessionRevoke',secret => sessions.revoke(secret));
+  }
   parentPort.on('message',message => {
     if (message.type === 'cancel') { active.get(message.id)?.abort(); return; }
     if (message.type === 'close') {
       closing = true;
       if (active.size) return;
-      try { framework.close(); parentPort.postMessage({type:'closed'}); parentPort.close(); }
+      try { try { sessions?.close(); } finally { framework.close(); } parentPort.postMessage({type:'closed'}); parentPort.close(); }
       catch { parentPort.close(); process.exitCode = 1; }
       return;
     }
@@ -70,6 +78,7 @@ try {
   });
   parentPort.postMessage({type:'ready'});
 } catch (error) {
+  try { sessions?.close(); } catch {}
   try { store?.close(); } catch {}
   parentPort.postMessage({type:'startup-failed',error:serializeError(error)});
   parentPort.close();

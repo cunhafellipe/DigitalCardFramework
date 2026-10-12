@@ -109,9 +109,11 @@ try {
 }
 ```
 
+Enable the optional session adapter with `sessionOptions: { encryptionKey, maxSessions }` when constructing the service. Its `sessions.create`, `sessions.get` and `sessions.revoke` methods return Promises and share the framework queue and shutdown lifecycle. Login challenge consumption is atomic and is never automatically retried after an uncertain worker failure. Existing synchronous `SessionStore` embedders remain supported.
+
 Use plain data arguments. Functions belong in the trusted module; action dispatch supports its explicit AbortSignal cancellation bridge. The service exposes a fixed set of framework operations and selected store diagnostics, not arbitrary storage callbacks. `status()` is synchronous; framework operations return Promises. A close deadline or forced `terminate()` can leave a mutation's outcome uncertain, requiring original-key reconciliation.
 
-The production host runs CardFramework and its SQLite store in a worker thread. HTTP adapters await its results. Sessions still use synchronous SQLite on the HTTP thread, and presentation/import work has separate execution boundaries; this is not a guarantee that every request is free of blocking work. A worker failure rejects pending requests without replaying them. Recover mutations using their original idempotency keys after restarting the service.
+The production host runs CardFramework, its SQLite store and authentication session operations in a worker thread. HTTP and authentication adapters await their results. Presentation/import work has separate execution boundaries; this is not a guarantee that every request is free of blocking work. A worker failure rejects pending requests without replaying them. Recover mutations using their original idempotency keys after restarting the service.
 
 Trusted `workerOptions` may set `maxPendingRequests` (default 128), `maxPendingBytes` (default 8 MiB), `startupTimeoutMs` (default 30000) and `closeTimeoutMs` (default 10000). Queue limits apply before dispatch; overload returns 503. Admission includes serialized command overhead, so a body near the HTTP limit may require a larger worker byte budget. Shutdown stops scheduling, awaits in-flight cycles and drains the service within the shutdown deadline.
 

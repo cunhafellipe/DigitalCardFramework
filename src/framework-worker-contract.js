@@ -25,6 +25,7 @@ export const frameworkMethods = Object.freeze([
   'cancelTrade','saveAlbum','albums','viewAlbum','publicAlbums','bindings','events',
 ]);
 export const storeMethods = Object.freeze(['storeIntegrity','storeDiagnostics','prepareRecordTransactions','runtimeCapabilities']);
+export const sessionMethods = Object.freeze(['sessionCreate','sessionGet','sessionConsume','sessionRevoke']);
 export const frameworkOptionNames = Object.freeze([
   'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','actionHandlers',
   'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits',

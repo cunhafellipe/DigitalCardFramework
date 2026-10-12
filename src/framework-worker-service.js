@@ -3,9 +3,9 @@ import {deserialize} from 'node:v8';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {FrameworkError} from './catalog.js';
-import {frameworkMethods,storeMethods,frameworkOptionNames,encodeTransport,unavailable} from './framework-worker-contract.js';
+import {frameworkMethods,storeMethods,sessionMethods,frameworkOptionNames,encodeTransport,unavailable} from './framework-worker-contract.js';
 
-const allowed = new Set([...frameworkMethods,...storeMethods]);
+const allowed = new Set([...frameworkMethods,...storeMethods,...sessionMethods]);
 const positive = (value,name) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new FrameworkError('INVALID_INPUT',name+' must be a positive integer');
   return value;
@@ -17,7 +17,7 @@ export class FrameworkWorkerService {
   #maxCount; #maxBytes; #readyResolve; #readyReject; #startupTimer;
   #closePromise; #closeResolve; #closeReject; #closeTimer; #closeSent = false; #closeTimeout;
   constructor({filename = ':memory:',storeOptions = {},frameworkOptions = {},extensionModule,
-    extensionOptions = {},codeVaultOptions,maxPendingRequests = 128,maxPendingBytes = 8 * 1024 * 1024,
+    extensionOptions = {},codeVaultOptions,sessionOptions,maxPendingRequests = 128,maxPendingBytes = 8 * 1024 * 1024,
     startupTimeoutMs = 30000,closeTimeoutMs = 10000} = {}) {
     this.#maxCount = positive(maxPendingRequests,'maxPendingRequests');
     this.#maxBytes = positive(maxPendingBytes,'maxPendingBytes');
@@ -27,11 +27,25 @@ export class FrameworkWorkerService {
       throw new FrameworkError('INVALID_INPUT','Unknown framework option '+name);
     for (const name of Object.keys(storeOptions)) if (!['encryptionKey','maxStateBytes','maxCompletionBytes','readOnly'].includes(name))
       throw new FrameworkError('INVALID_INPUT','Unsupported worker store option '+name);
+    if (sessionOptions !== undefined) {
+      encodeTransport(sessionOptions);
+      if (!sessionOptions || typeof sessionOptions !== 'object' || Array.isArray(sessionOptions)) throw new FrameworkError('INVALID_INPUT','Session options must be an object');
+      if (storeOptions.readOnly) throw new FrameworkError('INVALID_INPUT','Worker sessions require a writable store');
+      for (const name of Object.keys(sessionOptions)) if (!['encryptionKey','maxSessions'].includes(name))
+        throw new FrameworkError('INVALID_INPUT','Unsupported worker session option '+name);
+      if (sessionOptions.maxSessions !== undefined && (!Number.isSafeInteger(sessionOptions.maxSessions) || sessionOptions.maxSessions < 1 || sessionOptions.maxSessions > 1000000))
+        throw new FrameworkError('INVALID_INPUT','Session capacity must be a positive bounded integer');
+    }
     if (typeof filename !== 'string' || !filename.length) throw new FrameworkError('INVALID_INPUT','A database filename is required');
     if (extensionModule !== undefined && typeof extensionModule !== 'string') throw new FrameworkError('INVALID_INPUT','Trusted module path must be a string');
     const moduleUrl = extensionModule === undefined ? undefined : extensionModule.startsWith('file:') ? new URL(extensionModule).href : pathToFileURL(resolve(extensionModule)).href;
     if (moduleUrl !== undefined && new URL(moduleUrl).protocol !== 'file:') throw new FrameworkError('INVALID_INPUT','Trusted modules must be local files');
-    const config = encodeTransport({filename,storeOptions,frameworkOptions,moduleUrl,extensionOptions,codeVaultOptions});
+    const config = encodeTransport({filename,storeOptions,frameworkOptions,moduleUrl,extensionOptions,codeVaultOptions,sessionOptions});
+    if (sessionOptions !== undefined) Object.defineProperty(this,'sessions',{value:Object.freeze({
+      create:(kind,data,ttl) => this.invoke('sessionCreate',kind,data,ttl),
+      get:(secret,kind,{consume = false} = {}) => this.invoke(consume ? 'sessionConsume' : 'sessionGet',secret,kind),
+      revoke:secret => this.invoke('sessionRevoke',secret),
+    })});
     this.ready = new Promise((resolveReady,rejectReady) => { this.#readyResolve = resolveReady; this.#readyReject = rejectReady; });
     // Readiness can fail before the host starts awaiting it.
     this.ready.catch(() => {});

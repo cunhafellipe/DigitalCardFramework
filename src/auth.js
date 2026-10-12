@@ -46,24 +46,25 @@ export function createAuthHost({framework,sessions,provider,origin,adminSubjects
   if(secure&&new URL(origin).protocol!=='https:')throw new Error('Authentication requires an HTTPS origin');
   const sessionName=secure?'__Host-dc_session':'dc_session',flowName=secure?'__Host-dc_flow':'dc_flow';
   const admins=new Set(adminSubjects),setCookie=(name,value,maxAge)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure?'; Secure':''}`;
+  const identity=session=>{if(!session)return null;const access=resolveAccess?resolveAccess({issuer:session.issuer,subject:session.subject,userId:session.userId}):{role:admins.has(session.subject)?'admin':'player'};if(!access||access.disabled||access.then)return null;return {userId:session.userId,role:access.role==='admin'?'admin':'player',permissions:Array.isArray(access.permissions)?access.permissions.filter(p=>typeof p==='string'):[]};};
   return {
-    resolveIdentity(request){const session=sessions.get(cookie(request,sessionName),'session');if(!session)return null;const access=resolveAccess?resolveAccess({issuer:session.issuer,subject:session.subject,userId:session.userId}):{role:admins.has(session.subject)?'admin':'player'};if(!access||access.disabled||access.then)return null;return {userId:session.userId,role:access.role==='admin'?'admin':'player',permissions:Array.isArray(access.permissions)?access.permissions.filter(p=>typeof p==='string'):[]};},
+    resolveIdentity(request){const session=sessions.get(cookie(request,sessionName),'session');return session&&typeof session.then==='function'?Promise.resolve(session).then(identity):identity(session);},
     async handle(req,res){const url=new URL(req.url,origin);if(!url.pathname.startsWith('/auth/'))return false;
       res.setHeader('Cache-Control','no-store');
       try{
         if(!rateLimit({request:req,mutation:true})) {res.statusCode=429;res.setHeader('Retry-After','60');res.end('Try again shortly');return true;}
         if(url.pathname==='/auth/login'&&req.method==='GET'){
-          const started=await provider.begin(),flow=sessions.create('flow',started.data,10*60000);
+          const started=await provider.begin(),flow=await sessions.create('flow',started.data,10*60000);
           res.setHeader('Set-Cookie',setCookie(flowName,flow,600));res.statusCode=303;res.setHeader('Location',started.url);res.end();
         }else if(url.pathname==='/auth/callback'&&req.method==='GET'){
-          const flow=sessions.get(cookie(req,flowName),'flow',{consume:true});if(!flow)throw new Error('Login expired');
+          const flow=await sessions.get(cookie(req,flowName),'flow',{consume:true});if(!flow)throw new Error('Login expired');
           const identity=await provider.finish(url,flow);if(!identity?.issuer||!identity?.subject)throw new Error('Invalid identity');
           const user=await framework.registerUser({role:'admin'},{provider:identity.issuer,subject:identity.subject,displayName:identity.displayName});
-          sessions.revoke(cookie(req,sessionName));const secret=sessions.create('session',{userId:user.id,issuer:identity.issuer,subject:identity.subject},sessionTTL);
+          await sessions.revoke(cookie(req,sessionName));const secret=await sessions.create('session',{userId:user.id,issuer:identity.issuer,subject:identity.subject},sessionTTL);
           res.setHeader('Set-Cookie',[setCookie(flowName,'',0),setCookie(sessionName,secret,Math.floor(sessionTTL/1000))]);res.statusCode=303;res.setHeader('Location','/');res.end();
         }else if(url.pathname==='/auth/logout'&&req.method==='POST'){
           if(req.headers.origin!==origin){res.statusCode=403;res.end('Origin rejected');return true;}
-          sessions.revoke(cookie(req,sessionName));res.setHeader('Set-Cookie',setCookie(sessionName,'',0));res.statusCode=204;res.end();
+          await sessions.revoke(cookie(req,sessionName));res.setHeader('Set-Cookie',setCookie(sessionName,'',0));res.statusCode=204;res.end();
         }else {res.statusCode=404;res.end('Not found');}
       }catch {res.statusCode=400;res.setHeader('Set-Cookie',setCookie(flowName,'',0));res.end('Sign-in could not be completed. Start a new login.');}
       return true;

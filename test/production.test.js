@@ -94,3 +94,42 @@ test('ordinary session reads remain available under a concurrent database writer
     now=0;sessions.revoke(secret);assert.equal(sessions.get(secret,'session'),null);assert.deepEqual(sessions.get(flow,'flow',{consume:true}),{nonce:'once'});assert.equal(sessions.get(flow,'flow',{consume:true}),null);
   }finally{writer.close();sessions.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('authentication awaits each asynchronous session mutation before cookies or completion and rejects failures',async()=>{
+  for (const operation of ['login-create','callback-consume','callback-revoke','callback-create','logout-revoke']) for (const rejected of [false,true]) {
+    let release,entered=false,ended=false;
+    const gate=new Promise(resolve=>{release=resolve;});
+    const wait=async()=>{entered=true;await gate;if(rejected)throw new Error('Session operation failed');};
+    const sessions={
+      async get(secret,kind,options){assert.equal(kind,'flow');assert.equal(options.consume,true);if(operation==='callback-consume')await wait();return {nonce:'verified'};},
+      async create(kind){if(operation===kind.replace('session','callback')+'-create'||operation==='login-create'&&kind==='flow')await wait();return 'opaque-secret';},
+      async revoke(){if(operation.endsWith('-revoke'))await wait();},
+    };
+    const provider={async begin(){return {url:'https://issuer.test/authorize',data:{nonce:'verified'}};},async finish(url,flow){assert.deepEqual(flow,{nonce:'verified'});return {issuer:'https://issuer.test',subject:'collector'};}};
+    const host=createAuthHost({sessions,provider,framework:{async registerUser(){return {id:'collector'};}},origin:'http://cards.test',secure:false});
+    const route=operation.split('-')[0],headers=new Map(),response={statusCode:200,setHeader:(name,value)=>headers.set(name,value),end(){ended=true;}};
+    const handled=host.handle({url:'/auth/'+route,method:route==='logout'?'POST':'GET',headers:{cookie:'dc_flow=flow; dc_session=session',origin:'http://cards.test'}},response);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(entered,true,operation);assert.equal(ended,false,operation);assert.equal(headers.has('Set-Cookie'),false,operation);
+    release();assert.equal(await handled,true);assert.equal(ended,true);
+    assert.equal(response.statusCode,rejected?400:route==='logout'?204:303);
+    if(rejected){assert.equal(headers.get('Set-Cookie').startsWith('dc_flow='),true);assert.equal(Array.isArray(headers.get('Set-Cookie')),false);}
+    else if(route==='callback')assert(headers.get('Set-Cookie').some(value=>value.startsWith('dc_session=opaque-secret;')));
+    else assert(headers.get('Set-Cookie').startsWith(route==='logout'?'dc_session=;':'dc_flow=opaque-secret;'));
+  }
+});
+
+test('asynchronous session identity lookup reevaluates authority and preserves denial of async access',async()=>{
+  const verified={userId:'collector',issuer:'https://issuer.test',subject:'operator'};
+  const sessions={async get(){return verified;}};let disabled=false,lookups=0;
+  const host=createAuthHost({sessions,origin:'https://cards.test',resolveAccess(identity){lookups++;assert.deepEqual(identity,verified);return {role:'admin',permissions:['art.import',1],disabled};}});
+  const request={headers:{cookie:'__Host-dc_session=opaque'}};
+  assert.deepEqual(await host.resolveIdentity(request),{userId:'collector',role:'admin',permissions:['art.import']});
+  disabled=true;assert.equal(await host.resolveIdentity(request),null);assert.equal(lookups,2);
+  for(const adapter of [sessions,{get(){return verified;}}]){
+    const denied=createAuthHost({sessions:adapter,origin:'https://cards.test',resolveAccess:async()=>({role:'admin'})});
+    assert.equal(await denied.resolveIdentity(request),null);
+  }
+  sessions.get=async()=>null;assert.equal(await host.resolveIdentity(request),null);assert.equal(lookups,2);
+  sessions.get=async()=>{throw new Error('Lookup failed');};await assert.rejects(host.resolveIdentity(request),/Lookup failed/);assert.equal(lookups,2);
+});

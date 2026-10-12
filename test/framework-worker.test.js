@@ -9,6 +9,7 @@ import {createServer} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {FrameworkWorkerService} from '../src/framework-worker-service.js';
 import {FrameworkError} from '../src/catalog.js';
+import {SessionStore,createAuthHost} from '../src/auth.js';
 import {sampleCatalog} from '../examples/catalog.js';
 
 const admin = {role:'admin'};
@@ -215,4 +216,125 @@ test('close during startup completes after readiness and vault keys retain Buffe
   await starting.ready;
   await closing;
   assert.equal(starting.status().state,'closed');
+});
+
+test('worker sessions preserve encrypted legacy rows, consume once, expire, revoke and survive restart',async t => {
+  const config = disk(t),sessionOptions = {encryptionKey:config.storeOptions.encryptionKey,maxSessions:4};
+  const legacy = new SessionStore(config.filename,sessionOptions),identity = {userId:'collector',issuer:'https://issuer.test',subject:'collector'};
+  const secret = legacy.create('session',identity,60000);
+  legacy.close();
+  const first = await start(t,{...config,sessionOptions});
+  assert.deepEqual(await first.sessions.get(secret,'session'),identity);
+  const flow = await first.sessions.create('flow',{nonce:'single-use'},60000);
+  const results = await Promise.all(Array.from({length:10},() => first.sessions.get(flow,'flow',{consume:true})));
+  assert.equal(results.filter(Boolean).length,1);
+  const expired = await first.sessions.create('session',identity,1);
+  await delay(20);
+  assert.equal(await first.sessions.get(expired,'session'),null);
+  await first.close();
+  assert(!readFileSync(config.filename).includes(Buffer.from(secret)));
+  assert(!readFileSync(config.filename).includes(Buffer.from('https://issuer.test')));
+  const second = await start(t,{...config,sessionOptions});
+  assert.deepEqual(await second.sessions.get(secret,'session'),identity);
+  assert.equal(await second.sessions.get(flow,'flow',{consume:true}),null);
+  await second.sessions.revoke(secret);
+  assert.equal(await second.sessions.get(secret,'session'),null);
+  await second.close();
+  const restored = new SessionStore(config.filename,sessionOptions);
+  assert.equal(restored.get(secret,'session'),null);
+  restored.close();
+});
+
+test('worker session capacity and admission reject before effects; options and wrong keys fail closed',async t => {
+  const config = disk(t),sessionOptions = {encryptionKey:config.storeOptions.encryptionKey,maxSessions:1};
+  const first = await start(t,{...config,sessionOptions});
+  const attempts = await Promise.allSettled([first.sessions.create('session',{userId:'a'},60000),first.sessions.create('flow',{},60000)]);
+  assert.equal(attempts.filter(result => result.status === 'fulfilled').length,1);
+  assert(code('WORKER_FAILURE')(attempts.find(result => result.status === 'rejected').reason));
+  const secret = attempts.find(result => result.status === 'fulfilled').value;
+  assert.deepEqual(await first.sessions.get(secret,'session'),{userId:'a'});
+  await first.close();
+  const wrong = await start(t,{...config,sessionOptions:{...sessionOptions,encryptionKey:randomBytes(32)}});
+  const auth = createAuthHost({sessions:wrong.sessions,origin:'https://cards.test'});
+  await assert.rejects(auth.resolveIdentity({headers:{cookie:'__Host-dc_session='+secret}}),code('WORKER_FAILURE'));
+  await wrong.close();
+  const bounded = await start(t,{...config,sessionOptions,maxPendingRequests:1,maxPendingBytes:1000});
+  const read = bounded.sessions.get(secret,'session');
+  await assert.rejects(bounded.sessions.revoke(secret),code('WORKER_OVERLOADED'));
+  await read;
+  await assert.rejects(bounded.sessions.create('flow',{data:'x'.repeat(2000)},60000),code('WORKER_OVERLOADED'));
+  assert.deepEqual(await bounded.sessions.get(secret,'session'),{userId:'a'});
+  assert.throws(() => new FrameworkWorkerService({sessionOptions:{maxSessions:0}}),code('INVALID_INPUT'));
+  assert.throws(() => new FrameworkWorkerService({sessionOptions:{clock:Date.now}}),code('WORKER_TRANSPORT'));
+  assert.throws(() => new FrameworkWorkerService({sessionOptions:{unknown:1}}),code('INVALID_INPUT'));
+  let readGetter = false;
+  assert.throws(() => new FrameworkWorkerService({sessionOptions:{get maxSessions(){readGetter = true;return 1;}}}),code('WORKER_TRANSPORT'));
+  assert.equal(readGetter,false);
+  assert.throws(() => new FrameworkWorkerService({storeOptions:{readOnly:true},sessionOptions:{}}),code('INVALID_INPUT'));
+  const disabled = await start(t,{});
+  assert.equal(disabled.sessions,undefined);
+  await assert.rejects(disabled.sessionCreate('flow',{},60000),code('WORKER_METHOD'));
+});
+
+test('concurrent worker callbacks finish exactly one login and observe revocation',async t => {
+  const config = disk(t),service = await start(t,{...config,sessionOptions:{encryptionKey:config.storeOptions.encryptionKey}});
+  await initialize(service);
+  let finishes = 0;
+  const provider = {async finish(){finishes++;return {issuer:'https://issuer.test',subject:'signed-in',displayName:'Collector'};}};
+  const host = createAuthHost({framework:service,sessions:service.sessions,provider,origin:'https://cards.test',adminSubjects:['signed-in']});
+  const flow = await service.sessions.create('flow',{nonce:'once'},60000);
+  const response = () => ({statusCode:200,headers:new Map(),setHeader(name,value){this.headers.set(name,value);},end(){}});
+  const responses = [response(),response()];
+  await Promise.all(responses.map(res => host.handle({url:'/auth/callback',method:'GET',headers:{cookie:'__Host-dc_flow='+flow}},res)));
+  assert.deepEqual(responses.map(res => res.statusCode).sort(),[303,400]);
+  assert.equal(finishes,1);
+  const cookie = responses.find(res => res.statusCode === 303).headers.get('Set-Cookie').find(value => value.startsWith('__Host-dc_session=')).split(';')[0];
+  const identity = await host.resolveIdentity({headers:{cookie}});
+  assert.equal(identity.role,'admin');
+  await service.sessions.revoke(cookie.split('=')[1]);
+  assert.equal(await host.resolveIdentity({headers:{cookie}}),null);
+});
+
+test('HTTP health remains responsive while framework work delays session reads and writes',async t => {
+  const config = disk(t),marker = join(config.dir,'session-busy');
+  const service = await start(t,{...config,sessionOptions:{encryptionKey:config.storeOptions.encryptionKey},extensionOptions:{delayMs:400,marker}}),{actor} = await initialize(service);
+  const secret = await service.sessions.create('session',{userId:actor.userId},60000);
+  const server = createServer((req,res) => { const status = service.status();res.statusCode = status.ready && !status.saturated ? 200 : 503;res.end('healthy'); });
+  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const purchase = service.purchase(actor,await input(service,actor));
+  await entered(marker);
+  let readDone = false,writeDone = false;
+  const read = service.sessions.get(secret,'session').finally(() => {readDone = true;});
+  const write = service.sessions.create('flow',{nonce:'queued'},60000).finally(() => {writeDone = true;});
+  const begun = performance.now();
+  assert.equal((await fetch('http://127.0.0.1:'+server.address().port)).status,200);
+  assert(performance.now() - begun < 300);
+  assert.equal(readDone,false);assert.equal(writeDone,false);
+  await Promise.all([purchase,read,write]);
+});
+
+test('worker close drains admitted session writes and rejects later session operations',async t => {
+  const config = disk(t),sessionOptions = {encryptionKey:config.storeOptions.encryptionKey};
+  const service = await start(t,{...config,sessionOptions});
+  const creating = service.sessions.create('session',{userId:'collector'},60000),closing = service.close();
+  await assert.rejects(service.sessions.create('flow',{},60000),code('WORKER_UNAVAILABLE'));
+  const secret = await creating;
+  await closing;
+  assert.equal(service.status().pendingRequests,0);
+  await assert.rejects(service.sessions.get(secret,'session'),code('WORKER_UNAVAILABLE'));
+  const sessions = new SessionStore(config.filename,sessionOptions);
+  assert.deepEqual(sessions.get(secret,'session'),{userId:'collector'});
+  sessions.close();
+});
+
+test('uncertain session consume and revoke are never replayed after worker failure',async t => {
+  for (const operation of ['consume','revoke']) {
+    const config = disk(t),sessionOptions = {encryptionKey:config.storeOptions.encryptionKey};
+    const service = await start(t,{...config,sessionOptions,extensionOptions:{crashAfterSession:operation}});
+    const secret = await service.sessions.create(operation === 'consume' ? 'flow' : 'session',{nonce:'once'},60000);
+    await assert.rejects(operation === 'consume' ? service.sessions.get(secret,'flow',{consume:true}) : service.sessions.revoke(secret),code('WORKER_UNAVAILABLE'));
+    const restarted = await start(t,{...config,sessionOptions});
+    assert.equal(await restarted.sessions.get(secret,operation === 'consume' ? 'flow' : 'session'),null);
+  }
 });

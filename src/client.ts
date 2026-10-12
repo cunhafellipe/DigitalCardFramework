@@ -16,6 +16,8 @@ export interface QueryOptions {
   [key:string]:string|number|boolean|null|undefined;
 }
 export interface Client extends DirectMethods,QueryMethods {
+  allocationStatus(options:{productId:string}):Promise<Operations['allocationStatus']['response']>;
+  acknowledgeAllocation(input:Operations['acknowledgeAllocation']['request']):Promise<Operations['acknowledgeAllocation']['response']>;
   capabilities():Promise<Schemas['CapabilityAvailability']>;
   commandIntents(options?:{command?:DurableCommand}):Promise<Operations['commandIntents']['response']>;
   adminUser(options:QueryOptions&{userId:string}):Promise<Schemas['AdminUserDetail']>;
@@ -56,6 +58,7 @@ export interface CommandStorage {
 export interface CommandRunner {
   <C extends DurableCommand>(command:C,input:CommandInput<C>,options?:{recover?:boolean}):Promise<CommandResult<C>>;
   recover<C extends DurableCommand>(command:C,input:CommandInput<C>):Promise<CommandResult<C>>;
+  confirmFailed<C extends DurableCommand>(command:C,input:CommandInput<C>):Promise<boolean>;
   beginNew<C extends DurableCommand>(command:C,input:CommandInput<C>):Promise<CommandResult<C>>;
   pending(command:DurableCommand):({key:string;_confirmed?:boolean;[field:string]:unknown})|null;
   recoverable(command?:DurableCommand):Promise<Operations['commandIntents']['response']>;
@@ -77,6 +80,7 @@ export function createClient({baseUrl='/api',fetch:request=globalThis.fetch}:{ba
   return {
     capabilities:()=>call('capabilities',undefined),commandIntents:options=>call('commandIntents',undefined,{query:options}),
     registerCommandIntent:input=>call('registerCommandIntent',input),executeCommandIntent:input=>call('executeCommandIntent',input),acknowledgeCommandIntent:input=>call('acknowledgeCommandIntent',input),
+    allocationStatus:options=>call('allocationStatus',undefined,{query:options}),acknowledgeAllocation:input=>call('acknowledgeAllocation',input),
     adminOverview:()=>call('adminOverview',undefined),adminUsers:options=>call('adminUsers',undefined,{query:options}),adminUser:options=>call('adminUser',undefined,{query:options}),adminHistory:options=>call('adminHistory',undefined,{query:options}),configureAdmin:input=>call('configureAdmin',input),administerCards:input=>call('administerCards',input),
     cardPolicies:()=>call('cardPolicies',undefined),effectiveCardPolicy:input=>call('effectiveCardPolicy',input),saveCardPolicy:input=>call('saveCardPolicy',input),previewCardPolicy:input=>call('previewCardPolicy',input),activateCardPolicy:input=>call('activateCardPolicy',input),retireCardPolicy:input=>call('retireCardPolicy',input),restoreCardPolicy:input=>call('restoreCardPolicy',input),saveCardResource:input=>call('saveCardResource',input),retireCardResource:input=>call('retireCardResource',input),restoreCardResource:input=>call('restoreCardResource',input),updateCopyStats:input=>call('updateCopyStats',input),
     tradingPolicy:()=>call('tradingPolicy',undefined),configureTrading:input=>call('configureTrading',input),setCardTransferLock:input=>call('setCardTransferLock',input),commerceSettings:()=>call('commerceSettings',undefined),configureCommerce:input=>call('configureCommerce',input),shops:options=>call('shops',undefined,{query:options}),createShop:input=>call('createShop',input),setShopEnabled:input=>call('setShopEnabled',input),
@@ -175,6 +179,16 @@ export function createCommandRunner({client,storage,namespace}:{client:Partial<C
   run.pending=(command:DurableCommand)=>{if(disposed)return null;try{const saved=read(),tokens=Object.keys(saved).filter(key=>key.startsWith(command+':')),token=tokens.find(key=>!saved[key]?._confirmed)??tokens.at(-1);return token&&saved[token]?structuredClone(saved[token]):null;}catch{return null;}};
   run.recover=<C extends DurableCommand>(command:C,input:CommandInput<C>)=>run(command,input,{recover:true});
   run.recoverable=async(command?:DurableCommand)=>{fence();if(!recovery)return {items:[]};const result=await recovery.list(command?{command}:{});fence();return result;};
+  run.confirmFailed=async<C extends DurableCommand>(command:C,input:CommandInput<C>):Promise<boolean>=>{
+    fence();if(!allowed.has(command)||!recovery)return false;
+    const token=tokenFor(command,clean(command,input)),saved=read(),original=saved[token];
+    if(!original||original._confirmed||active.has(token))return false;
+    const payload=structuredClone(original);delete payload._confirmed;
+    const current=await recovery.list({command});fence();
+    if(active.has(token)||!current.items.some(row=>row.command===command&&row.userId===namespace&&row.state==='failed'&&JSON.stringify(stable(row.input))===JSON.stringify(stable(payload))))return false;
+    const latest=read(),row=latest[token];if(!row||row._confirmed||JSON.stringify(stable(row))!==JSON.stringify(stable(original)))return false;
+    row._confirmed=true;write(latest,token);uncertain.delete(token);acknowledged.set(token,row.key);return true;
+  };
   run.resume=(intent:Schemas['CommandIntent'])=>run.recover(intent.command,intent.input as CommandInput<DurableCommand>);
   run.beginNew=<C extends DurableCommand>(command:C,input:CommandInput<C>):Promise<CommandResult<C>>=>{
     if(recovery)return (async()=>{fence();const token=tokenFor(command,clean(command,input)),saved=read();if([...uncertain.keys()].some(key=>key.startsWith(command+':'))||Object.keys(saved).some(key=>key.startsWith(command+':')&&!saved[key]?._confirmed))throw new ApiError('COMMAND_PENDING','Recover the original result before starting another command.',409);const pending=await recovery.list({command});fence();

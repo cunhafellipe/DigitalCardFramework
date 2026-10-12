@@ -1133,6 +1133,10 @@
           "price": {
             "$ref": "#/components/schemas/Money"
           },
+          "allocationDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
           "adminRevision": {
             "type": "integer",
             "minimum": 0,
@@ -1192,6 +1196,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "allocationDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           },
           "adminRevision": {
             "type": "integer",

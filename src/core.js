@@ -29,6 +29,8 @@ import {listingPolicyProtocol,validateListingPolicyRequest} from './listing-poli
 import {createRemoteTransferPolicy} from './remote-transfer-policy.js';
 import {createRemoteTradePolicy} from './remote-trade-policy.js';
 import {TransferPolicyAdmission} from './transfer-policy-admission.js';
+import {createRemoteAllocationStrategy} from './remote-allocation-strategy.js';
+import {AllocationIntentService} from './allocation-intents.js';
 
 const clone = value => structuredClone(value);
 const id = () => randomUUID();
@@ -40,8 +42,8 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 export class CardFramework {
-  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();
-  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={}}={}) {
+  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;#remoteTransferPolicy;#remoteTradePolicy;#transferPolicies;#policyPreflights=new WeakSet();#inventoryPolicyReads=new WeakSet();#remoteAllocation;#allocationIntents;#allocationAdmissions=new WeakMap();
+  constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={},remoteAllocation=null}={}) {
     this.#store=store; this.#clock=clock; this.#random=random;
     this.#cardPolicies=new CardPolicyService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),clock});
     this.#administration=new AdminService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),now:clock,mint:(...args)=>this.#mint(...args),open:(...args)=>this.#openCopy(...args),removePlacements:(...args)=>this.#removePlacements(...args)});
@@ -61,8 +63,10 @@ export class CardFramework {
       if(Object.hasOwn(remotePolicies,'canList'))this.#remoteListingPolicy=createRemoteListingPolicy(remotePolicies.canList);
       if(Object.hasOwn(remotePolicies,'canTransfer'))this.#remoteTransferPolicy=createRemoteTransferPolicy(remotePolicies.canTransfer);
       if(Object.hasOwn(remotePolicies,'canTrade'))this.#remoteTradePolicy=createRemoteTradePolicy(remotePolicies.canTrade);
-    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();throw error;}
+      if(remoteAllocation!==null)this.#remoteAllocation=createRemoteAllocationStrategy(remoteAllocation);
+    }catch(error){this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#remoteAllocation?.close();throw error;}
     this.#transferPolicies=new TransferPolicyAdmission({canTransfer:this.#remoteTransferPolicy,canTrade:this.#remoteTradePolicy});
+    if(this.#remoteAllocation)this.#allocationIntents=new AllocationIntentService({store,provider:this.#remoteAllocation,clock,prepare:(...args)=>this.#prepareAllocation(...args),commit:(...args)=>this.#commitAllocation(...args),reference:(...args)=>this.#commandIntents.allocationReference(...args),abandon:(...args)=>this.#commandIntents.failAllocationWithinTransaction(...args)});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
       raffleCommand:(actor,key,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn),
@@ -214,7 +218,7 @@ export class CardFramework {
       return {count};
     });
   }
-  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#store.close(); }
+  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#remoteTransferPolicy?.close();this.#remoteTradePolicy?.close();this.#allocationIntents?.close();this.#store.close(); }
   audit(actor){this.#admin(actor,'audit.read');return this.#store.read(auditState);}
   #admin(actor,permission) { check(hasPermission(actor,permission),'FORBIDDEN','Operator authority required: '+permission,403); }
   #user(s,actor) {
@@ -483,6 +487,7 @@ export class CardFramework {
   resolveLegacyExternalPurchase(actor,input){return this.#externalPurchases.resolveLegacy(actor,input);}
   #captureExternalPurchase(s,user,quote,{recovery=false}={}){
     const catalog=this.#catalog(s),base=lookup(catalog.products,quote.productId);
+    check(!base?.allocationStrategy,'ALLOCATION_UNSUPPORTED','External fulfillment of this allocation strategy is not supported',409);
     check(base&&base.enabled!==false,'UNAVAILABLE','Pack product unavailable',404);
     assertAdminPurchase(s,user.id,base);const product=effectiveProduct(s,base);this.#productTime(product);
     if(!recovery)this.#workflow(s,'packs',product.price.amount>0);
@@ -662,16 +667,16 @@ export class CardFramework {
       this.#productTime(product);
       check(quantity<=product.maxQuantity,'INVALID_INPUT','Quantity exceeds product limit');
       const total=product.price.amount*quantity; integer(total,'total price');
-      return {productId,quantity,productRevision:product.revision,catalogVersion:c.version,adminRevision:adminRevision(s),price:{currencyId:product.price.currencyId,amount:total}};
+      return {productId,quantity,productRevision:product.revision,catalogVersion:c.version,adminRevision:adminRevision(s),price:{currencyId:product.price.currencyId,amount:total},...(product.allocationStrategy?{allocationDigest:this.#allocationDigest(product,quantity)}:{})};
     });
   }
   #productTime(product){const time=Date.parse(this.#clock());check(!product.availableFrom||time>=Date.parse(product.availableFrom),'NOT_RELEASED','This pack is not available yet',409);check(!product.availableUntil||time<Date.parse(product.availableUntil),'PRODUCT_ENDED','This pack is no longer available',409);}
   availability(){return this.#query(q=>{const s={catalog:q.value('catalog'),supply:q.value('supply'),adminControls:q.value('adminControls')},c=this.#catalog(s);return {version:c.version,variants:c.variants.map(v=>({id:v.id,issued:s.supply[v.id]??0,remaining:v.supplyLimit===undefined?null:Math.max(0,v.supplyLimit-(s.supply[v.id]??0))})),products:c.products.map(base=>{const p=effectiveProduct(s,base);return {id:p.id,available:p.enabled!==false&&(!p.availableFrom||Date.parse(this.#clock())>=Date.parse(p.availableFrom))&&(!p.availableUntil||Date.parse(this.#clock())<Date.parse(p.availableUntil)),pity:p.pity??null};})};});}
   pityProgress(actor){return this.#store.read(s=>{const u=this.#user(s,actor);return s.pity?.[u.id]??{};});}
-  purchase(actor,{key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision}) {
+  purchase(actor,{key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision,allocationDigest}) {
     integer(quantity,'quantity',1,100);
-    const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision})};
-    return this.#command(actor,key,'packs.purchased',input,(s,user)=>this.#purchaseBody(s,user,input));
+    const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
+    if(this.#query(q=>q.value('catalog')?.products.find(p=>p.id===productId)?.allocationStrategy)){const previous=this.#purchaseReceipt(actor,key,input,'packs.purchased');if(previous.found)return previous.result;check(false,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous allocation strategy evaluation',503);}return this.#command(actor,key,'packs.purchased',input,(s,user)=>this.#purchaseBody(s,user,input));
   }
   #purchaseBody(s,user,{productId,quantity,productRevision,catalogVersion,adminRevision:quotedAdminRevision}){
       const c=this.#catalog(s),base=lookup(c.products,productId);
@@ -686,13 +691,43 @@ export class CardFramework {
       const packs=this.#allocatePacks(s,user,product,quantity,{purchaseId});
       return {id:purchaseId,packs,paid:{currencyId:product.price.currencyId,amount:total}};
   }
-  async purchaseAsync(actor,request){
+  allocationStatus(actor,input){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.status(actor,input);}
+  acknowledgeAllocation(actor,input){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.acknowledge(actor,input);}
+  setRemoteAllocationEnabled(actor,{enabled}){this.#admin(actor,'commerce.manage');check(this.#remoteAllocation,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#remoteAllocation.setEnabled(enabled);}
+  #allocationDigest(product,quantity){return contentDigest({strategy:product.allocationStrategy,productId:product.id,productRevision:product.revision,slots:product.slots,quantity,adminRevision:product.adminRevision??0});}
+  #allocationState(tx,actor,input){
+    const user=this.#queryUser(tx,actor),catalog=tx.value('catalog'),base=catalog?.products.find(p=>p.id===input.productId);check(base?.allocationStrategy,'ALLOCATION_STALE','Allocation state changed; review again',409);
+    const variants=[...new Set(base.slots.flatMap(slot=>slot.pool.map(entry=>entry.variantId)))].map(id=>catalog.variants.find(v=>v.id===id));
+    const state={schemaVersion:1,revision:tx.value('revision'),catalog,adminControls:tx.value('adminControls'),cardAuthoring:tx.value('cardAuthoring'),users:{[user.id]:user},balances:{[user.id]:tx.get('balances',user.id)},supply:{},pity:{[user.id]:tx.get('pity',user.id)??{}},cardValidation:{},copies:{},packs:{},trades:{},requests:{},ledger:[],events:[]};
+    for(const variant of variants){state.supply[variant.id]=tx.get('supply',variant.id)??0;const validation=tx.get('cardValidation',variant.id);if(validation)state.cardValidation[variant.id]=validation;}
+    return {state,user,variants,product:effectiveProduct(state,base)};
+  }
+  #prepareAllocation(tx,actor,input){
+    const {state,user,variants,product}=this.#allocationState(tx,actor,input);assertAdminPurchase(state,user.id,product);this.#workflow(state,'packs',product.price.amount>0);this.#productTime(product);
+    check(product.enabled!==false&&product.revision===input.productRevision&&state.catalog.version===input.catalogVersion&&adminRevision(state)===(input.adminRevision??0)&&this.#allocationDigest(product,input.quantity)===input.allocationDigest,'ALLOCATION_STALE','Allocation state changed; review again',409);
+    check(!product.pity&&product.duplicatePolicy.scope==='none'&&variants.every(v=>!v.codes?.length&&!Object.values(v.bindings).some(b=>b.factory)),'ALLOCATION_UNSUPPORTED','Allocation strategy does not yet support pity, duplicate filters, codes or binding factories',409);
+    check(input.quantity<=product.maxQuantity,'INVALID_INPUT','Quantity exceeds product limit');const total=product.price.amount*input.quantity;integer(total,'total');check((state.balances[user.id][product.price.currencyId]??0)>=total,'INSUFFICIENT_FUNDS','Insufficient purchase currency',409);
+    check(product.slots.reduce((n,s)=>n+s.count,0)*input.quantity<=2000,'ALLOCATION_LIMIT','Allocation batch exceeds 2000 cards',502);
+    const remaining=new Map(variants.map(v=>[v.id,v.enabled===false?0:v.supplyLimit===undefined?null:Math.max(0,v.supplyLimit-state.supply[v.id])])),seenFinite=new Set();
+    const slots=product.slots.map(slot=>{for(const e of slot.pool)if(remaining.get(e.variantId)!==null){check(!seenFinite.has(e.variantId),'ALLOCATION_UNSUPPORTED','Overlapping finite-supply slot pools are not supported',409);seenFinite.add(e.variantId);}const pool=slot.pool.map(e=>({...e,weight:remaining.get(e.variantId)===null?e.weight:Math.min(e.weight,remaining.get(e.variantId))})).filter(e=>e.weight>0);check(pool.reduce((n,e)=>n+e.weight,0)>=(slot.probability?.numerator===0?0:slot.count*input.quantity),'ALLOCATION_STALE','Allocation state changed; review again',409);return {id:slot.id,role:slot.role,count:slot.count,probability:slot.probability??{numerator:1,denominator:1},pool};});
+    const context={userId:user.id,product:{id:product.id,revision:product.revision,strategy:product.allocationStrategy,slots},quantity:input.quantity,variants:variants.map(v=>({id:v.id,remaining:remaining.get(v.id)}))};
+    return {context,snapshotDigest:contentDigest({product,catalogVersion:state.catalog.version,adminControls:state.adminControls,cardAuthoringRevision:state.cardAuthoring?.revision??0,supply:state.supply,cardValidation:state.cardValidation})};
+  }
+  #commitAllocation(tx,actor,row,plan){
+    const {state,user,product}=this.#allocationState(tx,actor,row.input);let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_MIGRATION_REQUIRED','Prepare revision-bound record accounting',503);
+    recordContexts.set(state,{accounting,ownerId:user.id,ownerCounts:tx.ownerCounts(user.id)});this.#allocationAdmissions.set(state,{productId:product.id,quantity:row.input.quantity,plan});
+    try{const result=this.#purchaseBody(state,user,row.input);state.requests[user.id+':'+row.key]={hash:row.receiptHash,result:clone(result),allocationAttemptId:row.id};this.#event(state,'packs.purchased',{userId:user.id});this.#capacity(state,true);
+      for(const field of ['balances','supply','pity','copies','packs','requests','actionJobs','completionObligations'])for(const [id,value]of Object.entries(state[field]??{}))tx.put(field,id,value);for(const field of ['ledger','events'])for(const value of state[field])tx.append(field,value);return result;
+    }finally{this.#allocationAdmissions.delete(state);recordContexts.delete(state);}
+  }
+  async purchaseAsync(actor,request,{signal}={}){
     const principal=clone(actor),reviewed=clone(request);
     await Promise.resolve();
     if(!this.#store.transactRecords)return this.purchase(principal,reviewed);
-    const {key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision}=reviewed;
+    const {key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision,allocationDigest}=reviewed;
     integer(quantity,'quantity',1,100);text(key,'idempotency key',128);
-    const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision})};
+    const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
+    if(this.#query(q=>q.value('catalog')?.products.find(p=>p.id===productId)?.allocationStrategy)){const previous=this.#purchaseReceipt(principal,key,input,'packs.purchased');if(previous.found)return previous.result;check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.purchase(principal,key,input,{signal});}
     const execute=()=>this.#store.transactRecords(tx=>{
       check(principal?.disabled!==true&&typeof principal?.userId==='string','UNAUTHENTICATED','A verified framework user is required',401);
       const user=tx.get('users',principal.userId);check(user,'UNAUTHENTICATED','A verified framework user is required',401);
@@ -725,7 +760,8 @@ export class CardFramework {
     }
   }
   #allocatePacks(s,user,product,quantity,source={},personalized=true){
-    const c=this.#catalog(s),purchaseId=source.purchaseId??null;
+    const c=this.#catalog(s),purchaseId=source.purchaseId??null,admission=this.#allocationAdmissions.get(s);
+    if(product.allocationStrategy)check(personalized&&admission?.productId===product.id&&admission.quantity===quantity,'ALLOCATION_UNSUPPORTED','This allocation strategy requires its asynchronous wallet purchase path',409);
       const packs=[];
       s.pity??={};s.pity[user.id]??={};
       for (let n=0;n<quantity;n++) {
@@ -737,7 +773,8 @@ export class CardFramework {
         let qualified=false;const pityDue=personalized&&product.pity&&(s.pity[user.id][product.id]??0)>=product.pity.after-1;
         const firstCardSlot=product.slots.findIndex(slot=>(slot.role??'card')==='card');
         for(const [slotIndex,slot]of product.slots.entries()) {
-          if(slot.probability&&slot.probability.numerator<slot.probability.denominator){const roll=this.#random(slot.probability.denominator);check(Number.isInteger(roll)&&roll>=0&&roll<slot.probability.denominator,'INVALID_PROVIDER','Invalid slot probability draw',500);if(roll>=slot.probability.numerator)continue;}
+          const planned=product.allocationStrategy?admission.plan.find(row=>row.packIndex===n&&row.slotId===slot.id):null;if(planned&&!planned.variantIds.length)continue;
+          if(!planned&&slot.probability&&slot.probability.numerator<slot.probability.denominator){const roll=this.#random(slot.probability.denominator);check(Number.isInteger(roll)&&roll>=0&&roll<slot.probability.denominator,'INVALID_PROVIDER','Invalid slot probability draw',500);if(roll>=slot.probability.numerator)continue;}
           for(let i=0;i<slot.count;i++) {
           let available=this.#available(s,slot.pool);
           if(pityDue&&slotIndex===firstCardSlot&&i===0)available=available.filter(e=>lookup(c.rarities,lookup(c.variants,e.variantId).rarityId).rank>=lookup(c.rarities,product.pity.rarityId).rank);
@@ -745,7 +782,7 @@ export class CardFramework {
           if(slot.role!=='insert'&&product.duplicatePolicy.scope!=='none') pool=pool.filter(e=>!excluded.has(lookup(c.variants,e.variantId).cardId));
           if(!pool.length && product.duplicatePolicy.fallback==='allow') pool=available;
           check(pool.length,'POOL_EXHAUSTED','No eligible card remains in this pack slot',409);
-          const copy=this.#mint(s,user.id,this.#weighted(pool),{type:'pack',packId:pack.id,purchaseId,productId:product.id,productRevision:product.revision,...source,productDigest:contentDigest(product),packIndex:n,slotId:slot.id??'slot-'+slotIndex,slotIndex,slotRole:slot.role??'card',slotOrdinal:i,position:pack.copyIds.length,slotMetadata:clone(slot.metadata??{}),packMetadata:clone(product.metadata??{})},'sealed');
+          const copy=this.#mint(s,user.id,planned?planned.variantIds[i]:this.#weighted(pool),{type:'pack',packId:pack.id,purchaseId,productId:product.id,productRevision:product.revision,...source,productDigest:contentDigest(product),packIndex:n,slotId:slot.id??'slot-'+slotIndex,slotIndex,slotRole:slot.role??'card',slotOrdinal:i,position:pack.copyIds.length,slotMetadata:clone(slot.metadata??{}),packMetadata:clone(product.metadata??{})},'sealed');
           if(slot.role!=='insert'&&personalized&&product.pity&&lookup(c.rarities,copy.rarityId).rank>=lookup(c.rarities,product.pity.rarityId).rank)qualified=true;
           pack.copyIds.push(copy.id); if(slot.role!=='insert')excluded.add(copy.cardId);
           }

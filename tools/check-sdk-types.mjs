@@ -8,7 +8,7 @@ const result=spawnSync(process.execPath,[compiler,'--strict','--noUncheckedIndex
 if(result.error)throw result.error;
 if(result.status!==0)process.exitCode=result.status??1;
 else{
-  for(const generator of ['generate-wire-types.mjs','generate-wire-validators.mjs','generate-action-contracts.mjs','generate-plugin-contracts.mjs','generate-plugin-manifest.mjs']){
+  for(const generator of ['generate-wire-types.mjs','generate-wire-validators.mjs','generate-action-contracts.mjs','generate-allocation-contracts.mjs','generate-plugin-contracts.mjs','generate-plugin-manifest.mjs']){
     const checked=spawnSync(process.execPath,[fileURLToPath(new URL(generator,import.meta.url)),'--check'],{stdio:'inherit'});
     if(checked.status!==0)throw new Error('Generated contract drift');
   }

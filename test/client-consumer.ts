@@ -5,6 +5,10 @@ const storage:Storage=globalThis.sessionStorage;
 const runner=createCommandRunner({client,storage,namespace:'account'});
 async function recoverPurchase(){
   const quote=await client.quote({productId:'sample'});
+  const allocation=await client.allocationStatus({productId:'sample'});
+  const resolved:boolean=await runner.confirmFailed('purchase',quote);
+  if(allocation.attemptId&&allocation.state==='stale')await client.acknowledgeAllocation({attemptId:allocation.attemptId});
+  void resolved;
   const purchase=await runner('purchase',quote);
   const packId:string=purchase.packs[0]!.id;
   const recovered=await runner.recover('purchase',quote);

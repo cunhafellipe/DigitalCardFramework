@@ -138,3 +138,12 @@ test('retained intent lookup validates owner and exact command after acknowledge
   assert.throws(()=>x.core.commandIntent(x.alice,{id:intent.id,command:'configureAdmin'},{operators:false}),error=>error.code==='FORBIDDEN');
  }finally{x.core.close();}
 });
+
+for(const Store of [MemoryStore,SQLiteStore])test(Store.name+' rejected operator intent preserves native completion accounting',async()=>{
+ const x=fixture({store:new Store()});try{
+  const actor={...x.alice,role:'admin'},intent=x.core.registerCommandIntent(actor,{command:'administerCards',input:{userId:x.bob.userId,action:'give',variantId:'dawn.standard',quantity:0,reason:'Fixture validation',expectedRevision:0}});
+  await assert.rejects(x.core.executeCommandIntentAsync(actor,{id:intent.id}),code('INVALID_INPUT'));
+  const failed=x.core.commandIntents(actor,{command:'administerCards'}).items[0];assert.equal(failed.state,'failed');assert.equal(failed.error.code,'INVALID_INPUT');assert.equal(x.core.inventory(x.bob).length,0);
+  assert.equal(x.core.audit(admin).ok,true);x.core.acknowledgeCommandIntent(actor,{id:intent.id});assert.equal(x.core.audit(admin).ok,true);
+ }finally{x.core.close();}
+});

@@ -10,24 +10,24 @@ const configFailure=()=>fail('POLICY_CONFIG','Invalid remote policy configuratio
 const unavailable=()=>fail('POLICY_UNAVAILABLE','Policy eligibility could not be verified; retry later',503);
 const errorStatuses={'invalid-request':400,unauthenticated:401,'rate-limited':429,unavailable:503};
 function parseResponse(raw,validateResponse){
-  const value=JSON.parse(raw),keys=new Set();
-  for(const match of raw.matchAll(/"(?:[^"\\]|\\.)*"/g)){
-    if(!/^\s*:/.test(raw.slice(match.index+match[0].length)))continue;
-    const key=JSON.parse(match[0]);if(keys.has(key))fail('INVALID_POLICY_RESPONSE','Invalid remote policy response');keys.add(key);
+  const value=JSON.parse(raw),frames=[];
+  for(const match of raw.matchAll(/"(?:[^"\\]|\\.)*"|[{}\[\]]/g)){
+    const token=match[0];if(token==='{'){frames.push(new Set());continue;}if(token==='['){frames.push(null);continue;}if(token==='}'||token===']'){frames.pop();continue;}
+    if(!/^\s*:/.test(raw.slice(match.index+token.length)))continue;const key=JSON.parse(token),keys=frames.at(-1);if(keys.has(key))fail('INVALID_POLICY_RESPONSE','Invalid remote policy response');keys.add(key);
   }
   return validateResponse(value);
 }
 
 /** The owning framework controls the live grant and may revoke it during evaluation. */
-export function createRemotePolicyTransport(options,{validateRequest,validateResponse,scope:expectedScope='listing',requestBytes=65536}){
+export function createRemotePolicyTransport(options,{validateRequest,validateResponse,scope:expectedScope='listing',requestBytes=65536,responseBytes=65536}){
   if(!plain(options)||Object.keys(options).some(key=>!['scope','providerId','url','token','allowLoopbackHttp','timeoutMs','maxRequestBytes','maxResponseBytes','maxConcurrent'].includes(key)))configFailure();
-  const {scope,providerId,url,token,allowLoopbackHttp=false,timeoutMs=10000,maxRequestBytes=requestBytes,maxResponseBytes=8192,maxConcurrent=8}=options;
+  const {scope,providerId,url,token,allowLoopbackHttp=false,timeoutMs=10000,maxRequestBytes=requestBytes,maxResponseBytes=Math.min(8192,responseBytes),maxConcurrent=8}=options;
   if(scope!==expectedScope)fail('POLICY_UNSUPPORTED','Remote policy scope is unsupported',400);
   let endpoint;if(typeof url!=='string'||url.length>2000)configFailure();try{endpoint=new URL(url);}catch{configFailure();}
   const loopback=['127.0.0.1','[::1]','localhost'].includes(endpoint.hostname);
   if(!validId(providerId)||typeof allowLoopbackHttp!=='boolean'||endpoint.username||endpoint.password||endpoint.hash||endpoint.search||!(endpoint.protocol==='https:'||(allowLoopbackHttp&&loopback&&endpoint.protocol==='http:')))configFailure();
-  if(typeof token!=='string'||token.length<16||token.length>4096||!/^[\x21-\x7e]+$/.test(token))configFailure();
-  for(const [value,max]of [[timeoutMs,120000],[maxRequestBytes,requestBytes],[maxResponseBytes,65536],[maxConcurrent,64]])if(!Number.isSafeInteger(value)||value<1||value>max)configFailure();
+  if(typeof token!=='string'||token.length<16||token.length>4096||!/^[\x21-\x7e]+(?![\s\S])/.test(token))configFailure();
+  for(const [value,max]of [[timeoutMs,120000],[maxRequestBytes,requestBytes],[maxResponseBytes,responseBytes],[maxConcurrent,64]])if(!Number.isSafeInteger(value)||value<1||value>max)configFailure();
   const grantId=randomUUID(),active=new Set();let generation=1,enabled=true,closed=false;
   const assertActive=()=>{if(!enabled||closed)fail('POLICY_DISABLED','Remote policy is disabled',503);};
   const assertGrant=(grant)=>{assertActive();if(grant.grantId!==grantId||grant.generation!==generation||grant.providerId!==providerId)fail('POLICY_STALE','Remote policy grant changed; review again',409);};

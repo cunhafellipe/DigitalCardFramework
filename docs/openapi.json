@@ -1658,6 +1658,232 @@
         }
       }
     },
+    "/allocations/status": {
+      "get": {
+        "operationId": "allocationStatus",
+        "description": "Read this account's allocation attempt state. Entropy and uncommitted outcomes are never returned.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/allocations/acknowledge": {
+      "post": {
+        "operationId": "acknowledgeAllocation",
+        "description": "Acknowledge an inactive allocation attempt before a fresh review. Does not refresh unused entropy or change ownership.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-DC-Principal",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required by the production host; must match the verified session principal."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationAcknowledgementInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationAcknowledgement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/trades/review-transfer": {
       "post": {
         "operationId": "reviewTransfer",
@@ -10369,6 +10595,10 @@
             "minimum": 1,
             "maximum": 9007199254740991
           },
+          "allocationDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
           "adminRevision": {
             "type": "integer",
             "minimum": 0,
@@ -10784,6 +11014,10 @@
           "price": {
             "$ref": "#/components/schemas/Money"
           },
+          "allocationDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
           "adminRevision": {
             "type": "integer",
             "minimum": 0,
@@ -10934,6 +11168,79 @@
             "items": {
               "$ref": "#/components/schemas/Copy"
             }
+          }
+        }
+      },
+      "AllocationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "productId",
+          "attemptId",
+          "state",
+          "errorCode"
+        ],
+        "properties": {
+          "productId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "attemptId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "idle",
+              "prepared",
+              "stale",
+              "completed",
+              "acknowledged"
+            ]
+          },
+          "errorCode": {
+            "enum": [
+              null,
+              "ALLOCATION_STALE"
+            ]
+          }
+        }
+      },
+      "AllocationAcknowledgementInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attemptId"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          }
+        }
+      },
+      "AllocationAcknowledgement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attemptId",
+          "state"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
+          },
+          "state": {
+            "const": "acknowledged"
           }
         }
       },
@@ -17452,6 +17759,10 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 9007199254740991
+                  },
+                  "allocationDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
                   },
                   "adminRevision": {
                     "type": "integer",

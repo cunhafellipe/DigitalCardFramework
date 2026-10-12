@@ -23,6 +23,7 @@ export function createClient({ baseUrl = '/api', fetch: request = globalThis.fet
     return {
         capabilities: () => call('capabilities', undefined), commandIntents: options => call('commandIntents', undefined, { query: options }),
         registerCommandIntent: input => call('registerCommandIntent', input), executeCommandIntent: input => call('executeCommandIntent', input), acknowledgeCommandIntent: input => call('acknowledgeCommandIntent', input),
+        allocationStatus: options => call('allocationStatus', undefined, { query: options }), acknowledgeAllocation: input => call('acknowledgeAllocation', input),
         adminOverview: () => call('adminOverview', undefined), adminUsers: options => call('adminUsers', undefined, { query: options }), adminUser: options => call('adminUser', undefined, { query: options }), adminHistory: options => call('adminHistory', undefined, { query: options }), configureAdmin: input => call('configureAdmin', input), administerCards: input => call('administerCards', input),
         cardPolicies: () => call('cardPolicies', undefined), effectiveCardPolicy: input => call('effectiveCardPolicy', input), saveCardPolicy: input => call('saveCardPolicy', input), previewCardPolicy: input => call('previewCardPolicy', input), activateCardPolicy: input => call('activateCardPolicy', input), retireCardPolicy: input => call('retireCardPolicy', input), restoreCardPolicy: input => call('restoreCardPolicy', input), saveCardResource: input => call('saveCardResource', input), retireCardResource: input => call('retireCardResource', input), restoreCardResource: input => call('restoreCardResource', input), updateCopyStats: input => call('updateCopyStats', input),
         tradingPolicy: () => call('tradingPolicy', undefined), configureTrading: input => call('configureTrading', input), setCardTransferLock: input => call('setCardTransferLock', input), commerceSettings: () => call('commerceSettings', undefined), configureCommerce: input => call('configureCommerce', input), shops: options => call('shops', undefined, { query: options }), createShop: input => call('createShop', input), setShopEnabled: input => call('setShopEnabled', input),
@@ -299,6 +300,28 @@ export function createCommandRunner({ client, storage, namespace }) {
     run.recover = (command, input) => run(command, input, { recover: true });
     run.recoverable = async (command) => { fence(); if (!recovery)
         return { items: [] }; const result = await recovery.list(command ? { command } : {}); fence(); return result; };
+    run.confirmFailed = async (command, input) => {
+        fence();
+        if (!allowed.has(command) || !recovery)
+            return false;
+        const token = tokenFor(command, clean(command, input)), saved = read(), original = saved[token];
+        if (!original || original._confirmed || active.has(token))
+            return false;
+        const payload = structuredClone(original);
+        delete payload._confirmed;
+        const current = await recovery.list({ command });
+        fence();
+        if (active.has(token) || !current.items.some(row => row.command === command && row.userId === namespace && row.state === 'failed' && JSON.stringify(stable(row.input)) === JSON.stringify(stable(payload))))
+            return false;
+        const latest = read(), row = latest[token];
+        if (!row || row._confirmed || JSON.stringify(stable(row)) !== JSON.stringify(stable(original)))
+            return false;
+        row._confirmed = true;
+        write(latest, token);
+        uncertain.delete(token);
+        acknowledged.set(token, row.key);
+        return true;
+    };
     run.resume = (intent) => run.recover(intent.command, intent.input);
     run.beginNew = (command, input) => {
         if (recovery)

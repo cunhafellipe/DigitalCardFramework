@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import {createClient,createRevealController,createCommandRunner,ApiError} from '../src/client.js';
 const memory=()=>{const map=new Map();return {getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value)};};
 
+test('allocation client validates attempt identity and rejects private outcome fields',async()=>{
+  const attemptId='11111111-1111-4111-8111-111111111111',calls=[];
+  let result={productId:'deck',attemptId,state:'prepared',errorCode:null};
+  const client=createClient({fetch:async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(result),{status:200});}});
+  assert.deepEqual(await client.allocationStatus({productId:'deck'}),result);
+  assert.equal(calls[0].url,'/api/allocations/status?productId=deck');
+  result={attemptId,state:'acknowledged'};
+  assert.deepEqual(await client.acknowledgeAllocation({attemptId}),result);
+  assert.equal(calls[1].url,'/api/allocations/acknowledge');
+  assert.deepEqual(JSON.parse(calls[1].options.body),{attemptId});
+  await assert.rejects(client.acknowledgeAllocation({attemptId:'invalid'}),error=>error.code==='INVALID_INPUT');
+  assert.equal(calls.length,2);
+  result={productId:'deck',attemptId,state:'prepared',errorCode:null,seed:'private'};
+  await assert.rejects(client.allocationStatus({productId:'deck'}),error=>error.code==='INVALID_WIRE_CONTRACT');
+});
+
 test('client sends advisory trade review through checked wire contracts and forwards cancellation',async()=>{
   const calls=[],result={status:'allowed',inputDigest:'a'.repeat(64),snapshotDigest:'b'.repeat(64),expiresAt:new Date(Date.now()+60000).toISOString(),copyIds:['copy']};
   const client=createClient({fetch:async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(result),{status:200});}}),controller=new AbortController();
@@ -83,4 +99,23 @@ for(const retryStatus of [401,429])for(const remount of [false,true])test('lost 
       await runner('convert',input);assert.equal(keys,1);assert.deepEqual(inputs[0],inputs[2]);assert.equal(x.core.wallet(x.alice).credits,9700);assert.equal(x.core.wallet(x.alice).gems,3);
     }finally{runner.dispose();x.core.close();}
   }
+});
+
+test('read-only failed-command confirmation requires exact original identity and never executes',async()=>{
+  const storage=memory(),payload={key:'original',productId:'deck',quantity:1,catalogVersion:1,productRevision:1};
+  storage.setItem('digital-card.commands.v1:alice',JSON.stringify({'purchase:{"productId":"deck","quantity":1}':payload}));
+  let item={command:'purchase',userId:'alice',state:'pending',input:payload},executions=0;
+  const client={requestKey:()=> 'new',registerCommandIntent:async()=>{throw Error('must not register');},executeCommandIntent:async()=>{executions++;throw Error('must not execute');},acknowledgeCommandIntent:async()=>{throw Error('must not acknowledge');},commandIntents:async()=>({items:[item]})};
+  const run=createCommandRunner({client,storage,namespace:'alice'});
+  for(const patch of [{state:'pending'},{state:'completed'},{state:'failed',userId:'bob'},{state:'failed',command:'convert'},{state:'failed',input:{...payload,key:'other'}},{state:'failed',input:{...payload,catalogVersion:2}}]){
+    item={command:'purchase',userId:'alice',state:'failed',input:payload,...patch};assert.equal(await run.confirmFailed('purchase',payload),false);assert.equal(run.pending('purchase')._confirmed,undefined);
+  }
+  item={command:'purchase',userId:'alice',state:'failed',input:payload};assert.equal(await run.confirmFailed('purchase',payload),true);assert.equal(run.pending('purchase')._confirmed,true);assert.equal(executions,0);
+  run.dispose();await assert.rejects(run.confirmFailed('purchase',payload),error=>error.code==='COMMAND_DISPOSED');
+});
+
+test('failed-command confirmation preserves a journal changed while status is loading',async()=>{
+  const storage=memory(),input={key:'first',productId:'deck',quantity:1},token='purchase:{"productId":"deck","quantity":1}',storageKey='digital-card.commands.v1:alice';storage.setItem(storageKey,JSON.stringify({[token]:input}));
+  let resolve;const client={requestKey:()=> 'new',registerCommandIntent:async()=>{},executeCommandIntent:async()=>{},acknowledgeCommandIntent:async()=>{},commandIntents:()=>new Promise(done=>resolve=done)};
+  const run=createCommandRunner({client,storage,namespace:'alice'}),checking=run.confirmFailed('purchase',input);storage.setItem(storageKey,JSON.stringify({[token]:{...input,key:'second'}}));resolve({items:[{command:'purchase',userId:'alice',state:'failed',input}]});assert.equal(await checking,false);assert.equal(run.pending('purchase').key,'second');assert.equal(run.pending('purchase')._confirmed,undefined);
 });

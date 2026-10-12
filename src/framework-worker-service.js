@@ -6,7 +6,7 @@ import {FrameworkError} from './catalog.js';
 import {frameworkMethods,storeMethods,sessionMethods,frameworkOptionNames,encodeTransport,unavailable} from './framework-worker-contract.js';
 
 const allowed = new Set([...frameworkMethods,...storeMethods,...sessionMethods]);
-const cancellationOptions = new Map([['dispatchActions',1],['quoteListingAsync',2],['buyListingAsync',2],['createListingAsync',2],['proposeTradeAsync',2],['counterTradeAsync',2],['acceptTradeAsync',2],['reviewTransferAsync',2],['executeCommandIntentAsync',2]]);
+const cancellationOptions = new Map([['dispatchActions',1],['purchaseAsync',2],['quoteListingAsync',2],['buyListingAsync',2],['createListingAsync',2],['proposeTradeAsync',2],['counterTradeAsync',2],['acceptTradeAsync',2],['reviewTransferAsync',2],['executeCommandIntentAsync',2]]);
 const positive = (value,name) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new FrameworkError('INVALID_INPUT',name+' must be a positive integer');
   return value;

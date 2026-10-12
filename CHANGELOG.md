@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added opt-in weighted-deck allocation for supported wallet-funded catalog purchases, with deterministic provider plans, durable retry protection, state revalidation, and allocation status and acknowledgement APIs. Added a Node provider example, ticket-count explanations, separate quote review and purchase actions, and read-only confirmation of failed commands.
+
 - Added a Go transfer/trade policy provider example and compiled-provider conformance checks. Aligned Python policy numeric parsing with exact integer-valued JSON inputs.
 
 - Added remote transfer and trade policies for offers, counteroffers, acceptance, and secondary sales, with batched checks, state revalidation, cancellation, and durable replay. Added a Python provider example for both protocols.

@@ -287,36 +287,79 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     if(rendered?.node){if(rendered.dispose)viewDisposers.push(()=>rendered.dispose());return rendered.node;}return rendered;
   }
   function shop() {
+    let shopDisposed=false;const principal=commandPrincipal,commands=mutate;
+    viewDisposers.push(()=>{shopDisposed=true;});
+    const fence=()=>{if(disposed||shopDisposed||commandPrincipal!==principal||typeof client.principal==='function'&&client.principal()!==principal)throw new Error('The purchase view or signed-in account changed. Review the purchase again.');};
     const node=section('Find your next discovery','Choose a pack, check its contents and price, then open it in My packs.');
     const guide=element('div','dc-steps');
     for(const [n,title,description]of [['01','Buy a pack','Spend your account’s currency'],['02','Reveal your cards','Open the pack in My packs'],['03','Make it yours','Inspect cards and build an album']]){const step=element('div');step.append(element('span','dc-step-number',n),element('strong','',title),element('small','dc-muted',description));guide.append(step);}node.append(guide);
     const grid=element('div','dc-shop-grid');
     for(const product of model.catalog.products.filter(p=>p.enabled!==false)) {
       const box=element('article','dc-product');box.append(packArt(product));
-      const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0);
-    info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',count+' card'+(count===1?'':'s')+' per pack'+(product.duplicatePolicy.scope!=='none'?' · Duplicate protection':'')));
+      const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0),ticketDeck=product.allocationStrategy?.algorithm==='weighted-deck@1';
+    info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',count+' card'+(count===1?'':'s')+' per pack'+(!ticketDeck&&product.duplicatePolicy.scope!=='none'?' · Duplicate protection':'')));
     if(product.pity){const progress=model.pity[product.id]??0;info.append(element('p','dc-pity-note',(model.catalog.rarities.find(r=>r.id===product.pity.rarityId)?.name??product.pity.rarityId)+' or better by purchase '+product.pity.after+' since your last qualifying pack · '+progress+'/'+product.pity.after+' misses. Sealed packs count.'));}
     if(product.availableFrom||product.availableUntil)info.append(element('small','dc-muted',(product.availableFrom?'From '+new Date(product.availableFrom).toLocaleString():'')+(product.availableUntil?' · Until '+new Date(product.availableUntil).toLocaleString():'')));
-      const details=element('details','dc-rates');details.append(element('summary','','See cards & drop rates'));
+      const details=element('details','dc-rates');details.append(element('summary','',ticketDeck?'See cards & ticket counts':'See cards & drop rates'));
       for(const slot of product.slots) {
-        const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',slot.count+' draw'+(slot.count===1?'':'s')+' from this pool:'));
-        for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?' · '+remaining+' remaining':'')),element('strong','',(entry.weight/total*100).toFixed(1)+'%'));details.append(row);}
+        const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',slot.count+' draw'+(slot.count===1?'':'s')+' per pack from this pool'+(ticketDeck?' · '+num(total)+' configured tickets':':')));
+        for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?' · '+remaining+' remaining':'')),element('strong','',ticketDeck?num(entry.weight)+' configured ticket'+(entry.weight===1?'':'s'):(entry.weight/total*100).toFixed(1)+'%'));details.append(row);}
       }
-      details.append(element('p','dc-muted','Base rates. Remaining editions and duplicate protection affect eligible cards.'));info.append(details);
+      details.append(element('p','dc-muted',ticketDeck?'All packs in one purchase draw tickets from each pool without replacement. A drawn ticket cannot be drawn again in that batch, so chances change between draws. Configured ticket counts are not fixed independent drop rates. Finite remaining supply can reduce the tickets available. Your quote checks the current eligible supply.':'Base rates. Remaining editions and duplicate protection affect eligible cards.'));info.append(details);
       const purchase=element('div','dc-purchase-row'),quantity=field(purchase,'Packs','number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
-      const pendingPurchase=mutate.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id;
+      let pendingPurchase=commands.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id,reviewedQuote=null,quoteGeneration=0,allocationState=null,allocationBlocked=false;
+      const allocationNote=element('p','dc-muted');allocationNote.setAttribute('role','status');
       if(recover){quantity.value=String(pendingPurchase.quantity);quantity.disabled=true;}
-      const buy=button('',()=>action(async()=>{
-        const quote=recover?pendingPurchase:await client.quote({productId:product.id,quantity:Number(quantity.value)});
-        if(!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*Number(quantity.value))){await refresh();throw new Error('The pack price changed. Review the updated price before buying.');}
-        const original=mutate.pending('purchase');const receipt=await (!recover&&original?._confirmed?mutate.beginNew('purchase',quote):mutate('purchase',quote));active='packs';return receipt;
-      },{message:r=>'Purchased '+r.packs.length+' pack'+(r.packs.length===1?'':'s')+'. Choose Open pack to reveal your cards.'}));
+      const buy=button('',async()=>{
+        await action(async()=>{
+          fence();const current=++quoteGeneration,requestedQuantity=Number(quantity.value);
+          try{
+            const quote=recover?pendingPurchase:reviewedQuote??await client.quote({productId:product.id,quantity:requestedQuantity});fence();
+            if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error('The pack quantity changed. Review the purchase again.');
+            if(ticketDeck&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);allocationNote.textContent='Review '+quote.quantity+' pack'+(quote.quantity===1?'':'s')+' for '+num(quote.price.amount)+' '+currencyName(quote.price.currencyId)+'. Buying uses this reviewed allocation quote.';return {review:true};}
+            if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error('The pack price changed. Review the updated price before buying.');}
+            const original=commands.pending('purchase');const receipt=await (!recover&&original?._confirmed?commands.beginNew('purchase',quote):recover?commands.recover('purchase',quote):commands('purchase',quote));fence();active='packs';if(ticketDeck)await refresh();return receipt;
+          }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent='The allocation attempt needs review. Check its status before acknowledging it and requesting a fresh quote.';}}throw error;}
+        },{refreshAfter:!ticketDeck,message:r=>r.review?'Purchase quote ready. Review the pack quantity and price before buying.':'Purchased '+r.packs.length+' pack'+(r.packs.length===1?'':'s')+'. Choose Open pack to reveal your cards.'});
+        if(!disposed&&!shopDisposed)update();
+      });
       function update(){
-        const total=recover?pendingPurchase.price.amount:product.price.amount*Number(quantity.value),currency=recover?pendingPurchase.price.currencyId:product.price.currencyId,available=model.availability?.products.find(p=>p.id===product.id)?.available!==false;
-        buy.textContent=recover?'Retry original purchase · '+num(total)+' '+currencyName(currency):available?'Buy · '+num(total)+' '+currencyName(currency):'Currently unavailable';
-        buy.disabled=!recover&&(!available||!!pendingPurchase&&!pendingPurchase._confirmed||!Number.isInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>product.maxQuantity||total>(model.wallet[currency]??0));
+        pendingPurchase=commands.pending('purchase');recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id;
+        quantity.disabled=!!recover;
+        const total=recover?pendingPurchase.price.amount:reviewedQuote?.price.amount??product.price.amount*Number(quantity.value),currency=recover?pendingPurchase.price.currencyId:reviewedQuote?.price.currencyId??product.price.currencyId,available=model.availability?.products.find(p=>p.id===product.id)?.available!==false;
+        buy.textContent=recover?'Retry original purchase · '+num(total)+' '+currencyName(currency):available?(ticketDeck?(reviewedQuote?'Buy reviewed packs · ':'Review purchase · '):'Buy · ')+num(total)+' '+currencyName(currency):'Currently unavailable';
+        buy.disabled=!recover&&(!available||allocationBlocked||!!pendingPurchase&&!pendingPurchase._confirmed||!Number.isInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>product.maxQuantity||total>(model.wallet[currency]??0));
       }
-      quantity.addEventListener('input',update);update();purchase.append(buy);info.append(purchase);box.append(info);grid.append(box);
+      quantity.addEventListener('input',()=>{quoteGeneration++;reviewedQuote=null;allocationNote.textContent='';update();});update();purchase.append(buy);info.append(purchase);
+      if(ticketDeck){
+        info.append(allocationNote);
+        if(typeof client.allocationStatus==='function'&&typeof client.acknowledgeAllocation==='function'){
+          const recovery=element('div','dc-allocation-recovery'),attemptNote=element('p','dc-muted');attemptNote.setAttribute('role','status');
+          const inspectAttempt=button('Check allocation attempt',async()=>{
+            await action(async()=>{fence();const result=await client.allocationStatus({productId:product.id});fence();
+              if(result.productId!==product.id||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error('Invalid allocation status response');
+              allocationState=result;allocationBlocked=['prepared','stale'].includes(result.state);if(allocationBlocked){reviewedQuote=null;quoteGeneration++;}if(result.state==='acknowledged')await confirmOriginalFailure();showAttempt();return result;
+            },{refreshAfter:false,message:'Allocation status checked.'});if(!disposed&&!shopDisposed)update();
+          });
+          const acknowledge=button('Acknowledge allocation attempt',async()=>{
+            await action(async()=>{fence();if(!allocationState||!['prepared','stale'].includes(allocationState.state))throw new Error('Check the allocation attempt before acknowledging it');
+              const attemptId=allocationState.attemptId,result=await client.acknowledgeAllocation({attemptId});fence();if(result.attemptId!==attemptId||result.state!=='acknowledged')throw new Error('Invalid allocation acknowledgement response');
+              allocationState={...allocationState,state:'acknowledged',errorCode:null};allocationBlocked=false;reviewedQuote=null;quoteGeneration++;
+              await confirmOriginalFailure();
+              const original=commands.pending('purchase');showAttempt();return {...result,unresolved:!!original&&!original._confirmed};
+            },{refreshAfter:false,message:result=>result.unresolved?'Allocation attempt acknowledged. Resolve the original purchase before requesting a fresh quote.':'Allocation attempt acknowledged. Review a fresh quote before buying.'});if(!disposed&&!shopDisposed)update();
+          });
+          async function confirmOriginalFailure(){const pending=commands.pending('purchase');if(pending&&pending.productId===product.id&&!pending._confirmed&&typeof commands.confirmFailed==='function'){await commands.confirmFailed('purchase',pending);fence();}}
+          function showAttempt(){
+            const state=allocationState?.state;acknowledge.hidden=!['prepared','stale'].includes(state);
+            if(state==='completed')attemptNote.textContent='This allocation completed. Recover the original purchase result or check My packs.';
+            else if(state==='prepared'||state==='stale')attemptNote.textContent=(state==='stale'?'The allocation is stale.':'An allocation attempt is pending.')+' Acknowledge this inactive attempt to abandon it. This does not buy packs.';
+            else{const pending=commands.pending('purchase');attemptNote.textContent=pending&&!pending._confirmed?'Retry the original purchase to resolve its saved result before requesting a new quote.':'No active allocation attempt. Select Review purchase to request a fresh quote.';}
+          }
+          acknowledge.hidden=true;recovery.append(inspectAttempt,attemptNote,acknowledge);info.append(recovery);
+        }
+      }
+      box.append(info);grid.append(box);
     }node.append(grid);return node;
   }
   function packs() {

@@ -5,6 +5,7 @@ import {hasPermission} from './access.js';
 import {completionCapacity,withCompletion,accountReservationMetadata} from './completion.js';
 import {recordAccountingField,validRecordAccounting,summarizeRecords} from './record-accounting.js';
 import {recordContexts} from './record-context.js';
+import {contentDigest} from './importer.js';
 
 export const durableCommands=Object.freeze(['purchase','openPack','convert','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','consumeBinding','counterTrade','preferences','readNotifications','commitImport','reportCodeUsage','createShop','createListing','buyListing','cancelListing','enterRaffle','openCard','configureAdmin','administerCards']);
 const permissions={commitImport:'catalog.publish',configureAdmin:'admin.manage',administerCards:'admin.cards'};
@@ -61,16 +62,29 @@ export class CommandIntentService{
     }));
   }
   #accounting(tx){let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_MIGRATION_REQUIRED','Record accounting is not prepared',503);return accounting;}
-  #records(fn,fallback){if(!this.#store.transactRecords)return fallback();try{return this.#store.transactRecords(fn,{intent:true});}catch(error){if(error.code==='RECORD_MIGRATION_REQUIRED')return fallback();throw error;}}
-  #finish(actor,id,fn){
-    return this.#records(tx=>{
+  allocationReference(tx,actor,key,inputDigest){
+    const head=tx.get('commandIntentHeads',actor.userId)?.purchase,row=head?tx.get('commandIntents',head):null;if(row?.userId!==actor.userId||row.command!=='purchase'||row.state!=='pending'||row.input.key!==key)return null;
+    const {productId,quantity=1,productRevision,catalogVersion,adminRevision,allocationDigest}=row.input,input={productId,quantity,productRevision,catalogVersion,...(adminRevision===undefined?{}:{adminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
+    return contentDigest(input)===inputDigest?{id:row.id,inputDigest:contentDigest(row.input)}:null;
+  }
+  failAllocationWithinTransaction(tx,actor,allocation){
+    const reference=this.allocationReference(tx,actor,allocation.key,allocation.inputDigest);if(!reference)return false;
+    if(allocation.intentReference?.id===reference.id)check(allocation.intentReference.inputDigest===reference.inputDigest,'INVALID_STATE','Allocation command intent input changed',500);
+    return this.finishWithinTransaction(tx,actor,reference.id,row=>{check(contentDigest(row.input)===reference.inputDigest,'INVALID_STATE','Allocation command intent input changed',500);row.state='failed';row.completedAt=this.#clock();row.error={code:'ALLOCATION_ACKNOWLEDGED',message:'Allocation attempt was abandoned; review a new purchase',status:409};return true;},true);
+  }
+  finishWithinTransaction(tx,actor,id,fn,pendingOnly=false){
       const accounting=this.#accounting(tx),row=tx.get('commandIntents',id);check(row?.userId===actor.userId,'NOT_FOUND','Command intent not found',404);
+      if(pendingOnly&&row.state!=='pending')return false;
       const obligationId='intent:'+id,obligation=tx.get('completionObligations',obligationId);check(obligation,'INVALID_STATE','Command completion reservation is missing',500);
       const state={commandIntents:{[id]:row},commandIntentHeads:{[actor.userId]:tx.get('commandIntentHeads',actor.userId)??{}},completionObligations:{[obligationId]:obligation},events:[]},prior=summarizeRecords(state);
       for(const key of Object.keys(accounting.completion))accounting.completion[key]-=prior.completion[key];recordContexts.set(state,{accounting});
       try{obligation.status='completed';const result=fn(row,state);completionCapacity(state,this.#limits);tx.put('commandIntents',id,row);tx.put('commandIntentHeads',actor.userId,state.commandIntentHeads[actor.userId]);tx.put('completionObligations',obligationId,obligation);tx.reserveIntentCompletion(obligationId);return result;}finally{recordContexts.delete(state);}
-    },()=>this.#store.transact(s=>{
+  }
+  #records(fn,fallback){if(!this.#store.transactRecords)return fallback();try{return this.#store.transactRecords(fn,{intent:true});}catch(error){if(error.code==='RECORD_MIGRATION_REQUIRED')return fallback();throw error;}}
+  #finish(actor,id,fn,pendingOnly=false){
+    return this.#records(tx=>this.finishWithinTransaction(tx,actor,id,fn,pendingOnly),()=>this.#store.transact(s=>{
       const row=s.commandIntents?.[id];check(row?.userId===actor.userId,'NOT_FOUND','Command intent not found',404);
+      if(pendingOnly&&row.state!=='pending')return false;
       const obligation=s.completionObligations?.['intent:'+id];check(obligation,'INVALID_STATE','Command completion reservation is missing',500);
       const result=withCompletion(s,obligation,()=>fn(row,s),state=>this.#store.measure(state));completionCapacity(s,this.#limits);return result;
     }));
@@ -100,7 +114,7 @@ export class CommandIntentService{
     if(options.requireTradeReview&&['acceptTrade','counterTrade'].includes(row.command))check(typeof row.input.expectedDigest==='string'&&/^[a-f0-9]{64}$/.test(row.input.expectedDigest),'TRADE_REVIEW_REQUIRED','Review the current offer before submitting this action',409);
   }
   #rejected(actor,row,error){
-    if(row.state==='pending'&&Number.isInteger(error.status)&&(error.status>=400&&error.status<500||error.status===507)&&![401,403,429].includes(error.status))this.#finish(actor,row.id,current=>{if(current.state==='pending'){current.state='failed';current.completedAt=this.#clock();current.error={code:/^[A-Z][A-Z0-9_]{0,80}$/.test(error.code)?error.code:'COMMAND_REJECTED',message:String(error.message).slice(0,512),status:error.status};}});
+    if(row.state==='pending'&&Number.isInteger(error.status)&&(error.status>=400&&error.status<500||error.status===507)&&![401,403,429].includes(error.status))this.#finish(actor,row.id,current=>{current.state='failed';current.completedAt=this.#clock();current.error={code:/^[A-Z][A-Z0-9_]{0,80}$/.test(error.code)?error.code:'COMMAND_REJECTED',message:String(error.message).slice(0,512),status:error.status};},true);
     throw error;
   }
   #completed(actor,row,result){

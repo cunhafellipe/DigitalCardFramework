@@ -15,6 +15,10 @@ export interface QueryOptions {
     [key: string]: string | number | boolean | null | undefined;
 }
 export interface Client extends DirectMethods, QueryMethods {
+    allocationStatus(options: {
+        productId: string;
+    }): Promise<Operations['allocationStatus']['response']>;
+    acknowledgeAllocation(input: Operations['acknowledgeAllocation']['request']): Promise<Operations['acknowledgeAllocation']['response']>;
     capabilities(): Promise<Schemas['CapabilityAvailability']>;
     commandIntents(options?: {
         command?: DurableCommand;
@@ -70,6 +74,7 @@ export interface CommandRunner {
         recover?: boolean;
     }): Promise<CommandResult<C>>;
     recover<C extends DurableCommand>(command: C, input: CommandInput<C>): Promise<CommandResult<C>>;
+    confirmFailed<C extends DurableCommand>(command: C, input: CommandInput<C>): Promise<boolean>;
     beginNew<C extends DurableCommand>(command: C, input: CommandInput<C>): Promise<CommandResult<C>>;
     pending(command: DurableCommand): ({
         key: string;

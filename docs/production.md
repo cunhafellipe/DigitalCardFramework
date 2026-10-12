@@ -200,6 +200,8 @@ Providers must echo the request identity fields, including the phase, grant, gen
 
 The [Python transfer policy example](../examples/plugins/python-transfer-policy.py) implements both protocols at `/transfer-policy`. Set `TRANSFER_POLICY_TOKEN` and optionally `TRANSFER_POLICY_PROVIDER_ID` (default `example.transfer`), then run `python examples/plugins/python-transfer-policy.py records.json [port]`. It prints its loopback port. Records use `{"actors":[{"id":"alice","recipientIds":["bob"],"allowListingReservation":true}]}`. Each transfer leg must have an authorized sender and destination; null destinations require explicit listing reservation permission. Trade policy checks the exchange sender and recipient. Unconfigured routes are denied. This read-only fixture supports at most 100 actors and 100 recipients per actor within 64 KiB of configuration.
 
+The [Go transfer policy example](../examples/plugins/go-transfer-policy/main.go) uses the same records, environment variables, endpoint and limits. Build it with `go -C examples/plugins/go-transfer-policy build -mod=readonly -o transfer-policy .`, then run the resulting executable with `records.json [port]`. It uses only the Go standard library. Run `node test/go-transfer-policy-conformance.mjs <executable-path>` to exercise the compiled provider through the framework transports. Both examples accept exact integer-valued JSON numbers and reject fractional or unsafe values without rounding them into valid amounts.
+
 ### Remote currency providers
 
 The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a Go transfer/trade policy provider example and compiled-provider conformance checks. Aligned Python policy numeric parsing with exact integer-valued JSON inputs.
+
 - Added remote transfer and trade policies for offers, counteroffers, acceptance, and secondary sales, with batched checks, state revalidation, cancellation, and durable replay. Added a Python provider example for both protocols.
 
 - Added asynchronous trade-draft review with cancellation, expiry feedback, and counteroffer version checks. Custom views using the framework client must call `reviewAsync()` before building an offer.

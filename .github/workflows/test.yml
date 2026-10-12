@@ -58,6 +58,8 @@ jobs:
       - run: node test/action-receiver-conformance.mjs "$RUNNER_TEMP/action-receiver" python3
       - run: go -C examples/plugins/go-plugin-client build -mod=readonly -o "$RUNNER_TEMP/plugin-client" .
       - run: node test/plugin-purchase-conformance.mjs "$RUNNER_TEMP/plugin-client" python3
+      - run: go -C examples/plugins/go-transfer-policy build -mod=readonly -buildvcs=false -trimpath -o "$RUNNER_TEMP/transfer-policy" .
+      - run: node test/go-transfer-policy-conformance.mjs "$RUNNER_TEMP/transfer-policy"
   browser:
     runs-on: ubuntu-latest
     strategy:

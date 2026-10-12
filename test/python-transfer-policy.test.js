@@ -110,6 +110,9 @@ test('Python endpoint authenticates both protocols and rejects malformed identit
     }
     const bodies=[...values.map(value=>JSON.stringify(value)),'{','{"context":{},"cont\\u0065xt":{}}',JSON.stringify(trade()).replace('"amount":15','"amount":NaN'),'x'.repeat(262145),Buffer.from([0xff,0xfe])];
     for(const body of bodies)assert.deepEqual(await post(url,body,400),{});
+    for(const spelling of ['15.0','15e0','1.5e1'])assert.equal((await post(url,JSON.stringify(trade()).replace('"amount":15','"amount":'+spelling))).status,'allowed');
+    for(const spelling of ['15.1','9007199254740991.1','1e999999999'])assert.deepEqual(await post(url,JSON.stringify(trade()).replace('"amount":15','"amount":'+spelling),400),{});
+    assert.equal((await post(url,JSON.stringify(transfer()).replace('"generation":1','"generation":1.0'))).generation,1);
     for(const options of [{url:url+'?unsupported=1',headers},{url,headers:{...headers,'content-type':'text/plain'}}]){
       const response=await fetch(options.url,{method:'POST',headers:options.headers,body:JSON.stringify(transfer())});assert.equal(response.status,400);assert.deepEqual(await response.json(),{});
     }

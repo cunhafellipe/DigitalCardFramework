@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PROVIDER = os.environ.get("TRANSFER_POLICY_PROVIDER_ID", "example.transfer")
@@ -67,8 +68,19 @@ def unicode_strings(value):
             unicode_strings(item)
 
 
+def exact_integer(token):
+    try:
+        value = Decimal(token)
+        if not value.is_finite() or value.copy_abs() > MAX_INTEGER or value != value.to_integral_value():
+            raise ValueError("Invalid integer")
+        return int(value)
+    except InvalidOperation as error:
+        raise ValueError("Invalid integer") from error
+
+
 def parse(raw):
     value = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs,
+                       parse_float=exact_integer,
                        parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()))
     unicode_strings(value)
     return value

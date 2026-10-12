@@ -134,7 +134,7 @@ For externally funded wallets, export `currencyProviders` from HOST_MODULE. The 
 
 ## Code-card stock
 
-For catalogs with code attachments, configure the separate code-vault key ring and stable index key described in [code-card operations](card-types-and-codes.md#deploy-and-operate). Startup verifies existing envelopes and reconstructs missing legacy provenance from stored evidence. `HOST_MODULE` may export `codeProviders` with authenticated read-only status lookups and `codeLimits` for bounded inventory/request capacity. A provider confirmation is distinct from a player marking a code used. Include the vault keys in isolated restore drills; state encryption keys alone cannot recover code secrets.
+For catalogs with code attachments, configure the separate code-vault key ring and stable index key described in [code-card operations](card-types-and-codes.md#deploy-and-operate). Startup verifies existing envelopes and reconstructs missing legacy provenance from stored evidence. `HOST_MODULE` may export `codeProviders` with authenticated read-only status lookups, or data-only `codeProviderEndpoints` for the framework-owned remote HTTP bridge. Remote providers use the versioned [code-status protocol](card-types-and-codes.md#remote-code-status-providers); shutdown disables their lookups. Configure `codeLimits` for bounded inventory/request capacity. A provider confirmation is distinct from a player marking a code used. Include the vault keys in isolated restore drills; state encryption keys alone cannot recover code secrets.
 
 
 ## Shops and durable account rewards

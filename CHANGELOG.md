@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a versioned remote code-status provider protocol and bounded authenticated HTTP bridge with data-only host configuration, cancellation and disable controls.
+
 - Moved production authentication session operations into the framework worker, preserving atomic login challenge consumption and awaited session creation/revocation. Synchronous embedded session stores remain supported.
 
 - Removed write-lock acquisition from ordinary session reads so authenticated requests can read committed sessions while framework writes are in progress. Login-challenge consumption remains atomic.

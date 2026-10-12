@@ -185,3 +185,28 @@ Rotate encryption by loading both old and new keys, selecting the new active key
 `codeLimits:{maxCodes,maxRequests}` adjusts bounded inventory and retry/confirmation capacities (defaults 50,000 and 200,000). SQLite still has its whole-state 64 MiB default limit; those row limits do not promise that every payload will fit. Allocation is transactional across connections, not a distributed high-throughput service. Configure production identity, TLS, rate limiting and access according to [production setup](production.md). Refund/reissue policy, upstream redemption, webhook authentication and retention requirements belong to the host.
 
 See [HTTP schemas](openapi.json) for private `/codes`, `/codes/reveal`, `/codes/report`, optional `/codes/reconcile`, and privileged `/operator/codes`, `/operator/code-pools`, `/operator/codes/import`, `/operator/codes/confirm`. All paths are under `/api`.
+
+### Remote code-status providers
+
+The production host accepts data-only `HOST_MODULE.codeProviderEndpoints` configuration. The framework supplies the HTTP client; a provider can implement the JSON protocol in any language. This route performs read-only status lookup, never redemption. Existing `codeProviders` adapters remain supported; the same provider ID cannot be configured in both registries.
+
+```js
+export const codeProviderEndpoints = {
+  'example.game': {
+    url: 'https://codes.example.com/status',
+    token: process.env.CODE_STATUS_TOKEN
+  }
+};
+```
+
+Endpoints are trusted operator configuration. Use HTTPS and a provider-specific secret; URLs cannot contain credentials, query strings or fragments, and redirects are rejected. `allowLoopbackHttp: true` permits HTTP only for explicit loopback development endpoints. Never publish credentials or codes in logs. Only a caller authorized by the framework can obtain lookup material; the configured provider receives the selected code and external reference.
+
+The versioned `digital-card-code-status@1` contract is published as [JSON Schema](code-provider.schema.json) and exported from `@digital-card/framework/code-provider-contracts`. Requests include a unique request ID, provider ID, code ID, operation, external reference and code. Replies must echo the identities and contain `unknown`, `redeemed`, `revoked` or a bounded protocol error. Confirmed statuses require the provider's stable event ID and UTC occurrence time; the core deduplicates confirmations. An unknown result remains unverified. Text limits follow the core’s UTF-16 length bounds (512 for codes, 300 for external references and event IDs); unpaired surrogates are rejected. The supplied validators apply these checks in addition to JSON Schema.
+
+Transport defaults are a 10-second deadline, 8 KiB request and response limits, and eight concurrent lookups per provider. Configuration supports `timeoutMs` up to 120000, byte limits up to 65536 and `maxConcurrent` up to 64. The gateway's own deadline also applies. Responses must be uncompressed JSON; mismatched identities, malformed output and oversized bodies are rejected. Provider failures are sanitized at the gateway.
+
+Custom hosts may import `createRemoteCodeProvider` or `createCodeProviderRegistry` from `@digital-card/framework/remote-code-provider`. A registry exposes providers plus `disable(providerId)` and `close()`. Disable permanently rejects new lookups, aborts active transport and prevents results not yet admitted for confirmation. It cannot undo a confirmation already admitted to the framework worker. Replace an instance with a newly configured credential to resume service.
+
+This provider bridge is separate from general plugin commands, policy/allocation hooks and operating-system isolation. Protocol compatibility alone does not establish qualified support for every language or deployment.
+
+The [Python standard-library example](../examples/plugins/python-code-provider.py) implements a synthetic, read-only registry. Set `CODE_PROVIDER_TOKEN` and optionally `CODE_PROVIDER_ID` (default `example.game`), then run `python examples/plugins/python-code-provider.py records.json 8081`. Its loopback endpoint is `/code-status`; use the explicit loopback option in the host for local testing. The registry file contains at most 100 entries within 64 KiB, each with `code`, `externalId`, `status`, `eventId` and `occurredAt`. Only exact code/reference matches return a confirmed status. Replace the fixture lookup with an authenticated authoritative provider integration for real deployment.

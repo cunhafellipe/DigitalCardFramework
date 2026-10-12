@@ -2,6 +2,7 @@ import {createPresentationStore} from "../src/presentation/service.js";
 import {createPresentationHandler} from "../src/presentation/node-http.js";
 import {authorizePresentation} from "../src/access.js";
 import {createCodeGateway} from '../src/code-gateway.js';
+import {createCodeProviderRegistry} from '../src/remote-code-provider.js';
 import {createCurrencyGateway} from "../src/currency-gateway.js";
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
@@ -23,6 +24,7 @@ const issuer=process.env.OIDC_ISSUER,clientId=process.env.OIDC_CLIENT_ID;
 const adminSubjects=JSON.parse(process.env.OPERATOR_SUBJECTS??'[]');if(!Array.isArray(adminSubjects)||adminSubjects.some(x=>typeof x!=='string'))throw new Error('OPERATOR_SUBJECTS must be a JSON string array');
 const dbPath=resolve(process.env.DATABASE_PATH??'data/production.sqlite');await mkdir(dirname(dbPath),{recursive:true});
 const extension=process.env.HOST_MODULE?await import(pathToFileURL(resolve(process.env.HOST_MODULE)).href):{};
+const codeProviderRegistry=createCodeProviderRegistry({codeProviders:extension.codeProviders,codeProviderEndpoints:extension.codeProviderEndpoints});
 const codeKeyConfig=await secret('CODE_VAULT_KEYS'),codeIndex=await secret('CODE_INDEX_KEY');
 const codeVaultOptions=codeKeyConfig?({activeKeyId:process.env.CODE_ACTIVE_KEY_ID,keys:Object.fromEntries(Object.entries(JSON.parse(codeKeyConfig)).map(([id,hex])=>[id,keyFromHex(hex)])),indexKey:keyFromHex(codeIndex)}):undefined;
 const workerOptions=extension.workerOptions??{};for(const name of Object.keys(workerOptions))if(!['maxPendingRequests','maxPendingBytes','startupTimeoutMs','closeTimeoutMs'].includes(name))throw new Error('Unsupported worker option '+name);
@@ -37,7 +39,7 @@ if(raw.variants.some(v=>v.codes?.length)&&!runtime.codeVault)throw new Error('Co
 await framework.verifyCodeVault({role:'admin'});
 await framework.backfillCompletionReservations({role:'admin'});
 await framework.backfillProvenance({role:'admin'});
-const codeGateway=extension.codeProviders?createCodeGateway({framework,providers:extension.codeProviders}):undefined;
+const codeGateway=Object.keys(codeProviderRegistry.providers).length?createCodeGateway({framework,providers:codeProviderRegistry.providers}):undefined;
 const audit=await framework.audit({role:'admin'});if(!audit.ok||!await framework.storeIntegrity())throw new Error('Database verification failed; restore a verified backup');
 try{await framework.prepareRecordTransactions();}catch(error){if(!['STORAGE_CAPACITY','COMPLETION_CAPACITY'].includes(error.code))throw error;process.stderr.write('Record accounting migration deferred; worker planning uses compatibility summaries\n');}
 const sessions=framework.sessions,rateLimit=extension.rateLimiter??createRateLimiter(extension.rateLimits);
@@ -76,6 +78,6 @@ function syncWorkers(){
 }
 await syncWorkers();
 server.listen(Number(process.env.PORT??8080),process.env.BIND_ADDRESS??'127.0.0.1',()=>console.log('Framework production host ready on '+origin));
-let closing=false;function shutdown(){if(closing)return;closing=true;clearInterval(maintenance);clearInterval(actionWorker);workerAbort.abort();server.close(async()=>{try{await Promise.all([dispatching,maintaining,planning]);await presentations?.close();await framework.close();process.exit(0);}catch{process.exit(1);}});setTimeout(()=>process.exit(1),10000).unref();}
+let closing=false;function shutdown(){if(closing)return;closing=true;codeProviderRegistry.close();clearInterval(maintenance);clearInterval(actionWorker);workerAbort.abort();server.close(async()=>{try{await Promise.all([dispatching,maintaining,planning]);await presentations?.close();await framework.close();process.exit(0);}catch{process.exit(1);}});setTimeout(()=>process.exit(1),10000).unref();}
 process.on('SIGINT',shutdown);process.on('SIGTERM',shutdown);
-} catch(error) { await framework.terminate(); throw error; }
+} catch(error) { codeProviderRegistry.close();await framework.terminate(); throw error; }

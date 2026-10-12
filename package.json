@@ -77,6 +77,8 @@
     "./code-ui": "./src/code-ui.js",
     "./code-vault": "./src/code-vault.js",
     "./code-gateway": "./src/code-gateway.js",
+    "./code-provider-contracts": "./src/code-provider-contracts.js",
+    "./remote-code-provider": "./src/remote-code-provider.js",
     "./marketplace-ui": "./src/marketplace-ui.js",
     "./remote-actions": {
       "types": "./src/remote-actions.d.ts",

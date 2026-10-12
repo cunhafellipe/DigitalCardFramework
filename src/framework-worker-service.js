@@ -6,6 +6,7 @@ import {FrameworkError} from './catalog.js';
 import {frameworkMethods,storeMethods,sessionMethods,frameworkOptionNames,encodeTransport,unavailable} from './framework-worker-contract.js';
 
 const allowed = new Set([...frameworkMethods,...storeMethods,...sessionMethods]);
+const cancellationOptions = new Map([['dispatchActions',1],['quoteListingAsync',2],['buyListingAsync',2],['executeCommandIntentAsync',2]]);
 const positive = (value,name) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new FrameworkError('INVALID_INPUT',name+' must be a positive integer');
   return value;
@@ -72,14 +73,15 @@ export class FrameworkWorkerService {
       ? new FrameworkError('WORKER_NOT_READY','Framework worker is starting',503) : unavailable();
     if (this.#pending.size >= this.#maxCount) throw new FrameworkError('WORKER_OVERLOADED','Framework worker admission limit reached',503);
     let signal;
-    if (method === 'dispatchActions' && args[1] && Object.hasOwn(args[1],'signal')) {
-      const options = args[1], descriptor = Object.getOwnPropertyDescriptor(options,'signal');
+    const optionsIndex=cancellationOptions.get(method);
+    if (optionsIndex!==undefined && args[optionsIndex] && Object.hasOwn(args[optionsIndex],'signal')) {
+      const options = args[optionsIndex], descriptor = Object.getOwnPropertyDescriptor(options,'signal');
       if (!Object.hasOwn(descriptor,'value') || descriptor.value !== undefined && !(descriptor.value instanceof AbortSignal))
-        throw new FrameworkError('WORKER_TRANSPORT','Action cancellation requires an AbortSignal');
+        throw new FrameworkError('WORKER_TRANSPORT','Cancellation requires an AbortSignal');
       signal = descriptor.value;
       const clean = Object.create(Object.getPrototypeOf(options));
       Object.defineProperties(clean,Object.fromEntries(Reflect.ownKeys(options).filter(key => key !== 'signal').map(key => [key,Object.getOwnPropertyDescriptor(options,key)])));
-      args = [args[0],clean,...args.slice(2)];
+      args = args.map((value,index)=>index===optionsIndex?clean:value);
     }
     const payload = encodeTransport({method,args},this.#maxBytes - this.#bytes);
     if (payload.byteLength > this.#maxBytes - this.#bytes) throw new FrameworkError('WORKER_OVERLOADED','Framework worker input byte limit reached',503);

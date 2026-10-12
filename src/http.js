@@ -30,6 +30,9 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
     response.setHeader('Cache-Control','no-store');
     response.setHeader('X-Content-Type-Options','nosniff');
     response.setHeader('X-Request-ID',randomUUID());
+    const policyController=new AbortController();
+    const cancelPolicy=()=>{if(!response.writableEnded)policyController.abort();};
+    request.on?.('aborted',cancelPolicy);response.on?.('close',cancelPolicy);
     try {
       const method=request.method;
       if(method!=='GET' && method!=='POST') throw new FrameworkError('METHOD_NOT_ALLOWED','Unsupported method',405);
@@ -87,14 +90,16 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
           '/api/operator/import/preview':'previewImport','/api/operator/import/commit':'commitImport','/api/operator/card-policies/effective':'effectiveCardPolicy','/api/operator/card-policies/save':'saveCardPolicy','/api/operator/card-policies/preview':'previewCardPolicy','/api/operator/card-policies/activate':'activateCardPolicy','/api/operator/card-policies/retire':'retireCardPolicy','/api/operator/card-policies/restore':'restoreCardPolicy','/api/operator/card-resources/save':'saveCardResource','/api/operator/card-resources/retire':'retireCardResource','/api/operator/card-resources/restore':'restoreCardResource','/api/operator/copy-stats':'updateCopyStats'
         };
         if(path==='/api/command-intents')result=await framework.registerCommandIntent(actor,input,{operators:exposeOperators});
-        else if(path==='/api/command-intents/execute')result=await (framework.executeCommandIntentAsync??framework.executeCommandIntent).call(framework,actor,input,{operators:exposeOperators,requireTradeReview});
+        else if(path==='/api/command-intents/execute')result=await (framework.executeCommandIntentAsync??framework.executeCommandIntent).call(framework,actor,input,{operators:exposeOperators,requireTradeReview,...(framework.executeCommandIntentAsync?{signal:policyController.signal}:{})});
         else if(path==='/api/command-intents/acknowledge')result=await framework.acknowledgeCommandIntent(actor,input,{operators:exposeOperators});
         else if(path==='/api/currency/reconcile' && currencyGateway) result=await currencyGateway.reconcile(actor,input);
         else if(path==='/api/codes/reconcile' && codeGateway) result=await codeGateway.reconcile(actor,input);
         else {
         const command=routes[path]; if(!command) throw new FrameworkError('NOT_FOUND','Unknown API route',404);
         if(requireTradeReview&&['acceptTrade','counterTrade'].includes(command)&&typeof input.expectedDigest!=='string')throw new FrameworkError('REVIEW_REQUIRED','Review the immutable trade contents first',409);
-        result=await (command==='purchase'&&framework.purchaseAsync?framework.purchaseAsync:framework[command]).call(framework,actor,input);
+        const asynchronous={purchase:'purchaseAsync',quoteListing:'quoteListingAsync',buyListing:'buyListingAsync'}[command];
+        const target=asynchronous&&framework[asynchronous]?framework[asynchronous]:framework[command];
+        result=await (['quoteListing','buyListing'].includes(command)&&target===framework[asynchronous]?target.call(framework,actor,input,{signal:policyController.signal}):target.call(framework,actor,input));
         }
       }
       response.end(JSON.stringify(result));
@@ -103,6 +108,8 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
       if(response.statusCode===429)response.setHeader('Retry-After','60');
       response.end(JSON.stringify({code:error instanceof FrameworkError?error.code:error instanceof URIError?'INVALID_PATH':'INTERNAL_ERROR',
         message:error instanceof FrameworkError?error.message:error instanceof URIError?'Malformed path encoding':'The server could not complete this request'}));
+    } finally {
+      request.removeListener?.('aborted',cancelPolicy);response.removeListener?.('close',cancelPolicy);
     }
     try{onRequest?.({requestId:response.getHeader('X-Request-ID'),method:request.method,path,status:response.statusCode});}catch{}
     return true;

@@ -66,9 +66,10 @@ try {
         if (closing) throw new FrameworkError('WORKER_UNAVAILABLE','Framework worker is closing',503);
         const {method,args} = deserialize(message.payload);
         if (!commands.has(method)) throw new FrameworkError('WORKER_METHOD','Unsupported framework operation');
-        if (method === 'dispatchActions') {
+        if (['dispatchActions','quoteListingAsync','buyListingAsync','executeCommandIntentAsync'].includes(method)) {
           if (message.aborted) controller.abort();
-          args[1] = {...args[1],signal:controller.signal};
+          const index=method==='dispatchActions'?1:2;
+          args[index] = {...args[index],signal:controller.signal};
         }
         response = {payload:encodeTransport(await commands.get(method)(...args))};
       } catch (error) { response = {error:serializeError(error)}; }

@@ -5,7 +5,7 @@ import { hasPermission } from "./access.js";
 import { safeData, page } from "./data.js";
 import { contentDigest } from "./importer.js";
 import { enqueueAction } from "./actions.js";
-import {adminSite,assertAdminShop,effectiveProduct} from './admin.js';
+import {adminSite,adminRevision,assertAdminShop,effectiveProduct} from './admin.js';
 
 export const commerceDefaults = Object.freeze({
   enabled: true,
@@ -113,9 +113,13 @@ function publicListing(s, l, at, userId) {
 export class CommerceService {
   #b;
   #random;
-  constructor(bridge, { random = randomInt } = {}) {
+  #remotePolicy;
+  #proposals;
+  constructor(bridge, { random = randomInt, remotePolicy, policyCoordinator } = {}) {
     this.#b = bridge;
     this.#random = random;
+    this.#remotePolicy = remotePolicy;
+    this.#proposals = policyCoordinator;
   }
   settings() {
     return this.#b.read(s=>({...s.commerceSettings??{revision:0,settings:clone(commerceDefaults)},effectiveSettings:{...config(s),playerShops:config(s).playerShops&&!adminSite(s).playerShopsPaused}}));
@@ -625,7 +629,7 @@ export class CommerceService {
       );
     });
   }
-  #eligible(s, l, u) {
+  #eligible(s, l, u, evaluateDirectPolicy = true) {
     const shop = s.shops[l.shopId],
       at = this.#b.now();
     const claim=l.draw?.winners.some(w=>w.userId===u.id&&!w.orderId);
@@ -655,7 +659,7 @@ export class CommerceService {
       403,
     );
     this.#currency(s, shop, l.price);
-    if (this.#b.canPurchase) {
+    if (evaluateDirectPolicy && this.#b.canPurchase) {
       const decision = this.#b.canPurchase({
         user: clone(u),
         shop: clone(shop),
@@ -671,8 +675,8 @@ export class CommerceService {
       );
     }
   }
-  #selection(s, l, u, quantity) {
-    this.#eligible(s, l, u);
+  #selection(s, l, u, quantity, evaluateDirectPolicy = true) {
+    this.#eligible(s, l, u, evaluateDirectPolicy);
     integer(quantity, "quantity", 1, 1000);
     const bought = (recordContexts.get(s)?.listingPurchases ?? 0) + Object.values(s.orders ?? {})
       .filter((o) => o.listingId === l.id && o.buyerId === u.id)
@@ -723,11 +727,16 @@ export class CommerceService {
     return { unitId: unit.id, kind: "custom" };
   }
   quote(actor, { listingId, quantity = 1 }) {
+    check(!this.#remotePolicy,'POLICY_ASYNC_REQUIRED','Use asynchronous listing policy evaluation',503);
+    return this.#quote(actor,{listingId,quantity});
+  }
+  #quote(actor, {listingId,quantity=1}, proposal, signal) {
     return this.#b.listingRead(actor, {listingId,quantity}, (s) => {
       const u = this.#b.user(s, actor),
         l = record(s.listings, listingId);
       check(l, "NOT_FOUND", "Listing not found", 404);
       const units = this.#selection(s, l, u, quantity);
+      if(proposal)this.#proposals.admit(proposal,this.#dependencies(s,l,u,units,{listingId,quantity}),{signal});
       integer(l.price.amount * quantity, "total", 0);
       return {
         listingId,
@@ -742,15 +751,61 @@ export class CommerceService {
       };
     });
   }
+  #dependencies(s,l,u,units,input){
+    const copyIds=[...new Set(units.flatMap(unit=>unit.kind==='copy'?[unit.copyId]:unit.kind==='pack'?s.packs[unit.packId]?.copyIds??[]:[]))];
+    const copies=copyIds.map(id=>{const c=s.copies[id];return c?{id:c.id,version:c.version,ownerId:c.ownerId,state:c.state,lockedBy:c.lockedBy??null,transferLock:c.transferLock??null,codeIds:c.codeIds??[]}:null;});
+    const codes=copyIds.flatMap(id=>s.copies[id]?.codeIds??[]).map(id=>{const c=s.codes[id];return c?{id:c.id,holderId:c.holderId,status:c.status,transfer:c.transfer,revealedAt:c.revealedAt,reportedUsed:c.reportedUsed}:null;});
+    const packs=units.filter(unit=>unit.kind==='pack').map(unit=>{const p=s.packs[unit.packId];return p?{id:p.id,ownerId:p.ownerId,lockedBy:p.lockedBy??null,openedAt:p.openedAt,copyIds:p.copyIds}:null;});
+    const purchased=(recordContexts.get(s)?.listingPurchases??0)+Object.values(s.orders??{}).filter(o=>o.listingId===l.id&&o.buyerId===u.id).reduce((n,o)=>n+o.quantity,0);
+    const parties=[u.id,l.sellerId].map(id=>({id,blockedUserIds:s.users[id]?.preferences?.blockedUserIds??[],balance:s.balances[id]?.[l.price.currencyId]??0}));
+    return contentDigest({input,parties,listing:l,shop:s.shops[l.shopId],copies,packs,codes,purchased,
+      catalogVersion:s.catalog?.version??0,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,tradingRevision:s.tradingPolicy?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0});
+  }
+  #preparePolicy(actor,input,phase,key){
+    const prepared=this.#b.listingRead(actor,input,s=>{
+      const u=this.#b.user(s,actor),l=record(s.listings,input.listingId);check(l,'NOT_FOUND','Listing not found',404);
+      const units=this.#selection(s,l,u,input.quantity,false);
+      if(phase==='purchase')check(JSON.stringify(units.map(unit=>unit.id))===JSON.stringify(input.unitIds)&&digest(l,units)===input.digest,'STALE_QUOTE','Stock or terms changed; review a new quote',409);
+      const shop=s.shops[l.shopId];
+      return {phase,userId:u.id,key,input,snapshotDigest:this.#dependencies(s,l,u,units,input),context:{
+        user:{id:u.id},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},listing:{id:l.id,kind:l.kind,price:clone(l.price)},quantity:input.quantity,unitIds:units.map(unit=>unit.id),
+      }};
+    });
+    return this.#proposals.prepare(prepared);
+  }
+  async quoteAsync(actor,{listingId,quantity=1},{signal}={}){
+    if(!this.#remotePolicy)return this.quote(actor,{listingId,quantity});
+    const principal=clone(actor),input={listingId,quantity};
+    const proposal=this.#preparePolicy(principal,input,'quote');
+    await this.#proposals.evaluate(proposal,{signal});return this.#quote(principal,input,proposal,signal);
+  }
+  async buyAsync(actor,{key,listingId,quantity=1,unitIds,digest:expectedDigest},{signal}={}){
+    if(!this.#remotePolicy)return this.buy(actor,{key,listingId,quantity,unitIds,digest:expectedDigest});
+    const principal=clone(actor),input=clone({listingId,quantity,unitIds,digest:expectedDigest});
+    text(key,'idempotency key',128);
+    const previous=this.#b.purchaseReceipt(principal,key,input);if(previous.found)return previous.result;
+    check(Array.isArray(unitIds)&&unitIds.length===quantity,'INVALID_INPUT','Quoted unit IDs required');
+    const proposal=this.#preparePolicy(principal,input,'purchase',key);
+    await this.#proposals.evaluate(proposal,{signal});return this.#buy(principal,{key,...input},proposal,signal);
+  }
   buy(
     actor,
     { key, listingId, quantity = 1, unitIds, digest: expectedDigest },
   ) {
+    if(this.#remotePolicy){
+      const previous=this.#b.purchaseReceipt(actor,key,{listingId,quantity,unitIds,digest:expectedDigest});
+      if(previous.found)return previous.result;
+      check(false,'POLICY_ASYNC_REQUIRED','Use asynchronous listing policy evaluation',503);
+    }
+    return this.#buy(actor,{key,listingId,quantity,unitIds,digest:expectedDigest});
+  }
+  #buy(actor,{key,listingId,quantity=1,unitIds,digest:expectedDigest},proposal,signal){
     check(
       Array.isArray(unitIds) && unitIds.length === quantity,
       "INVALID_INPUT",
       "Quoted unit IDs required",
     );
+    const receipt={};
     return this.#b.listingCommand(
       actor,
       key,
@@ -761,6 +816,7 @@ export class CommerceService {
         const l = record(s.listings, listingId);
         check(l, "NOT_FOUND", "Listing not found", 404);
         const units = this.#selection(s, l, u, quantity);
+        if(proposal)receipt.policyAdmission=this.#proposals.admit(proposal,this.#dependencies(s,l,u,units,{listingId,quantity,unitIds,digest:expectedDigest}),{signal});
         check(
           units.length === quantity &&
             JSON.stringify(units.map((x) => x.id)) ===
@@ -872,7 +928,7 @@ export class CommerceService {
           listingId: l.id,
         });
         return this.#orderView(s, order);
-      },
+      },receipt,
     );
   }
   #orderView(s, o) {

@@ -73,6 +73,8 @@
     "./currency-gateway": "./src/currency-gateway.js",
     "./currency-provider-contracts": "./src/currency-provider-contracts.js",
     "./remote-currency-provider": "./src/remote-currency-provider.js",
+    "./purchase-policy-contracts": "./src/purchase-policy-contracts.js",
+    "./remote-purchase-policy": "./src/remote-purchase-policy.js",
     "./presentation/png-encode": "./src/presentation/png-encode.js",
     "./presentation/node-http": "./src/presentation/node-http.js",
     "./card-types": "./src/card-types.js",

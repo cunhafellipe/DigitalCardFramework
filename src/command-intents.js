@@ -89,10 +89,10 @@ export class CommandIntentService{
     return this.#completed(actor,row,result);
   }
   async executeAsync(actor,{id},options={}){
-    const principal=clone(actor),policy=clone(options),row=this.#read(principal,id,policy);
+    const {signal,...configuration}=options,principal=clone(actor),policy=clone(configuration),row=this.#read(principal,id,policy);
     if(row.error)throw new FrameworkError(row.error.code,row.error.message,row.error.status);
     let result;
-    try{this.#review(row,policy);result=await this.#executeAsync(principal,row.command,clone(row.input));}
+    try{this.#review(row,policy);result=await this.#executeAsync(principal,row.command,clone(row.input),{signal});}
     catch(error){this.#rejected(principal,row,error);}
     return this.#completed(principal,row,result);
   }

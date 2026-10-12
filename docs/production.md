@@ -136,6 +136,29 @@ For externally funded wallets, export direct `currencyProviders` or data-only `c
 
 ## Code-card stock
 
+### Remote listing purchase policies
+
+A trusted `HOST_MODULE` can export `remotePolicies`, or return it from `createFrameworkOptions`. Configure `canPurchase` with `scope: 'listing'`, a provider ID, HTTPS URL and bearer token. The policy runs inside the framework worker and evaluates listing quotes and purchases. Existing direct `policies.canPurchase` checks also apply. Catalog-pack issuance and external catalog purchases use separate contracts; unsupported scopes and remote hook names are rejected.
+
+```js
+export const remotePolicies = {
+  canPurchase: {
+    scope: 'listing',
+    providerId: 'shop.policy',
+    url: 'https://policy.example/listing-purchases',
+    token: process.env.PURCHASE_POLICY_TOKEN
+  }
+};
+```
+
+Defaults are a 10000 ms timeout, 65536 request bytes, 8192 response bytes and eight concurrent evaluations. Configurable maxima are 120000 ms, 65536 bytes per body and 64 concurrent evaluations; excess calls fail immediately. HTTPS is required except explicit `allowLoopbackHttp: true` for local development. Redirects, URL credentials, query strings, fragments and compressed responses are rejected. Keep endpoint credentials in trusted server configuration.
+
+The framework prepares a scoped immutable proposal, releases database access while awaiting the provider, then rechecks authority, current state, policy generation and deadline before purchase commit. The provider receives identifiers, listing price, quantity and selected unit IDs; an allow decision cannot override native ownership, balance, stock or administrator checks. Responses must echo the proposal identity from [the purchase-policy schema](purchase-policy.schema.json). Policy providers must perform no external side effects during evaluation.
+
+Embedded callers use `quoteListingAsync(actor, input, {signal})` and `buyListingAsync(actor, input, {signal})`. Synchronous listing methods reject configured remote policy work with `POLICY_ASYNC_REQUIRED`. A changed dependency produces `POLICY_STALE`: obtain and review a fresh quote before attempting again. The framework does not silently retry policy evaluation. Retry an uncertain purchase with its original command key and input to recover an existing receipt; an authenticated committed replay does not depend on provider availability.
+
+Trusted SDK operators with `commerce.manage` can call `setRemotePolicyEnabled(actor, {hook: 'canPurchase', enabled: false})`. Disabling aborts evaluations and invalidates their grants; enabling creates a new generation. It cannot retract committed purchases. Runtime policy state is local to the framework instance; configure startup policy deliberately when restarting. Framework close aborts provider requests.
+
 ### Remote currency providers
 
 The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:

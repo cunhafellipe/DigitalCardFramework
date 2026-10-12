@@ -7,7 +7,7 @@ export const frameworkMethods = Object.freeze([
   'cardPolicies','effectiveCardPolicy','saveCardPolicy','previewCardPolicy','activateCardPolicy',
   'retireCardPolicy','restoreCardPolicy','saveCardResource','retireCardResource','restoreCardResource',
   'updateCopyStats','registerCardPresentation','commerceSettings','configureCommerce','createShop',
-  'setShopEnabled','shops','createListing','listings','quoteListing','buyListing','orders','cancelListing',
+  'setShopEnabled','shops','createListing','listings','quoteListing','buyListing','quoteListingAsync','buyListingAsync','setRemotePolicyEnabled','orders','cancelListing',
   'expireListings','enterRaffle','raffleStatus','drawRaffle','drawDueRaffles','openCard','fulfillments',
   'actionJobs','retryAction','claimAction','settleAction','dispatchActions','tradingPolicy','configureTrading',
   'setCardTransferLock','configureCodePool','importCodes','codePools','codeInventory','codeRegistrationMaterial',
@@ -28,7 +28,7 @@ export const storeMethods = Object.freeze(['storeIntegrity','storeDiagnostics','
 export const sessionMethods = Object.freeze(['sessionCreate','sessionGet','sessionConsume','sessionRevoke']);
 export const frameworkOptionNames = Object.freeze([
   'clock','random','bindings','policies','limits','codeVault','codeLimits','codeGenerators','actionHandlers',
-  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits',
+  'actionOptions','eventSubscriptions','raffleRandom','externalPurchaseProviders','externalPurchaseLimits','remotePolicies',
 ]);
 export function unavailable() {
   return new FrameworkError('WORKER_UNAVAILABLE','Framework worker is unavailable; reconcile mutations using their original idempotency keys',503);

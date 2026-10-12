@@ -676,12 +676,13 @@ export class CardFramework {
   purchase(actor,{key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision,allocationDigest}) {
     integer(quantity,'quantity',1,100);
     const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
-    if(this.#query(q=>q.value('catalog')?.products.find(p=>p.id===productId)?.allocationStrategy)){const previous=this.#purchaseReceipt(actor,key,input,'packs.purchased');if(previous.found)return previous.result;check(false,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous allocation strategy evaluation',503);}return this.#command(actor,key,'packs.purchased',input,(s,user)=>this.#purchaseBody(s,user,input));
+    return this.#command(actor,key,'packs.purchased',input,(s,user)=>this.#purchaseBody(s,user,input));
   }
   #purchaseBody(s,user,{productId,quantity,productRevision,catalogVersion,adminRevision:quotedAdminRevision}){
       const c=this.#catalog(s),base=lookup(c.products,productId);
       check(base && base.enabled!==false,'UNAVAILABLE','Pack product unavailable',404);
       assertAdminPurchase(s,user.id,base);const product=effectiveProduct(s,base);
+      check(!product.allocationStrategy||this.#allocationAdmissions.has(s),'ALLOCATION_ASYNC_REQUIRED','Use asynchronous allocation strategy evaluation',503);
       this.#workflow(s,'packs',product.price.amount>0);
       this.#productTime(product);
       check(product.revision===productRevision && c.version===catalogVersion && adminRevision(s)===(quotedAdminRevision??0),'STALE_QUOTE','Get a fresh quote before buying',409);
@@ -727,16 +728,16 @@ export class CardFramework {
     const {key,productId,quantity=1,productRevision,catalogVersion,adminRevision:quotedAdminRevision,allocationDigest}=reviewed;
     integer(quantity,'quantity',1,100);text(key,'idempotency key',128);
     const input={productId,quantity,productRevision,catalogVersion,...(quotedAdminRevision===undefined?{}:{adminRevision:quotedAdminRevision}),...(allocationDigest===undefined?{}:{allocationDigest})};
-    if(this.#query(q=>q.value('catalog')?.products.find(p=>p.id===productId)?.allocationStrategy)){const previous=this.#purchaseReceipt(principal,key,input,'packs.purchased');if(previous.found)return previous.result;check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.purchase(principal,key,input,{signal});}
     const execute=()=>this.#store.transactRecords(tx=>{
       check(principal?.disabled!==true&&typeof principal?.userId==='string','UNAUTHENTICATED','A verified framework user is required',401);
       const user=tx.get('users',principal.userId);check(user,'UNAUTHENTICATED','A verified framework user is required',401);
       const token=user.id+':'+key,hash=fingerprint({type:'packs.purchased',input}),previous=tx.get('requests',token);
+      const catalog=previous?null:tx.value('catalog'),base=catalog?.products.find(product=>product.id===productId);
+      check(!base?.allocationStrategy,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous allocation strategy evaluation',503);
       let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}
       check(validRecordAccounting(accounting,tx.value('revision')),previous?'RECORD_PATH_UNAVAILABLE':'RECORD_MIGRATION_REQUIRED','Prepare revision-bound record accounting',503);
       check(!accounting.legacyPurchases,'RECORD_PATH_UNAVAILABLE','Legacy external purchases require the compatibility path',409);
       if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
-      const catalog=tx.value('catalog'),base=catalog?.products.find(product=>product.id===productId);
       check(base,'UNAVAILABLE','Pack product unavailable',404);
       const variants=[...new Set(base.slots.flatMap(slot=>slot.pool.map(entry=>entry.variantId)))].map(variantId=>catalog.variants.find(variant=>variant.id===variantId));
       check(base.duplicatePolicy.scope!=='inventory'&&variants.every(variant=>!variant.codes?.length&&!Object.values(variant.bindings).some(binding=>binding.factory)),'RECORD_PATH_UNAVAILABLE','This product requires the compatibility acquisition path',409);
@@ -754,6 +755,7 @@ export class CardFramework {
       }finally{recordContexts.delete(state);}
     });
     try{return execute();}catch(error){
+      if(error.code==='ALLOCATION_ASYNC_REQUIRED'){check(this.#allocationIntents,'ALLOCATION_UNAVAILABLE','Allocation strategy is not configured',503);return this.#allocationIntents.purchase(principal,key,input,{signal});}
       if(error.code==='RECORD_MIGRATION_REQUIRED'){this.#store.prepareRecordTransactions();try{return execute();}catch(retry){if(retry.code==='RECORD_PATH_UNAVAILABLE')return this.purchase(principal,reviewed);throw retry;}}
       if(error.code==='RECORD_PATH_UNAVAILABLE')return this.purchase(principal,reviewed);
       throw error;

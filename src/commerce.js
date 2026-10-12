@@ -6,6 +6,7 @@ import { safeData, page } from "./data.js";
 import { contentDigest } from "./importer.js";
 import { enqueueAction } from "./actions.js";
 import {adminSite,adminRevision,assertAdminShop,effectiveProduct} from './admin.js';
+import {codeStockAvailable} from './codes.js';
 
 export const commerceDefaults = Object.freeze({
   enabled: true,
@@ -115,11 +116,15 @@ export class CommerceService {
   #random;
   #remotePolicy;
   #proposals;
-  constructor(bridge, { random = randomInt, remotePolicy, policyCoordinator } = {}) {
+  #remoteListingPolicy;
+  #listingProposals;
+  constructor(bridge, { random = randomInt, remotePolicy, policyCoordinator, remoteListingPolicy, listingPolicyCoordinator } = {}) {
     this.#b = bridge;
     this.#random = random;
     this.#remotePolicy = remotePolicy;
     this.#proposals = policyCoordinator;
+    this.#remoteListingPolicy = remoteListingPolicy;
+    this.#listingProposals = listingPolicyCoordinator;
   }
   settings() {
     return this.#b.read(s=>({...s.commerceSettings??{revision:0,settings:clone(commerceDefaults)},effectiveSettings:{...config(s),playerShops:config(s).playerShops&&!adminSite(s).playerShopsPaused}}));
@@ -300,6 +305,14 @@ export class CommerceService {
       );
   }
   createListing(actor, input) {
+    const reviewed=this.#reviewListing(input);
+    if(this.#remoteListingPolicy){
+      const previous=this.#b.creationReceipt(actor,reviewed.key,this.#creationCommandInput(reviewed));if(previous.found)return previous.result;
+      check(false,'POLICY_ASYNC_REQUIRED','Use asynchronous listing policy evaluation',503);
+    }
+    return this.#createListing(actor,reviewed);
+  }
+  #reviewListing(input){
     const {
       key,
       shopId,
@@ -371,6 +384,75 @@ export class CommerceService {
       "INVALID_INPUT",
       "Invalid stock kind",
     );
+    return {key,shopId,title,description,price:clone(price),items:clone(items),previewAt,startsAt,inputStartsAt:input.startsAt??null,endsAt,perBuyerLimit,metadata:clone(metadata),raffle:clone(raffle)};
+  }
+  #creationCommandInput(reviewed){
+    const {key,inputStartsAt,...input}=reviewed;return {...input,startsAt:inputStartsAt};
+  }
+  #creationPreflight(s,actor,reviewed){
+    initialize(s);const {shopId,items,price,raffle}=reviewed,shop=this.#own(s,actor,shopId);
+    check(config(s).enabled&&shop.enabled,'SHOP_DISABLED','Listing creation is disabled',409);
+    this.#b.workflow(s,items.kind==='mint-pack'?'packs':['mint-card','action'].includes(items.kind)?'directSales':'resale',price.amount>0);
+    assertAdminShop(s,shop);this.#currency(s,shop,price);
+    const count=recordContexts.get(s)?.activeShopListings??Object.values(s.listings).filter(l=>l.shopId===shopId&&active(l)).length;
+    check(count<config(s).maxListingsPerShop,'INSTALLATION_CAPACITY','Shop listing limit reached',507);
+    const primary=['mint-card','mint-pack','action'].includes(items.kind);
+    if(primary){check(shop.kind==='admin','FORBIDDEN','Only admin shops can issue stock or custom items',403);permission(actor,'commerce.manage');integer(items.quantity,'stock quantity',1,config(s).maxStockPerListing);}
+    else check(Array.isArray(items.ids)&&items.ids.length>0&&items.ids.length<=config(s).maxStockPerListing&&new Set(items.ids).size===items.ids.length&&items.ids.every(id=>typeof id==='string'),'INVALID_INPUT','Select unique owned stock');
+    if(items.kind==='copies'){
+      const copies=items.ids.map(id=>s.copies[id]);
+      check(copies.every(c=>c?.ownerId===shop.ownerId&&c.state==='owned'),'NOT_OWNED','Stock must be owned cards',403);
+      check(copies.every(c=>!c.lockedBy),'CARD_LOCKED','Card already reserved',409);
+      check(new Set(copies.map(c=>c.variantId)).size<=1,'INVALID_INPUT','One listing must contain the same variant');
+    }
+    if(items.kind==='packs'){
+      check(config(s).packResale,'FORBIDDEN','Pack resale is disabled',403);
+      const packs=items.ids.map(id=>s.packs[id]);check(packs.every(p=>p?.ownerId===shop.ownerId&&!p.openedAt&&!p.lockedBy),'NOT_OWNED','Stock must be unreserved sealed packs',403);
+      check(packs.every(p=>p.copyIds.every(id=>s.copies[id]?.ownerId===shop.ownerId&&!s.copies[id].lockedBy)),'NOT_OWNED','Pack stock ownership changed',403);
+      check(new Set(packs.map(p=>p.productId+':'+p.productRevision)).size<=1,'INVALID_INPUT','One listing must contain the same pack revision');
+    }
+    if(items.kind==='mint-card'){
+      const variant=find(s.catalog.variants,items.variantId);check(variant&&variant.enabled!==false,'NOT_FOUND','Variant not available',404);
+      check(variant.supplyLimit===undefined||(s.supply[variant.id]??0)+items.quantity<=variant.supplyLimit,'SOLD_OUT','Edition exhausted',409);
+      check(codeStockAvailable(s,variant.codes,this.#b.now()),'CODE_STOCK','Code stock is unavailable',409);
+    }
+    if(items.kind==='mint-pack'){
+      const product=effectiveProduct(s,find(s.catalog.products,items.productId));check(product&&product.enabled!==false,'NOT_FOUND','Pack product unavailable',404);
+      for(const slot of product.slots)if(slot.probability?.numerator!==0)check(slot.pool.some(entry=>{const v=find(s.catalog.variants,entry.variantId);return v&&v.enabled!==false&&(v.supplyLimit===undefined||(s.supply[v.id]??0)<v.supplyLimit)&&codeStockAvailable(s,v.codes,this.#b.now());}),'SOLD_OUT','Pack stock is unavailable',409);
+    }
+    if(items.kind==='action'){text(items.handler,'action handler',100);jsonObject(items.params??{});}
+    check(!raffle||raffle.winners<=(primary?items.quantity:items.ids.length),'INVALID_INPUT','Winners exceed reserved stock');
+    return shop;
+  }
+  #creationDependencies(s,actor,reviewed,shop){
+    const {items}=reviewed,product=items.kind==='mint-pack'?effectiveProduct(s,find(s.catalog.products,items.productId)):null;
+    const variantIds=items.kind==='mint-card'?[items.variantId]:product?[...new Set(product.slots.flatMap(slot=>slot.pool.map(entry=>entry.variantId)))]:[];
+    const demand=new Map(),add=(ids,count)=>{for(const poolId of new Set(ids.flatMap(id=>find(s.catalog.variants,id)?.codes?.map(spec=>spec.poolId)??[]))){const maximum=Math.max(0,...ids.map(id=>find(s.catalog.variants,id)?.codes?.filter(spec=>spec.poolId===poolId).length??0));demand.set(poolId,(demand.get(poolId)??0)+maximum*count);}};
+    if(items.kind==='mint-card')add(variantIds,items.quantity);else if(product)for(const slot of product.slots)add(slot.pool.map(entry=>entry.variantId),items.quantity*slot.count);
+    const codeReadiness=[...demand].map(([poolId,count])=>({pool:s.codePools?.[poolId]??null,stock:Object.values(s.codes??{}).filter(c=>c.poolId===poolId&&c.status==='available'&&(!c.expiresAt||Date.parse(c.expiresAt)>Date.parse(this.#b.now()))).slice(0,count).map(c=>({id:c.id,status:c.status,expiresAt:c.expiresAt})).sort((a,b)=>a.id.localeCompare(b.id))}));
+    const packIds=items.kind==='packs'?items.ids:[],copyIds=items.kind==='copies'?items.ids:packIds.flatMap(id=>s.packs[id]?.copyIds??[]);
+    const copies=copyIds.map(id=>{const c=s.copies[id];return c?{id:c.id,version:c.version,ownerId:c.ownerId,state:c.state,lockedBy:c.lockedBy??null,transferLock:c.transferLock??null,codeIds:c.codeIds??[]}:null;});
+    const codes=copyIds.flatMap(id=>s.copies[id]?.codeIds??[]).map(id=>{const c=s.codes[id];return c?{id:c.id,holderId:c.holderId,status:c.status,transfer:c.transfer,revealedAt:c.revealedAt,reportedUsed:c.reportedUsed}:null;});
+    const packs=packIds.map(id=>{const p=s.packs[id];return p?{id:p.id,ownerId:p.ownerId,lockedBy:p.lockedBy??null,openedAt:p.openedAt,copyIds:p.copyIds}:null;});
+    const baseline=recordContexts.get(s)?.ownerCountsById?.[shop.ownerId]??{ownedCopies:0,sealedCopies:0,packs:0,unopenedPacks:0};
+    const ownCopies=Object.values(s.copies).filter(c=>c.ownerId===shop.ownerId),ownPacks=Object.values(s.packs).filter(p=>p.ownerId===shop.ownerId);
+    const counts={ownedCopies:baseline.ownedCopies+ownCopies.filter(c=>c.state==='owned').length,sealedCopies:baseline.sealedCopies+ownCopies.filter(c=>c.state==='sealed').length,packs:baseline.packs+ownPacks.length,unopenedPacks:baseline.unopenedPacks+ownPacks.filter(p=>!p.openedAt).length};
+    return contentDigest({input:this.#creationCommandInput(reviewed),effectiveStartsAt:reviewed.startsAt,actorId:actor.userId,shop,copies,packs,codes,counts,codeReadiness,supply:variantIds.map(id=>[id,s.supply[id]??0]),
+      activeListings:recordContexts.get(s)?.activeShopListings??Object.values(s.listings).filter(l=>l.shopId===shop.id&&active(l)).length,catalogVersion:s.catalog?.version??0,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,tradingRevision:s.tradingPolicy?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0});
+  }
+  async createListingAsync(actor,input,{signal}={}){
+    if(!this.#remoteListingPolicy)return this.createListing(actor,input);
+    const principal=clone(actor),reviewed=this.#reviewListing(clone(input)),commandInput=this.#creationCommandInput(reviewed);
+    const previous=this.#b.creationReceipt(principal,reviewed.key,commandInput);if(previous.found)return previous.result;
+    const prepared=this.#b.createListingRead(principal,commandInput,s=>{
+      const shop=this.#creationPreflight(s,principal,reviewed),{items}=reviewed;
+      const stock=['copies','packs'].includes(items.kind)?{kind:items.kind,ids:clone(items.ids)}:items.kind==='mint-card'?{kind:items.kind,variantId:items.variantId,quantity:items.quantity}:items.kind==='mint-pack'?{kind:items.kind,productId:items.productId,quantity:items.quantity}:{kind:items.kind,handler:items.handler,quantity:items.quantity};
+      return {phase:'create',userId:principal.userId,key:reviewed.key,input:commandInput,snapshotDigest:this.#creationDependencies(s,principal,reviewed,shop),context:{actor:{id:principal.userId},shop:{id:shop.id,ownerId:shop.ownerId,kind:shop.kind},price:clone(reviewed.price),stock}};
+    });
+    const proposal=this.#listingProposals.prepare(prepared);await this.#listingProposals.evaluate(proposal,{signal});return this.#createListing(principal,reviewed,proposal,signal);
+  }
+  #createListing(actor,reviewed,proposal,signal){
+    const {key,shopId,title,description,price,items,previewAt,startsAt,endsAt,perBuyerLimit,metadata,raffle}=reviewed,receipt={};
     return this.#b.createListingCommand(
       actor,
       key,
@@ -382,7 +464,7 @@ export class CommerceService {
         price,
         items,
         previewAt,
-        startsAt: input.startsAt ?? null,
+        startsAt: reviewed.inputStartsAt,
         endsAt,
         perBuyerLimit,
         metadata,
@@ -390,6 +472,7 @@ export class CommerceService {
       },
       (s, u) => {
         initialize(s);
+        if(proposal){const currentShop=this.#creationPreflight(s,actor,reviewed);receipt.policyAdmission=this.#listingProposals.admit(proposal,this.#creationDependencies(s,actor,reviewed,currentShop),{signal});}
         const shop = this.#own(s, actor, shopId);
         check(config(s).enabled,'SHOP_DISABLED','Listing creation is disabled',409);
         this.#b.workflow(s,items.kind==='mint-pack'?'packs':['mint-card','action'].includes(items.kind)?'directSales':'resale',price.amount>0);
@@ -607,7 +690,7 @@ export class CommerceService {
         assertAdminShop(s,shop,null,listing);
         s.listings[listing.id] = listing;
         return publicListing(s, listing, this.#b.now(), u.id);
-      },
+      },receipt,
     );
   }
   listings(actor, { shopId, ...options } = {}) {

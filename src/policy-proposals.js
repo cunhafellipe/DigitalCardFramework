@@ -7,11 +7,11 @@ const freeze=value=>{if(value&&typeof value==='object'){for(const item of Object
 
 /** Proposals stay inside the framework; a remote response carries advisory data only. */
 export class PolicyProposalCoordinator{
-  #provider;#proposals=new WeakMap();
-  constructor(provider){this.#provider=provider;}
+  #provider;#proposals=new WeakMap();#protocol;#operation;#validateRequest;
+  constructor(provider,{protocol=purchasePolicyProtocol,operation='canPurchase',validateRequest=validatePurchasePolicyRequest}={}){this.#provider=provider;this.#protocol=protocol;this.#operation=operation;this.#validateRequest=validateRequest;}
   prepare({phase,userId,key,input,snapshotDigest,context}){
     const grant=this.#provider.grant(),inputDigest=contentDigest(input);
-    const proposal=freeze(validatePurchasePolicyRequest({protocol:purchasePolicyProtocol,operation:'canPurchase',scope:'listing',phase,requestId:randomUUID(),...grant,commandId:contentDigest({userId,operation:'canPurchase',phase,key:key??null,inputDigest}),inputDigest,snapshotDigest,deadline:Date.now()+this.#provider.timeoutMs,context:structuredClone(context)}));
+    const proposal=freeze(this.#validateRequest({protocol:this.#protocol,operation:this.#operation,scope:'listing',phase,requestId:randomUUID(),...grant,commandId:contentDigest({userId,operation:this.#operation,phase,key:key??null,inputDigest}),inputDigest,snapshotDigest,deadline:Date.now()+this.#provider.timeoutMs,context:structuredClone(context)}));
     this.#proposals.set(proposal,{allowed:false,admitted:false});return proposal;
   }
   async evaluate(proposal,{signal}={}){

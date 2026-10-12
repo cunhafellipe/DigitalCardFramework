@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added remote listing creation policy checks before allocation, with scoped state revalidation, cancellation, durable replay and asynchronous host/worker routing across supported listing kinds.
+
 - Reject malformed SDK cancellation signals before reserving code or currency provider capacity.
 
 - Added remote listing purchase policy evaluation outside database transactions, with commit-time state and grant checks, asynchronous HTTP/worker routing, cancellation and durable receipt replay.

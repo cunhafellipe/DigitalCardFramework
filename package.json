@@ -75,6 +75,8 @@
     "./remote-currency-provider": "./src/remote-currency-provider.js",
     "./purchase-policy-contracts": "./src/purchase-policy-contracts.js",
     "./remote-purchase-policy": "./src/remote-purchase-policy.js",
+    "./listing-policy-contracts": "./src/listing-policy-contracts.js",
+    "./remote-listing-policy": "./src/remote-listing-policy.js",
     "./presentation/png-encode": "./src/presentation/png-encode.js",
     "./presentation/node-http": "./src/presentation/node-http.js",
     "./card-types": "./src/card-types.js",

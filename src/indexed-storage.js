@@ -213,6 +213,11 @@ export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {
   };
   const count=(collection,column,id,extra='')=>db.prepare(`SELECT COUNT(*) AS count FROM framework_entities WHERE collection=? AND ${column}=?${extra}`).get(collection,id).count;
   return {get,value,
+    availableCodeStock(poolId,limit,at){
+      check(typeof poolId==='string'&&Number.isSafeInteger(limit)&&limit>=1&&limit<=1000&&Number.isFinite(Date.parse(at)),'RECORD_PATH_UNAVAILABLE','Code stock scope requires bounded allocation',409);
+      const rows=db.prepare("SELECT variant_id FROM framework_entities INDEXED BY framework_pool_status WHERE collection='_codeStock' AND pool_id=? AND status='available' AND (created_at='' OR created_at>?) ORDER BY ordinal LIMIT ?").all(poolId,new Date(at).toISOString(),limit);
+      return rows.map(row=>{const result=get('codes',row.variant_id);check(result,'INVALID_STATE','Projected code stock is missing',500);return result;});
+    },
     notifications(ownerId){
       if(db.prepare('PRAGMA user_version').get().user_version<4)return (value('notifications')??[]).filter(row=>row.userId===ownerId);
       return db.prepare("SELECT collection,entity_key,payload FROM framework_entities INDEXED BY framework_notification_owner_order WHERE collection='notifications' AND owner_id=? ORDER BY ordinal").all(ownerId).map(row=>{const item=decode(row);check(item.userId===ownerId,'INVALID_STATE','Notification owner index mismatch',500);return item;});

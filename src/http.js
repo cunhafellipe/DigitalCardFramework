@@ -97,9 +97,9 @@ export function createApiHandler({framework,currencyGateway,codeGateway,resolveI
         else {
         const command=routes[path]; if(!command) throw new FrameworkError('NOT_FOUND','Unknown API route',404);
         if(requireTradeReview&&['acceptTrade','counterTrade'].includes(command)&&typeof input.expectedDigest!=='string')throw new FrameworkError('REVIEW_REQUIRED','Review the immutable trade contents first',409);
-        const asynchronous={purchase:'purchaseAsync',quoteListing:'quoteListingAsync',buyListing:'buyListingAsync'}[command];
+        const asynchronous={purchase:'purchaseAsync',quoteListing:'quoteListingAsync',buyListing:'buyListingAsync',createListing:'createListingAsync'}[command];
         const target=asynchronous&&framework[asynchronous]?framework[asynchronous]:framework[command];
-        result=await (['quoteListing','buyListing'].includes(command)&&target===framework[asynchronous]?target.call(framework,actor,input,{signal:policyController.signal}):target.call(framework,actor,input));
+        result=await (['quoteListing','buyListing','createListing'].includes(command)&&target===framework[asynchronous]?target.call(framework,actor,input,{signal:policyController.signal}):target.call(framework,actor,input));
         }
       }
       response.end(JSON.stringify(result));

@@ -159,6 +159,16 @@ Embedded callers use `quoteListingAsync(actor, input, {signal})` and `buyListing
 
 Trusted SDK operators with `commerce.manage` can call `setRemotePolicyEnabled(actor, {hook: 'canPurchase', enabled: false})`. Disabling aborts evaluations and invalidates their grants; enabling creates a new generation. It cannot retract committed purchases. Runtime policy state is local to the framework instance; configure startup policy deliberately when restarting. Framework close aborts provider requests.
 
+### Remote listing creation policies
+
+Configure `remotePolicies.canList` with `scope: 'listing'`, `providerId`, `url` and `token` to require remote approval before creating listings. It uses [the listing policy protocol](listing-policy.schema.json), `digital-card-listing-policy@1`, separately from purchase approval. Both hooks can be configured together. Transport limits, HTTPS requirements and trusted credential handling match the purchase-policy bridge above.
+
+This gate covers owned copies, owned sealed packs, minted cards, minted packs and action listings. Preparation sends the actor and shop identifiers, price and requested stock identifiers, kind and quantity. Action parameters, bindings and code secrets are excluded. Evaluation happens before allocation, code assignment, binding factories or randomness; an allowed decision does not replace native authority, stock, supply, currency or administrator checks. Commit rejects changed dependencies and invalidated policy grants before creating the listing and its completion reservations.
+
+Embedded callers use `createListingAsync(actor, input, {signal})`. A configured remote creation policy causes synchronous `createListing` to reject new work with `POLICY_ASYNC_REQUIRED`; authenticated committed-key replay remains available. Reuse the original command key and input after an uncertain response. A stale decision requires a fresh review; the framework does not retry evaluation automatically. Existing direct `policies.canList` also applies at commit. This permission gate does not let the provider choose allocation results or odds.
+
+Use `setRemotePolicyEnabled(actor, {hook: 'canList', enabled: false})` from a trusted SDK operator with `commerce.manage` to stop evaluations. Disabling invalidates in-flight grants; committed listings remain. Runtime enable state belongs to the framework instance, so startup configuration must be set deliberately after restart.
+
 ### Remote currency providers
 
 The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:

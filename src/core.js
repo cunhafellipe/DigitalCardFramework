@@ -24,6 +24,8 @@ import {cardBehavior} from './card-types.js';
 import {CodeService,codeStockAvailable,codeSummary,codeTransferReason} from './codes.js';
 import {createRemotePurchasePolicy} from './remote-purchase-policy.js';
 import {PolicyProposalCoordinator} from './policy-proposals.js';
+import {createRemoteListingPolicy} from './remote-listing-policy.js';
+import {listingPolicyProtocol,validateListingPolicyRequest} from './listing-policy-contracts.js';
 
 const clone = value => structuredClone(value);
 const id = () => randomUUID();
@@ -35,7 +37,7 @@ function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 export class CardFramework {
-  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;
+  #store; #clock; #random; #bindings; #policies; #limits; #codes; #actions; #subscriptions; #commerce; #cardPolicies; #administration; #externalPurchases;#commandIntents;#workerPlanCache;#remotePurchasePolicy;#remoteListingPolicy;
   constructor({store=new MemoryStore(), clock=nowISO, random=randomInt, bindings={}, policies={},limits={},codeVault,codeLimits={},codeGenerators={},actionHandlers={},actionOptions={},eventSubscriptions=[],raffleRandom=randomInt,externalPurchaseProviders={},externalPurchaseLimits={},remotePolicies={}}={}) {
     this.#store=store; this.#clock=clock; this.#random=random;
     this.#cardPolicies=new CardPolicyService({read:fn=>store.read(fn),operate:(...args)=>this.#operatorCommand(...args),clock});
@@ -50,15 +52,18 @@ export class CardFramework {
     this.#actions=new ActionService({store,clock,handlers:actionHandlers,options:actionOptions,limits:this.#limits});
     this.#codes=new CodeService({store,vault:codeVault,clock,generators:codeGenerators,...codeLimits,emit:(s,type,data,at)=>this.#event(s,type,data,at)});
     this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
-    check(remotePolicies&&typeof remotePolicies==='object'&&!Array.isArray(remotePolicies)&&(Object.getPrototypeOf(remotePolicies)===Object.prototype||Object.getPrototypeOf(remotePolicies)===null)&&Object.keys(remotePolicies).every(hook=>hook==='canPurchase'),'POLICY_UNSUPPORTED','Only remote listing purchase policies are supported');
+    check(remotePolicies&&typeof remotePolicies==='object'&&!Array.isArray(remotePolicies)&&(Object.getPrototypeOf(remotePolicies)===Object.prototype||Object.getPrototypeOf(remotePolicies)===null)&&Object.keys(remotePolicies).every(hook=>['canPurchase','canList'].includes(hook)),'POLICY_UNSUPPORTED','Only remote listing purchase and creation policies are supported');
     if(Object.hasOwn(remotePolicies,'canPurchase'))this.#remotePurchasePolicy=createRemotePurchasePolicy(remotePolicies.canPurchase);
+    if(Object.hasOwn(remotePolicies,'canList'))this.#remoteListingPolicy=createRemoteListingPolicy(remotePolicies.canList);
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
       raffleCommand:(actor,key,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn),
       raffleOperator:(actor,key,permission,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn,'draw'),
       raffleRead:(actor,input,fn)=>this.#raffleRecords(actor,null,null,input,fn,'read'),
       cancelListingCommand:(actor,key,type,input,fn)=>this.#cancelListingRecords(actor,key,input,fn),
-      createListingCommand:(actor,key,type,input,fn)=>this.#createListingRecords(actor,key,input,fn),
+      createListingCommand:(actor,key,type,input,fn,receipt)=>this.#createListingRecords(actor,key,input,fn,true,receipt),
+      createListingRead:(actor,input,fn)=>this.#createListingRecords(actor,null,input,fn,false),
+      creationReceipt:(actor,key,input)=>this.#purchaseReceipt(actor,key,input,'listing.created'),
       listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn,receipt)=>this.#listingRecords(actor,key,input,fn,true,receipt),
       purchaseReceipt:(actor,key,input)=>this.#purchaseReceipt(actor,key,input),
       selectDueExpirations:(collection,at,limit)=>store.selectDueExpirations?store.selectDueExpirations(collection,at,limit):store.read(s=>Object.values(s[collection]??{}).filter(l=>l.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(date=>Date.parse(date)<=Date.parse(at))).slice(0,limit).map(l=>l.id)),expireListing:(listingId,release)=>this.#expireListingRecords(listingId,release),
@@ -73,8 +78,9 @@ export class CardFramework {
       checkResale:(s,from,to,units,price)=>{if(price.amount>0)check(this.#currency(s,price.currencyId).tradable===true,'TRANSFER_BLOCKED','Resale currency is not tradable',403);const copyIds=units.flatMap(unit=>unit.kind==='copy'?[unit.copyId]:s.packs[unit.packId].copyIds);this.#checkTrade(s,{channel:'sale',fromUserId:from,toUserId:to,give:{copyIds,currencies:[]},receive:{copyIds:[],currencies:price.amount>0?[price]:[]}});s.users[from].lastTradeAt=this.#clock();s.users[to].lastTradeAt=this.#clock();},
       deliverCopy:(...args)=>this.#deliverCopy(...args),deliverPack:(...args)=>this.#deliverPack(...args),
       canList:policies.canList,canPurchase:policies.canPurchase,
-    },{random:raffleRandom,remotePolicy:this.#remotePurchasePolicy,policyCoordinator:this.#remotePurchasePolicy?new PolicyProposalCoordinator(this.#remotePurchasePolicy):undefined});
-    this.#commandIntents=new CommandIntentService({store,clock,limits:this.#limits,admit:(s,completion)=>this.#capacity(s,completion),execute:(actor,command,input)=>this[command==='preferences'?'setPreferences':command](actor,input),executeAsync:(actor,command,input,options)=>this[command==='purchase'?'purchaseAsync':command==='buyListing'?'buyListingAsync':command==='preferences'?'setPreferences':command](actor,input,options),completion:(s,actor,command,input)=>!!(input.key&&(s.requests[actor.userId+':'+input.key]||s.operatorRequests?.[actor.userId+':'+input.key]))||command==='openPack'&&Object.hasOwn(s.packs,input.packId)&&s.packs[input.packId]&&!s.packs[input.packId].receipt||['acceptTrade','cancelTrade'].includes(command)&&s.trades[input.tradeId]?.status==='pending'||command==='cancelListing'&&s.listings?.[input.listingId]?.status==='active'});
+    },{random:raffleRandom,remotePolicy:this.#remotePurchasePolicy,policyCoordinator:this.#remotePurchasePolicy?new PolicyProposalCoordinator(this.#remotePurchasePolicy):undefined,
+      remoteListingPolicy:this.#remoteListingPolicy,listingPolicyCoordinator:this.#remoteListingPolicy?new PolicyProposalCoordinator(this.#remoteListingPolicy,{protocol:listingPolicyProtocol,operation:'canList',validateRequest:validateListingPolicyRequest}):undefined});
+    this.#commandIntents=new CommandIntentService({store,clock,limits:this.#limits,admit:(s,completion)=>this.#capacity(s,completion),execute:(actor,command,input)=>this[command==='preferences'?'setPreferences':command](actor,input),executeAsync:(actor,command,input,options)=>this[command==='purchase'?'purchaseAsync':command==='buyListing'?'buyListingAsync':command==='createListing'?'createListingAsync':command==='preferences'?'setPreferences':command](actor,input,options),completion:(s,actor,command,input)=>!!(input.key&&(s.requests[actor.userId+':'+input.key]||s.operatorRequests?.[actor.userId+':'+input.key]))||command==='openPack'&&Object.hasOwn(s.packs,input.packId)&&s.packs[input.packId]&&!s.packs[input.packId].receipt||['acceptTrade','cancelTrade'].includes(command)&&s.trades[input.tradeId]?.status==='pending'||command==='cancelListing'&&s.listings?.[input.listingId]?.status==='active'});
 
   }
   adminOverview(actor){return this.#administration.overview(actor);}
@@ -101,15 +107,16 @@ export class CardFramework {
   setShopEnabled(actor,input){return this.#commerce.setShop(actor,input);}
   shops(actor,options){return this.#commerce.shops(actor,options);}
   createListing(actor,input){return this.#commerce.createListing(actor,input);}
+  createListingAsync(actor,input,options){return this.#commerce.createListingAsync(actor,input,options);}
   listings(actor,options){return this.#commerce.listings(actor,options);}
   quoteListing(actor,input){return this.#commerce.quote(actor,input);}
   buyListing(actor,input){return this.#commerce.buy(actor,input);}
   quoteListingAsync(actor,input,options){return this.#commerce.quoteAsync(actor,input,options);}
   buyListingAsync(actor,input,options){return this.#commerce.buyAsync(actor,input,options);}
-  setRemotePolicyEnabled(actor,{hook,enabled}){this.#admin(actor,'commerce.manage');check(hook==='canPurchase'&&this.#remotePurchasePolicy,'POLICY_UNSUPPORTED','Remote listing purchase policy is not configured');return this.#remotePurchasePolicy.setEnabled(enabled);}
-  #purchaseReceipt(actor,key,input){
+  setRemotePolicyEnabled(actor,{hook,enabled}){this.#admin(actor,'commerce.manage');const provider=hook==='canPurchase'?this.#remotePurchasePolicy:hook==='canList'?this.#remoteListingPolicy:null;check(provider,'POLICY_UNSUPPORTED','Remote policy is not configured');return provider.setEnabled(enabled);}
+  #purchaseReceipt(actor,key,input,type='shop.purchased'){
     text(key,'idempotency key',128);
-    return this.#query(q=>{const user=this.#queryUser(q,actor),previous=q.get('requests',user.id+':'+key);if(!previous)return {found:false};check(previous.hash===fingerprint({type:'shop.purchased',input}),'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return {found:true,result:previous.result};});
+    return this.#query(q=>{const user=this.#queryUser(q,actor),previous=q.get('requests',user.id+':'+key);if(!previous)return {found:false};check(previous.hash===fingerprint({type,input}),'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return {found:true,result:previous.result};});
   }
   orders(actor,options){return this.#commerce.orders(actor,options);}
   cancelListing(actor,input){return this.#commerce.cancel(actor,input);}
@@ -197,7 +204,7 @@ export class CardFramework {
       return {count};
     });
   }
-  close() { this.#remotePurchasePolicy?.close();this.#store.close(); }
+  close() { this.#remotePurchasePolicy?.close();this.#remoteListingPolicy?.close();this.#store.close(); }
   audit(actor){this.#admin(actor,'audit.read');return this.#store.read(auditState);}
   #admin(actor,permission) { check(hasPermission(actor,permission),'FORBIDDEN','Operator authority required: '+permission,403); }
   #user(s,actor) {
@@ -969,12 +976,13 @@ export class CardFramework {
       }finally{recordContexts.delete(state);}
     },{raffle:true,raffleDraw:drawing});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
   }
-  #createListingRecords(actor,key,input,fn){
-    const type='listing.created',fallback=()=>this.#command(actor,key,type,input,fn);text(key,'idempotency key',128);
+  #createListingRecords(actor,key,input,fn,creating=true,receipt){
+    const type='listing.created',fallback=()=>creating?this.#command(actor,key,type,input,fn,receipt):this.#store.read(s=>fn(s,this.#user(s,actor)));if(creating)text(key,'idempotency key',128);
     if(!this.#store.transactRecords)return fallback();let invoked=false;
-    try{return this.#store.transactRecords(tx=>{
+    const run=creating?(fn,options)=>this.#store.transactRecords(fn,options):fn=>this.#query(q=>fn({...q,ownerCounts:id=>q.collectionCounts(id)}));
+    try{return run(tx=>{
       const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input}),previous=tx.get('requests',token);
-      if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
+      if(creating&&previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
       let accounting;const raw=tx.value(recordAccountingField);try{accounting=JSON.parse(raw);}catch{}
       if(raw!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);
       check(validRecordAccounting(accounting,tx.value('revision'))&&tx.value('_listingCreationReady')===true&&tx.value('_listingCreationRevision')===accounting.revision,'RECORD_PATH_UNAVAILABLE','Prepare listing creation projections',503);
@@ -995,13 +1003,13 @@ export class CardFramework {
       const part=summarizeRecords(state);for(const field of ['copies','packs','shops'])accounting.counts[field]-=part.counts[field]??0;for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
       const quantity=Number.isSafeInteger(items.quantity)?items.quantity:0,draws=items.kind==='mint-pack'?quantity*(product?.slots.reduce((n,slot)=>n+slot.count,0)??0):items.kind==='mint-card'?quantity:0;
       check(copyIds.size*5+draws*12+Object.keys(state.codes).length*2+quantity*3<2800&&Buffer.byteLength(JSON.stringify(state))<4*1024*1024,'RECORD_PATH_UNAVAILABLE','Listing creation requires compatibility scope',409);
-      const codeCount=tx.count('codes')-Object.keys(state.codes).length,activeShopListings=shop?(tx.get('_shopListingCounts',shop.id)??0):0;
+      const codeCount=(creating?tx.count('codes'):accounting.counts.codes??0)-Object.keys(state.codes).length,activeShopListings=shop?(tx.get('_shopListingCounts',shop.id)??0):0;
       recordContexts.set(state,{accounting,ownerCountsById,activeShopListings,codeCount,codeIdentityExists:(fingerprint,providerId,externalId)=>!!tx.get('_codeIdentities',JSON.stringify(['fingerprint',fingerprint]))||!!(externalId&&tx.get('_codeIdentities',JSON.stringify(['external',providerId,externalId])))});
-      try{invoked=true;const result=fn(state,user);this.#reserve(state,'listing',result.id);state.requests[token]={hash,result:clone(result)};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
+      try{invoked=true;const result=fn(state,user);if(!creating)return result;this.#reserve(state,'listing',result.id);state.requests[token]={hash,result:clone(result),...(receipt?.policyAdmission?{policyAdmission:clone(receipt.policyAdmission)}:{})};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
         for(const field of ['supply','pity','copies','packs','codes','listings','requests','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);
         for(const row of state.events)tx.append('events',row);return result;
       }finally{recordContexts.delete(state);}
-    },{listingCreation:true});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+    },creating?{listingCreation:true}:{});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
   }
   #listingRecords(actor,key,input,fn,purchasing=true,receipt){
     const type='shop.purchased';

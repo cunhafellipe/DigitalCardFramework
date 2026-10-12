@@ -88,6 +88,10 @@ export function memoryQueries(state) {
   };
   return {
     get,
+    availableCodeStock(poolId,limit,at){
+      check(typeof poolId==='string'&&Number.isSafeInteger(limit)&&limit>=1&&limit<=1000&&Number.isFinite(Date.parse(at)),'RECORD_PATH_UNAVAILABLE','Code stock scope requires bounded allocation',409);
+      return structuredClone(Object.values(state.codes??{}).filter(row=>row.poolId===poolId&&row.status==='available'&&(!row.expiresAt||Date.parse(row.expiresAt)>Date.parse(at))).slice(0,limit));
+    },
     notifications:ownerId=>structuredClone((state.notifications??[]).filter(row=>row.userId===ownerId)),
     codeHistoryEntries(holderId) {
       check(typeof holderId==='string','INVALID_INPUT','Invalid holder identifier');

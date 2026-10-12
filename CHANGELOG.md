@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added indexed action-delivery claims, completion and retries for prepared SQLite stores, retaining delivery identities, lease fencing and shared completion reservations. SQLite schema 5 migrates the action-work index atomically; stop writers and back up the database and encryption keys before upgrading. Older applications cannot open the upgraded database.
+
 - Added album cover, spine and page artwork authoring, editable design references, stable card-to-page assignments, book navigation and typed album contracts. Public artwork publication is separate from album visibility and saving.
 
 - Added bounded trade acceptance and counteroffers, including code-holder history, favorites and album cleanup with atomic escrow and recovery.

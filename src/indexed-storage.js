@@ -1,7 +1,7 @@
 import {check} from './catalog.js';
 import {projection, queryOptions} from './storage-query.js';
 
-export const STORAGE_SCHEMA = 4;
+export const STORAGE_SCHEMA = 5;
 export const schemaSqlV2 = `
 CREATE TABLE framework_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL,codec_check TEXT NOT NULL) STRICT;
 CREATE TABLE framework_fields(name TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('object','array','scalar')),payload TEXT) STRICT;
@@ -32,7 +32,14 @@ CREATE INDEX framework_code_membership ON framework_code_holders(collection,code
 `;
 export const schemaSqlV3 = schemaSqlV2 + codeHolderSchemaSql;
 export const notificationSchemaSql = "CREATE INDEX framework_notification_owner_order ON framework_entities(collection,owner_id,ordinal,entity_key);";
-export const schemaSql = schemaSqlV3 + notificationSchemaSql;
+export const schemaSqlV4 = schemaSqlV3 + notificationSchemaSql;
+export const actionSchemaSql = `
+CREATE TABLE framework_action_work(collection TEXT NOT NULL CHECK(collection='actionJobs'),job_key TEXT NOT NULL,ordinal INTEGER NOT NULL,due_at INTEGER,reservation_key TEXT,active INTEGER NOT NULL CHECK(active IN (0,1)),
+ PRIMARY KEY(job_key),FOREIGN KEY(collection,job_key) REFERENCES framework_entities(collection,entity_key) ON DELETE CASCADE) STRICT;
+CREATE INDEX framework_action_due ON framework_action_work(due_at,ordinal,job_key) WHERE due_at IS NOT NULL;
+CREATE INDEX framework_action_reservation ON framework_action_work(reservation_key,active);
+`;
+export const schemaSql = schemaSqlV4 + actionSchemaSql;
 
 const fieldName = value => {
   check(typeof value === 'string' && value.length <= 200 && !['__proto__','constructor','prototype'].includes(value), 'INVALID_STATE', 'Invalid state field', 500);
@@ -58,6 +65,7 @@ export function encodeEntity(collection,key,value,ordinal,codec,identityHash,key
   return {collection,key,storageKey:recordKey(collection,key,keyHash),value:item,ordinal,raw:JSON.stringify(item),
     bytes:encodedBytes(codec,wrapper(collection,key,item)),projected:projection(collection,key,item),
     identity:collection==='users'&&typeof item?.provider==='string'&&typeof item?.subject==='string'?identityHash(item.provider,item.subject):null,
+    actionReservation:collection==='actionJobs'&&(item.completionId??item.deliveryCompletionId)?keyHash('completionObligations',item.completionId??item.deliveryCompletionId):null,
     holders:collection==='codes'?[...new Set([item.holderId,...(item.holderHistory??[])].filter(id=>typeof id==='string'))].map(id=>keyHash('code-holder',id)):[]};
 }
 
@@ -80,6 +88,7 @@ export function encodeState(state, codec, identityHash, keyHash) {
         ? identityHash(item.provider, item.subject) : null;
       entities.set(JSON.stringify([name,key]), {collection:name, key, storageKey:recordKey(name,key,keyHash), value:item, ordinal:ordinal++, raw:JSON.stringify(item),
         bytes:encodedBytes(codec,wrapper(name,key,item)), identity, projected,
+        actionReservation:name==='actionJobs'&&(item.completionId??item.deliveryCompletionId)?keyHash('completionObligations',item.completionId??item.deliveryCompletionId):null,
         holders:name==='codes'?[...new Set([item.holderId,...(item.holderHistory??[])].filter(id=>typeof id==='string'))].map(id=>keyHash('code-holder',id)):[]});
     }
   }
@@ -129,13 +138,14 @@ export function writeDifference(db, before, after) {
   for (const [key,row] of after.entities) {
     const old=before.entities.get(key);
     if (old && old.raw===row.raw) {
-      if(row.collection==='notifications'?reorderedNotifications:old.ordinal!==row.ordinal){db.prepare('UPDATE framework_entities SET ordinal=? WHERE collection=? AND entity_key=?').run(row.ordinal,row.collection,row.storageKey);changed++;}
+      if(row.collection==='notifications'?reorderedNotifications:old.ordinal!==row.ordinal){db.prepare('UPDATE framework_entities SET ordinal=? WHERE collection=? AND entity_key=?').run(row.ordinal,row.collection,row.storageKey);if(row.collection==='actionJobs')writeActionWork(db,row);changed++;}
       continue;
     }
     const p=row.projected;
     const ordinal=row.collection==='notifications'&&!reorderedNotifications?(db.prepare("SELECT ordinal FROM framework_entities WHERE collection='notifications' AND entity_key=?").get(row.storageKey)?.ordinal??db.prepare("SELECT COALESCE(MAX(ordinal)+1,0) AS n FROM framework_entities WHERE collection='notifications'").get().n):row.ordinal;
     putEntity.run(row.collection,row.storageKey,ordinal,after.encode(row.collection,row.key,row.value),row.identity,p.ownerId,p.holderId,p.state,p.status,p.cardId,p.variantId,p.lineId,p.rarityId,p.poolId,p.providerId,p.createdAt,p.name,p.search,p.cardType);
     if(row.collection==='codes')writeCodeHolders(db,row);
+    if(row.collection==='actionJobs')writeActionWork(db,row);
     changed++;
   }
   return changed;
@@ -149,6 +159,11 @@ function writeCodeHolders(db,row) {
 export function migrateCodeHolders(db,encoded) {
   for(const row of encoded.entities.values())if(row.collection==='codes')writeCodeHolders(db,row);
 }
+function writeActionWork(db,row){
+  const job=row.value,due=job.status==='pending'?Date.parse(job.nextAt):job.status==='running'?Date.parse(job.leaseUntil):NaN;
+  db.prepare("INSERT INTO framework_action_work VALUES('actionJobs',?,?,?,?,?) ON CONFLICT(job_key) DO UPDATE SET ordinal=excluded.ordinal,due_at=excluded.due_at,reservation_key=excluded.reservation_key,active=excluded.active").run(row.storageKey,row.ordinal,Number.isFinite(due)?due:null,row.actionReservation,Number(['pending','running'].includes(job.status)));
+}
+export function migrateActionWork(db,encoded){for(const row of encoded.entities.values())if(row.collection==='actionJobs')writeActionWork(db,row);}
 
 const columns={ownerId:'owner_id',holderId:'holder_id',state:'state',status:'status',cardId:'card_id',variantId:'variant_id',lineId:'line_id',rarityId:'rarity_id',poolId:'pool_id',providerId:'provider_id'};
 export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {

@@ -1,6 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
 import {check} from './catalog.js';
-import {missingCompletions} from './completion.js';
+import {missingCompletions,deliveryBytes} from './completion.js';
 
 const fieldName=name=>check(typeof name==='string'&&name.length>0&&name.length<=200&&!['__proto__','constructor','prototype'].includes(name),'INVALID_INPUT','Invalid collection');
 const keyName=key=>check(typeof key==='string'&&key.length<=2048,'INVALID_INPUT','Invalid record key');
@@ -55,8 +55,24 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false}={}){
+export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false}={}){
   if(!plan.changes.length&&!plan.scalars.length&&!plan.completion)return;
+  if(actionDelivery){
+    check(!plan.scalars.length,'RECORD_TRANSACTION_UNSUPPORTED','Action delivery cannot mutate scalars',409);
+    const jobs=plan.changes.filter(row=>row.collection==='actionJobs'),reservations=plan.changes.filter(row=>row.collection==='completionObligations');
+    check(jobs.length===1&&jobs[0].old&&reservations.length===1&&reservations[0].old,'INVALID_STATE','Action delivery requires its existing job and reservation',500);
+    const job=jobs[0],reservation=reservations[0],id=job.old.value.completionId??job.old.value.deliveryCompletionId;
+    check(reservation.key===id&&reservation.old.value.status==='completed'&&reservation.value.status==='completed','INVALID_STATE','Action reservation identity differs',500);
+    const stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['status','attempts','totalAttempts','history','nextAt','leaseToken','leaseUntil','error','completedAt','retryCount'].includes(key)));
+    check(isDeepStrictEqual(stable(job.old.value),stable(job.value)),'INVALID_STATE','Action delivery identity is immutable',500);
+    for(const field of ['id','kind','entityId','status','events','jobs','subscriptions'])check(isDeepStrictEqual(reservation.old.value[field],reservation.value[field]),'INVALID_STATE','Action reservation terms differ',500);
+    check(reservation.value.bytes===reservation.old.value.bytes+(actionRetry?deliveryBytes:0)&&reservation.value.usedBytes>=reservation.old.value.usedBytes,'INVALID_STATE','Action reservation byte terms differ',500);
+    const requests=plan.changes.filter(row=>row.collection==='actionRetryRequests');
+    if(actionRetry){check(!plan.completion&&job.old.value.status==='dead'&&job.value.status==='pending'&&requests.length===1&&!requests[0].old&&requests[0].value.jobId===job.key,'INVALID_STATE','Action retry requires fresh ordinary admission',500);}
+    else check(plan.completion?.id===id&&!plan.completion.admission&&!requests.length&&['pending','running'].includes(job.old.value.status)&&['pending','running','dead','succeeded'].includes(job.value.status),'INVALID_STATE','Action delivery requires its admitted reservation',500);
+    check(plan.changes.length===2+requests.length,'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside action delivery scope',409);
+    return;
+  }
   if(tradeAcceptance||tradeCounter){check(!intent&&!preferences&&!packCompletion&&!tradeProposal&&!tradeCompletion&&!plan.scalars.length&&tradeAcceptance!==tradeCounter,'RECORD_TRANSACTION_UNSUPPORTED','Invalid exchange scope',409);return validateTradeExchange(plan,tradeCounter);}
   if(tradeProposal||tradeCompletion){
     check(!intent&&!preferences&&!packCompletion&&!plan.scalars.length&&tradeProposal!==tradeCompletion,'RECORD_TRANSACTION_UNSUPPORTED','Invalid trade scope',409);
@@ -136,6 +152,7 @@ export function createRecordTransaction(backend,{maxRecords=4096,maxBytes=16*102
     setScalar(name,value){const metadata=field(name);check(!metadata||metadata.kind==='scalar','INVALID_INPUT','Scalar field required');check(value!==undefined,'INVALID_INPUT','Cannot store undefined');scalars.set(name,{name,old:metadata?.value,value:clone(value)});},
     reserveIntentCompletion(id,{admission=false}={}){live();keyName(id);check(!completion,'INVALID_STATE','Only one intent reservation can fund a transaction',500);completion={id,admission};},
     reserveTradeCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
+    reserveActionCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
     reservePackCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
   };
   return {api,close(){active=false;},finish(){live();const changes=[...records.values()].filter(row=>!isDeepStrictEqual(row.old?.value,row.value)||completion&&row.collection==='completionObligations'&&row.key===completion.id);

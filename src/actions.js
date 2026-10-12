@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { check, integer, text, jsonObject } from "./catalog.js";
 import { hasPermission } from "./access.js";
 import { contentDigest } from "./importer.js";
+import {validRecordAccounting,recordAccountingField} from './record-accounting.js';
 import { page } from "./data.js";
 
 export function enqueueAction(
@@ -136,7 +137,7 @@ export class ActionService {
       );
     });
   }
-  retry(actor, { key, jobId }) {
+  #retryLegacy(actor, { key, jobId }) {
     operator(actor, "actions.manage");
     text(jobId, "job ID", 100);
     text(key, "retry key", 128);
@@ -190,7 +191,7 @@ export class ActionService {
       return result;
     });
   }
-  claim(actor) {
+  #claimLegacy(actor) {
     operator(actor, "actions.dispatch");
     const due = (j, now) =>
       (j.status === "pending" && Date.parse(j.nextAt) <= now) ||
@@ -208,7 +209,33 @@ export class ActionService {
         now = Date.parse(at);
       for (const j of Object.values(s.actionJobs ?? {})) {
         if (!due(j, now)) continue;
-        const claimed=this.#completeJob(s,j,()=>{
+        const claimed=this.#completeJob(s,j,()=>this.#startJob(j,at,now));
+        if(claimed)return claimed;
+      }
+      return null;
+    });
+  }
+  #settleLegacy(actor, { jobId, leaseToken, succeeded }) {
+    operator(actor, "actions.dispatch");
+    check(
+      typeof succeeded === "boolean",
+      "INVALID_INPUT",
+      "Delivery result must be boolean",
+    );
+    return this.#store.transact((s) => {
+      const j = s.actionJobs?.[jobId];
+      check(
+        j?.status === "running" &&
+          j.leaseToken === leaseToken &&
+          Date.parse(j.leaseUntil) > Date.parse(this.#clock()),
+        "ACTION_LEASE",
+        "Delivery lease is no longer current",
+        409,
+      );
+      return this.#completeJob(s,j,()=>this.#finishJob(j,succeeded));
+    });
+  }
+  #startJob(j,at,now){
         if (j.attempts >= this.#options.maxAttempts) {
           j.status = "dead";
           j.error =
@@ -235,30 +262,8 @@ export class ActionService {
         j.leaseToken = randomUUID();
         j.leaseUntil = new Date(now + this.#options.leaseMs).toISOString();
         return structuredClone(j);
-        });
-        if(claimed)return claimed;
-      }
-      return null;
-    });
   }
-  settle(actor, { jobId, leaseToken, succeeded }) {
-    operator(actor, "actions.dispatch");
-    check(
-      typeof succeeded === "boolean",
-      "INVALID_INPUT",
-      "Delivery result must be boolean",
-    );
-    return this.#store.transact((s) => {
-      const j = s.actionJobs?.[jobId];
-      check(
-        j?.status === "running" &&
-          j.leaseToken === leaseToken &&
-          Date.parse(j.leaseUntil) > Date.parse(this.#clock()),
-        "ACTION_LEASE",
-        "Delivery lease is no longer current",
-        409,
-      );
-      return this.#completeJob(s,j,()=>{
+  #finishJob(j,succeeded){
       j.leaseToken = null;
       j.leaseUntil = null;
       (j.history ??= []).push({
@@ -283,8 +288,55 @@ export class ActionService {
         ).toISOString();
       }
       return view(j);
-      });
-    });
+  }
+  #recordJob(tx,jobId,fn,{retry=false}={}){
+    const raw=tx.value(recordAccountingField);let summary;try{summary=JSON.parse(raw);}catch{}
+    check(validRecordAccounting(summary,tx.value('revision')),raw!==undefined&&(!summary||summary.version===3)?'INVALID_STATE':'RECORD_PATH_UNAVAILABLE','Action records require valid prepared accounting',503);
+    const j=tx.get('actionJobs',jobId);check(j,'NOT_FOUND','Action not found',404);
+    const id=j.completionId??j.deliveryCompletionId,row=id&&tx.get('completionObligations',id);
+    check(row?.status==='completed','RECORD_PATH_UNAVAILABLE','Action requires compatibility reservation recovery',503);
+    check(Number.isSafeInteger(row.bytes)&&Number.isSafeInteger(row.usedBytes)&&row.usedBytes>=0&&row.usedBytes<=row.bytes,'INVALID_STATE','Invalid completion byte accounting',500);
+    const result=fn(j,row);tx.put('actionJobs',jobId,j);tx.put('completionObligations',id,row);
+    if(!retry)tx.reserveActionCompletion(id);return result;
+  }
+  #actionOptions(retry=false){return {actionDelivery:true,actionRetry:retry,actionLimits:this.#limits,maxRecords:16,maxBytes:16*1024*1024};}
+  retry(actor,input){
+    if(!this.#store.selectDueActions)return this.#retryLegacy(actor,input);
+    operator(actor,'actions.manage');text(input.jobId,'job ID',100);text(input.key,'retry key',128);
+    const token=contentDigest({actorId:actor.userId??'operator',key:input.key});
+    try{return this.#store.transactRecords(tx=>{
+      const old=tx.get('actionRetryRequests',token);if(old){check(old.jobId===input.jobId,'IDEMPOTENCY_CONFLICT','Retry key already used',409);return old.result;}
+      check(tx.count('actionRetryRequests')<20000,'INSTALLATION_CAPACITY','Action retry capacity reached',507);
+      const result=this.#recordJob(tx,input.jobId,(j,row)=>{
+        check(j.status==='dead','ACTION_STATE','Only dead actions can be retried',409);
+        check((j.history?.length??0)<=1997,'INSTALLATION_CAPACITY','Action history capacity reached; operator review required',507);
+        row.bytes+=deliveryBytes;j.status='pending';j.attempts=0;j.nextAt=this.#clock();j.error=null;j.retryCount=(j.retryCount??0)+1;
+        (j.history??=[]).push({type:'retry-requested',at:this.#clock(),actorId:actor.userId??null});return view(j);
+      },{retry:true});
+      tx.put('actionRetryRequests',token,{jobId:input.jobId,result});return result;
+    },this.#actionOptions(true));}catch(error){if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#retryLegacy(actor,input);throw error;}
+  }
+  claim(actor){
+    if(!this.#store.selectDueActions)return this.#claimLegacy(actor);
+    operator(actor,'actions.dispatch');
+    const selected=this.#store.selectDueActions(this.#clock(),32);
+    for(const jobId of selected){
+      try{const result=this.#store.transactRecords(tx=>{
+        const at=this.#clock(),now=Date.parse(at),job=tx.get('actionJobs',jobId);
+        if(!job||!((job.status==='pending'&&Date.parse(job.nextAt)<=now)||(job.status==='running'&&Date.parse(job.leaseUntil)<=now)))return null;
+        return this.#recordJob(tx,jobId,j=>this.#startJob(j,at,now));
+      },this.#actionOptions());if(result)return result;}catch(error){if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#claimLegacy(actor);throw error;}
+    }
+    return null;
+  }
+  settle(actor,input){
+    if(!this.#store.selectDueActions)return this.#settleLegacy(actor,input);
+    operator(actor,'actions.dispatch');check(typeof input.succeeded==='boolean','INVALID_INPUT','Delivery result must be boolean');
+    try{return this.#store.transactRecords(tx=>{
+      const job=tx.get('actionJobs',input.jobId);
+      check(job?.status==='running'&&job.leaseToken===input.leaseToken&&Date.parse(job.leaseUntil)>Date.parse(this.#clock()),'ACTION_LEASE','Delivery lease is no longer current',409);
+      return this.#recordJob(tx,input.jobId,j=>this.#finishJob(j,input.succeeded));
+    },this.#actionOptions());}catch(error){if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#settleLegacy(actor,input);throw error;}
   }
   async dispatch(actor, { limit = 10, signal } = {}) {
     operator(actor, "actions.dispatch");

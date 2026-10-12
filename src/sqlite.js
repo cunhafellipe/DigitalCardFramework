@@ -12,14 +12,14 @@ import {FrameworkError,check} from './catalog.js';
 import {initialState} from './store.js';
 import {cloneResult,completionBytes,querySnapshot} from './storage-query.js';
 import {copySnapshotFiles} from './storage-snapshot.js';
-import {STORAGE_SCHEMA,schemaSql,schemaSqlV2,schemaSqlV3,notificationSchemaSql,codeHolderSchemaSql,migrateCodeHolders,encodeState,readState,writeDifference,sqliteQueries,storageRecordKey,decodeRecordEnvelope,encodedRecordBytes,encodeRecordPayload,encodeEntity} from './indexed-storage.js';
+import {STORAGE_SCHEMA,schemaSql,schemaSqlV2,schemaSqlV3,schemaSqlV4,actionSchemaSql,migrateActionWork,notificationSchemaSql,codeHolderSchemaSql,migrateCodeHolders,encodeState,readState,writeDifference,sqliteQueries,storageRecordKey,decodeRecordEnvelope,encodedRecordBytes,encodeRecordPayload,encodeEntity} from './indexed-storage.js';
 
 const emptyRecords=()=>({fields:new Map(),entities:new Map(),usedBytes:0});
 const marker={format:'digital-card.indexed-state',version:STORAGE_SCHEMA,recordKeys:'blind-v1'};
 const expectedSchemas=new Map();
 const schemaEntries=db=>db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all().filter(row=>row.name.startsWith('framework_')||row.tbl_name.startsWith('framework_')).map(row=>({...row,sql:row.sql?.replace(/\s+/g,' ').trim()}));
 function validateSchema(db,storageVersion) {
-  if(!expectedSchemas.has(storageVersion)){const model=new DatabaseSync(':memory:');try{model.exec(storageVersion===2?schemaSqlV2:storageVersion===3?schemaSqlV3:schemaSql);expectedSchemas.set(storageVersion,schemaEntries(model));}finally{model.close();}}
+  if(!expectedSchemas.has(storageVersion)){const model=new DatabaseSync(':memory:');try{model.exec(storageVersion===2?schemaSqlV2:storageVersion===3?schemaSqlV3:storageVersion===4?schemaSqlV4:schemaSql);expectedSchemas.set(storageVersion,schemaEntries(model));}finally{model.close();}}
   if(!isDeepStrictEqual(schemaEntries(db),expectedSchemas.get(storageVersion)))throw new Error('Database schema does not match its declared version');
 }
 function version(db) {
@@ -28,7 +28,7 @@ function version(db) {
   const tables=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row=>row.name));
   if(tables.has('framework_meta')){
     const row=db.prepare('SELECT schema_version,codec_check FROM framework_meta WHERE id=1').get();
-    if(!row||![2,3,STORAGE_SCHEMA].includes(row.schema_version)||pragma!==row.schema_version||tables.has('framework_state'))throw new Error('Unsupported database schema version');
+    if(!row||![2,3,4,STORAGE_SCHEMA].includes(row.schema_version)||pragma!==row.schema_version||tables.has('framework_state'))throw new Error('Unsupported database schema version');
     validateSchema(db,row.schema_version);
     return {version:row.schema_version,check:row.codec_check};
   }
@@ -87,7 +87,7 @@ export class SQLiteStore {
     this.#db=new DatabaseSync(path,{readOnly,timeout:5000});
     try {
       this.#db.exec('PRAGMA foreign_keys=ON;');
-      if(readOnly){this.#db.exec('BEGIN');const found=version(this.#db);this.#storageVersion=found.version;this.#authenticate(found);if(![3,STORAGE_SCHEMA].includes(found.version))throw new Error('Database migration requires writable access');this.#db.exec('COMMIT');return;}
+      if(readOnly){this.#db.exec('BEGIN');const found=version(this.#db);this.#storageVersion=found.version;this.#authenticate(found);if(![3,4,STORAGE_SCHEMA].includes(found.version))throw new Error('Database migration requires writable access');this.#db.exec('COMMIT');return;}
       this.#db.exec('BEGIN IMMEDIATE');
       try {
         const found=version(this.#db);this.#authenticate(found);
@@ -97,7 +97,8 @@ export class SQLiteStore {
           const encoded=encodeState(state,this.#codec,this.#identity,this.#recordKey);
           if(found.version>=2){
             if(found.version===2)this.#db.exec(codeHolderSchemaSql);
-            this.#db.exec(notificationSchemaSql);
+            if(found.version<4)this.#db.exec(notificationSchemaSql);
+            this.#db.exec(actionSchemaSql);migrateActionWork(this.#db,encoded);
             if(found.version===2)migrateCodeHolders(this.#db,encoded);
             if(this.#db.prepare("SELECT payload,owner_id FROM framework_entities WHERE collection='notifications'").all().some(row=>{const envelope=this.#codec.decode(row.payload);return envelope.key!==envelope.value.id||row.owner_id!==envelope.value.userId;})){
               const oldBytes=this.#db.prepare("SELECT COALESCE(SUM(length(CAST(payload AS BLOB))),0) AS n FROM framework_entities WHERE collection='notifications'").get().n;
@@ -142,6 +143,11 @@ export class SQLiteStore {
   }
   read(fn) {return this.#snapshot(()=>{this.#materializations++;return fn(readState(this.#db,this.#codec,this.#recordKey));});}
   query(fn) {return this.#snapshot(()=>querySnapshot(sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey,()=>this.#decoded++),fn));}
+  selectDueActions(at,limit=32){
+    check(this.#storageVersion>=5,'RECORD_MIGRATION_REQUIRED','Action selection requires writable schema migration',503);
+    check(Number.isFinite(Date.parse(at))&&Number.isSafeInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Invalid action selection');
+    return this.#snapshot(()=>this.#db.prepare("SELECT e.entity_key,e.payload FROM framework_action_work AS w INDEXED BY framework_action_due JOIN framework_entities AS e ON e.collection=w.collection AND e.entity_key=w.job_key WHERE w.due_at IS NOT NULL AND w.due_at<=? ORDER BY w.due_at,w.ordinal,w.job_key LIMIT ?").all(Date.parse(at),limit).map(row=>{this.#decoded++;return decodeRecordEnvelope(this.#codec,row.payload,'actionJobs',row.entity_key,this.#recordKey).key;}));
+  }
   measure(state) {const usedBytes=encodeState(state,this.#codec,this.#identity,this.#recordKey).usedBytes,reservedBytes=completionBytes(state);const pool=completionPool(state);return {usedBytes,reservedBytes,totalBytes:usedBytes+reservedBytes,limitBytes:this.#maxBytes,completionStoredBytes:pool.storedBytes,completionReservedBytes:pool.reservedBytes,completionLimitBytes:this.#maxCompletionBytes};}
   assertCapacity(state,{previous}={}) {
     const measured=this.measure(state);
@@ -199,6 +205,7 @@ export class SQLiteStore {
         field:(name,charge)=>{const row=this.#db.prepare('SELECT kind,payload FROM framework_fields WHERE name=?').get(name);if(!row)return undefined;return {...row,...(row.kind==='scalar'?{value:decode(row,name,null,charge).value}:{})};},
         record:(name,key,charge)=>{const storageKey=storageRecordKey(name,key,this.#recordKey),row=this.#db.prepare('SELECT ordinal,payload FROM framework_entities WHERE collection=? AND entity_key=?').get(name,storageKey);const envelope=decode(row,name,storageKey,charge);return row?{value:envelope.value,ordinal:row.ordinal}:undefined;},
         entries:(name,charge)=>{const rows=[];for(const row of this.#db.prepare('SELECT entity_key,ordinal,payload FROM framework_entities WHERE collection=? ORDER BY ordinal').iterate(name)){const envelope=decode(row,name,row.entity_key,charge);rows.push({key:envelope.key,value:envelope.value,ordinal:row.ordinal});}return rows;},
+        activeActionCount:id=>this.#db.prepare("SELECT COUNT(*) AS n FROM framework_action_work INDEXED BY framework_action_reservation WHERE reservation_key=? AND active=1").get(this.#recordKey('completionObligations',id)).n,
         count:name=>this.#db.prepare('SELECT COUNT(*) AS n FROM framework_entities WHERE collection=?').get(name).n,
         nextOrdinal:name=>this.#db.prepare('SELECT COALESCE(MAX(ordinal)+1,0) AS n FROM framework_entities WHERE collection=?').get(name).n,
         ownerCounts:ownerId=>sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey).collectionCounts(ownerId),
@@ -227,6 +234,13 @@ export class SQLiteStore {
           if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);
         }
         const oldPart=summarizeRecords(previousPartial);
+        // The selected job may share a completion with unselected siblings.
+        const actionObligation=options.actionDelivery&&plan.changes.find(row=>row.collection==='completionObligations');
+        const actionJob=options.actionDelivery&&plan.changes.find(row=>row.collection==='actionJobs');
+        const activeBefore=actionObligation?backend.activeActionCount(actionObligation.key):0;
+        const activeAfter=activeBefore+(actionJob?Number(['pending','running'].includes(actionJob.value.status))-Number(['pending','running'].includes(actionJob.old.value.status)):0);
+        const awaitingIntent=actionObligation?.value.kind==='intent'&&scope.api.get('commandIntents',actionObligation.value.entityId)?.state!=='acknowledged';
+        if(actionObligation)oldPart.completion.reservedBytes=activeBefore>0||awaitingIntent?actionObligation.old.value.bytes-actionObligation.old.value.usedBytes:0;
         summary.revision=revision+1;
         const scalar=(name,old,value)=>{before.fields.set(name,{kind:'scalar',raw:JSON.stringify(old),value:old});after.fields.set(name,{kind:'scalar',raw:JSON.stringify(value),value});};
         scalar('revision',revision,summary.revision);
@@ -236,7 +250,7 @@ export class SQLiteStore {
         const completionRow=plan.completion&&plan.changes.find(row=>row.collection==='completionObligations'&&row.key===plan.completion.id),priorUsed=completionRow?.old?.value.usedBytes??0;
         let stabilized=false;
         for(let i=0;i<24;i++){
-          const added=summarizeRecords(partial);check(added.missingCompletions===0,'COMPLETION_MIGRATION_REQUIRED','New obligations require completion reservations',503);
+          const added=summarizeRecords(partial);if(actionObligation)added.completion.reservedBytes=activeAfter>0||awaitingIntent?actionObligation.value.bytes-actionObligation.value.usedBytes:0;check(added.missingCompletions===0,'COMPLETION_MIGRATION_REQUIRED','New obligations require completion reservations',503);
           for(const key of ['ordinaryRequests','ordinaryJobs','ordinaryEvents'])summary[key]=previousSummary[key]+added[key]-oldPart[key];
           for(const key of Object.keys(summary.workers))summary.workers[key]=previousSummary.workers[key]+added.workers[key]-oldPart.workers[key];
           for(const key of Object.keys(summary.completion))summary.completion[key]=previousSummary.completion[key]+added.completion[key]-oldPart.completion[key];
@@ -247,10 +261,12 @@ export class SQLiteStore {
           if(completionRow&&consumed!==completionRow.value.usedBytes){const token=JSON.stringify([completionRow.collection,completionRow.key]),oldBytes=after.entities.get(token).bytes;completionRow.value.usedBytes=consumed;const encoded=encodeEntity(completionRow.collection,completionRow.key,completionRow.value,completionRow.ordinal,this.#codec,this.#identity,this.#recordKey);after.entities.set(token,encoded);delta+=encoded.bytes-oldBytes;}
         }
         check(stabilized,'INVALID_STATE','Record accounting did not stabilize',500);
+        check(validRecordAccounting(summary,revision+1),'INVALID_STATE','Record accounting counters are invalid',500);
         scalar(recordAccountingField,oldAccounting,JSON.stringify(summary));
         const total=summary.usedBytes+summary.externalReservedBytes,previousTotal=previousSummary.usedBytes+previousSummary.externalReservedBytes;
         const allowance=completionRow?Math.max(0,completionRow.value.usedBytes-priorUsed):0;
         check(total<=this.#maxBytes||total<=previousTotal+allowance,'STORAGE_CAPACITY','Installation capacity reached; existing completion reservations are retained',507);
+        if(options.actionLimits){const limits=options.actionLimits;for(const [key,limit]of [['obligations','completionObligations'],['requests','completionRequests'],['jobs','completionJobs'],['events','completionEvents']])check(summary.completion[key]<=limits[limit],'COMPLETION_CAPACITY','Completion record capacity reached',507);check(summary.completion.storedBytes+summary.completion.reservedBytes<=limits.completionBytes,'COMPLETION_CAPACITY','Completion byte capacity reached',507);}
         check(summary.completion.storedBytes+summary.completion.reservedBytes<=this.#maxCompletionBytes&&total+summary.completion.reservedBytes<=this.#maxBytes+this.#maxCompletionBytes,'COMPLETION_CAPACITY','Completion storage capacity reached',507);
         this.#writes+=writeDifference(this.#db,before,after);
       }

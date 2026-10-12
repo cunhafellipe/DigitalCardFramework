@@ -34,6 +34,16 @@ Encrypted `_copyReferences` rows identify each copy's favorite-account and album
 
 `counterTrade` refunds and unlocks the original offer, then admits and reserves the new offer in one transaction. Its new receipt, escrow and ordinary event require ordinary capacity; it cannot spend the old trade's reservation to admit new work. The original offer remains unchanged if review, policy, funding or capacity checks fail. An expired acceptance still releases its existing obligation. Exact-key replay remains available without rebuilding projections.
 
+## Action delivery
+
+Prepared SQLite stores claim, settle and retry actions through addressed record transactions. Schema 5 maintains an index of due pending jobs and expired running leases. Each claim examines at most 32 candidates, ordered by due time and stable insertion order, and rechecks status and lease under the write transaction. Exhausted candidates become dead; later worker cycles continue through the remaining queue. Empty selection performs no write.
+
+Handlers still execute outside the database transaction with the original job ID as their downstream idempotency key. Settlement rejects expired or replaced leases. Shared completion capacity remains reserved while sibling jobs are active or a parent intent awaits acknowledgment. A manual retry admits new reserved capacity and retains its original keyed result for replay.
+
+Run preparation during planned maintenance to enable this path. Unprepared stores and legacy reservations use compatibility recovery, which may scan installation state. MemoryStore retains its snapshot implementation. SQLite database calls remain synchronous; these changes do not establish off-thread execution or bounded automatic expiration.
+
+Stop all writers and retain a database/key backup before upgrading. Writable opens migrate existing indexed schemas atomically to schema 5; older application versions cannot open the upgraded database. Restore the pre-upgrade backup with its matching application and keys if rollback is required.
+
 ## Preparation and mixed writers
 
 Call `store.prepareRecordTransactions()` during planned writable maintenance to establish revision-bound capacity accounting. The first incremental purchase, new preferences command or trade admission also prepares it when absent or stale. Preparation scans installation state and consumes ordinary storage capacity; insufficient capacity fails atomically. Read-only inspection does not prepare or modify a database. Preparation is a separate metadata migration; it can remain committed even if subsequent command validation fails, without committing that command's domain changes.

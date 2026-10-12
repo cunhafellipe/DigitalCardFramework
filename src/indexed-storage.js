@@ -1,7 +1,7 @@
 import {check} from './catalog.js';
 import {projection, queryOptions} from './storage-query.js';
 
-export const STORAGE_SCHEMA = 5;
+export const STORAGE_SCHEMA = 6;
 export const schemaSqlV2 = `
 CREATE TABLE framework_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL,codec_check TEXT NOT NULL) STRICT;
 CREATE TABLE framework_fields(name TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('object','array','scalar')),payload TEXT) STRICT;
@@ -39,7 +39,13 @@ CREATE TABLE framework_action_work(collection TEXT NOT NULL CHECK(collection='ac
 CREATE INDEX framework_action_due ON framework_action_work(due_at,ordinal,job_key) WHERE due_at IS NOT NULL;
 CREATE INDEX framework_action_reservation ON framework_action_work(reservation_key,active);
 `;
-export const schemaSql = schemaSqlV4 + actionSchemaSql;
+export const schemaSqlV5 = schemaSqlV4 + actionSchemaSql;
+export const expirationSchemaSql = `
+CREATE TABLE framework_expiration_work(collection TEXT NOT NULL CHECK(collection IN ('trades','listings')),entity_key TEXT NOT NULL,ordinal INTEGER NOT NULL,due_at INTEGER,
+ PRIMARY KEY(collection,entity_key),FOREIGN KEY(collection,entity_key) REFERENCES framework_entities(collection,entity_key) ON DELETE CASCADE) STRICT;
+CREATE INDEX framework_expiration_due ON framework_expiration_work(collection,due_at,ordinal,entity_key) WHERE due_at IS NOT NULL;
+`;
+export const schemaSql = schemaSqlV5 + expirationSchemaSql;
 
 const fieldName = value => {
   check(typeof value === 'string' && value.length <= 200 && !['__proto__','constructor','prototype'].includes(value), 'INVALID_STATE', 'Invalid state field', 500);
@@ -138,7 +144,7 @@ export function writeDifference(db, before, after) {
   for (const [key,row] of after.entities) {
     const old=before.entities.get(key);
     if (old && old.raw===row.raw) {
-      if(row.collection==='notifications'?reorderedNotifications:old.ordinal!==row.ordinal){db.prepare('UPDATE framework_entities SET ordinal=? WHERE collection=? AND entity_key=?').run(row.ordinal,row.collection,row.storageKey);if(row.collection==='actionJobs')writeActionWork(db,row);changed++;}
+      if(row.collection==='notifications'?reorderedNotifications:old.ordinal!==row.ordinal){db.prepare('UPDATE framework_entities SET ordinal=? WHERE collection=? AND entity_key=?').run(row.ordinal,row.collection,row.storageKey);if(row.collection==='actionJobs')writeActionWork(db,row);if(['trades','listings'].includes(row.collection))writeExpirationWork(db,row);changed++;}
       continue;
     }
     const p=row.projected;
@@ -146,6 +152,7 @@ export function writeDifference(db, before, after) {
     putEntity.run(row.collection,row.storageKey,ordinal,after.encode(row.collection,row.key,row.value),row.identity,p.ownerId,p.holderId,p.state,p.status,p.cardId,p.variantId,p.lineId,p.rarityId,p.poolId,p.providerId,p.createdAt,p.name,p.search,p.cardType);
     if(row.collection==='codes')writeCodeHolders(db,row);
     if(row.collection==='actionJobs')writeActionWork(db,row);
+    if(['trades','listings'].includes(row.collection))writeExpirationWork(db,row);
     changed++;
   }
   return changed;
@@ -164,6 +171,11 @@ function writeActionWork(db,row){
   db.prepare("INSERT INTO framework_action_work VALUES('actionJobs',?,?,?,?,?) ON CONFLICT(job_key) DO UPDATE SET ordinal=excluded.ordinal,due_at=excluded.due_at,reservation_key=excluded.reservation_key,active=excluded.active").run(row.storageKey,row.ordinal,Number.isFinite(due)?due:null,row.actionReservation,Number(['pending','running'].includes(job.status)));
 }
 export function migrateActionWork(db,encoded){for(const row of encoded.entities.values())if(row.collection==='actionJobs')writeActionWork(db,row);}
+function writeExpirationWork(db,row){
+  const value=row.value,times=row.collection==='trades'?(value.status==='pending'?[Date.parse(value.expiresAt)]:[]):value.status==='active'?[Date.parse(value.endsAt),Date.parse(value.draw?.claimUntil)]:[],finite=times.filter(Number.isFinite);
+  db.prepare('INSERT INTO framework_expiration_work VALUES(?,?,?,?) ON CONFLICT(collection,entity_key) DO UPDATE SET ordinal=excluded.ordinal,due_at=excluded.due_at').run(row.collection,row.storageKey,row.ordinal,finite.length?Math.min(...finite):null);
+}
+export function migrateExpirationWork(db,encoded){for(const row of encoded.entities.values())if(['trades','listings'].includes(row.collection))writeExpirationWork(db,row);}
 
 const columns={ownerId:'owner_id',holderId:'holder_id',state:'state',status:'status',cardId:'card_id',variantId:'variant_id',lineId:'line_id',rarityId:'rarity_id',poolId:'pool_id',providerId:'provider_id'};
 export function sqliteQueries(db,codec,identityHash,keyHash,onDecode=()=>{}) {

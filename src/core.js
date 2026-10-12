@@ -50,6 +50,7 @@ export class CardFramework {
     this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
+      selectDueExpirations:(collection,at,limit)=>store.selectDueExpirations?store.selectDueExpirations(collection,at,limit):store.read(s=>Object.values(s[collection]??{}).filter(l=>l.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(date=>Date.parse(date)<=Date.parse(at))).slice(0,limit).map(l=>l.id)),expireListing:(listingId,release)=>this.#expireListingRecords(listingId,release),
       user:(s,a)=>this.#user(s,a),currency:(s,id)=>this.#currency(s,id),blocked:(s,a,b)=>this.#blocked(s,a,b),
       command:(...args)=>this.#command(...args),operator:(...args)=>this.#operatorCommand(...args),
       mint:(...args)=>this.#mint(...args),allocatePacks:(...args)=>this.#allocatePacks(...args),
@@ -872,11 +873,11 @@ export class CardFramework {
       return trade;
   }
   #tradeRecords(actor,key,type,input,fallback){
-    if(!this.#store.transactRecords)return fallback();text(key,'idempotency key',128);const proposal=type==='trade.proposed',counter=type==='trade.countered',accepting=type==='trade.accepted',admission=proposal||counter;
+    if(!this.#store.transactRecords)return fallback();const expiring=type==='trade.expired';if(!expiring)text(key,'idempotency key',128);const proposal=type==='trade.proposed',counter=type==='trade.countered',accepting=type==='trade.accepted',admission=proposal||counter;
     const execute=()=>this.#store.transactRecords(tx=>{
-      const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input}),previous=tx.get('requests',token);if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
-      let accounting;try{accounting=JSON.parse(tx.value(recordAccountingField));}catch{}check(validRecordAccounting(accounting,tx.value('revision')),admission?'RECORD_MIGRATION_REQUIRED':'RECORD_PATH_UNAVAILABLE','Prepare revision-bound record accounting',503);
-      let trade;if(!proposal){trade=typeof input.tradeId==='string'?tx.get('trades',input.tradeId):undefined;check(trade&&(counter||accepting?trade.toUserId===user.id:[trade.fromUserId,trade.toUserId].includes(user.id)),'NOT_FOUND','Trade not found',404);check(trade.status==='pending','TRADE_CLOSED','Trade already closed',409);}
+      const candidate=expiring?tx.get('trades',input.tradeId):null;if(expiring&&(candidate?.status!=='pending'||!(Date.parse(candidate.expiresAt)<=Date.parse(this.#clock()))))return false;const user=expiring?tx.get('users',candidate.fromUserId):this.#queryUser(tx,actor),token=expiring?null:user.id+':'+key,hash=fingerprint({type,input}),previous=expiring?null:tx.get('requests',token);if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
+      let accounting;const rawAccounting=tx.value(recordAccountingField);try{accounting=JSON.parse(rawAccounting);}catch{}if(expiring&&rawAccounting!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);check(validRecordAccounting(accounting,tx.value('revision')),admission?'RECORD_MIGRATION_REQUIRED':'RECORD_PATH_UNAVAILABLE','Prepare revision-bound record accounting',503);
+      let trade;if(!proposal){trade=candidate??(typeof input.tradeId==='string'?tx.get('trades',input.tradeId):undefined);check(trade&&(counter||accepting?trade.toUserId===user.id:[trade.fromUserId,trade.toUserId].includes(user.id)),'NOT_FOUND','Trade not found',404);check(trade.status==='pending','TRADE_CLOSED','Trade already closed',409);}
       const sender=trade?.fromUserId??user.id,recipient=trade?.toUserId??input.toUserId,users=Object.create(null);users[user.id]=user;
       const loadUser=id=>{if(typeof id==='string'&&!Object.hasOwn(users,id)){const row=tx.get('users',id);if(row)users[id]=row;}};for(const id of [sender,recipient])loadUser(id);
       const offered=proposal?[input.give,input.receive]:counter?[trade.give,trade.receive,input.give,input.receive]:accepting?[trade.give,trade.receive]:[trade.give],copies=Object.create(null),codes=Object.create(null);
@@ -890,7 +891,7 @@ export class CardFramework {
       const ownerCountsById=Object.create(null);for(const id of [sender,recipient])if(typeof id==='string'&&users[id])ownerCountsById[id]=tx.ownerCounts(id);for(const copy of Object.values(copies)){const counts=ownerCountsById[copy.ownerId]??=tx.ownerCounts(copy.ownerId);if(copy.state==='owned')counts.ownedCopies--;if(copy.state==='sealed')counts.sealedCopies--;}
       recordContexts.set(state,{accounting,ownerCountsById,refundableEscrow});
       try{
-        const apply=()=>{const result=proposal?this.#createTrade(state,user,input):counter?this.#counterTradeBody(state,user,input):accepting?this.#acceptTradeBody(state,user,input):(this.#release(state,trade,user.id===sender?'cancelled':'declined'),trade);if(admission)this.#reserve(state,'trade',result.id);state.requests[token]={hash,result:clone(result),...(!admission?{completionId:'trade:'+result.id}:{})};this.#event(state,type,{userId:user.id});this.#capacity(state,true);return result;};
+        const apply=()=>{const result=proposal?this.#createTrade(state,user,input):counter?this.#counterTradeBody(state,user,input):accepting?this.#acceptTradeBody(state,user,input):(this.#release(state,trade,expiring?'expired':user.id===sender?'cancelled':'declined'),trade);if(admission)this.#reserve(state,'trade',result.id);if(!expiring){state.requests[token]={hash,result:clone(result),...(!admission?{completionId:'trade:'+result.id}:{})};this.#event(state,type,{userId:user.id});}this.#capacity(state,true);return result;};
         const result=admission?apply():this.#complete(state,'trade',trade.id,apply);
         const adjustEscrow=(owner,monies,sign)=>{for(const money of monies){const value=(escrows[owner][money.currencyId]??0)+sign*money.amount;check(Number.isSafeInteger(value)&&value>=0,'INVALID_STATE','Invalid sender escrow projection',500);if(value)escrows[owner][money.currencyId]=value;else delete escrows[owner][money.currencyId];}if(monies.length)tx.put('_tradeEscrow',owner,escrows[owner]);};
         if(trade)adjustEscrow(sender,trade.give.currencies,-1);if(admission)adjustEscrow(result.fromUserId,result.give.currencies,1);
@@ -922,15 +923,31 @@ export class CardFramework {
     this.#notify(s,trade.fromUserId,'trade.'+status,{tradeId:trade.id});this.#notify(s,trade.toUserId,'trade.'+status,{tradeId:trade.id});
   });}
 
+  #expireListingRecords(listingId,release){
+    const due=l=>l?.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(this.#clock()));
+    const fallback=()=>this.#store.transact(s=>{const listing=s.listings?.[listingId];if(!due(listing))return false;this.#complete(s,'listing',listingId,()=>release(s,listing,'expired'));return true;});
+    if(!this.#store.transactRecords)return fallback();
+    try{return this.#store.transactRecords(tx=>{
+      const listing=tx.get('listings',listingId);if(!due(listing))return false;
+      let accounting;const rawAccounting=tx.value(recordAccountingField);try{accounting=JSON.parse(rawAccounting);}catch{}if(rawAccounting!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_PATH_UNAVAILABLE','Prepare revision-bound record accounting',503);
+      const obligation=tx.get('completionObligations','listing:'+listingId);check(obligation?.status==='reserved','RECORD_PATH_UNAVAILABLE','Listing requires compatibility reservation recovery',409);
+      const copies=Object.create(null),packs=Object.create(null);
+      for(const unit of listing.units??[]){if(unit.status!=='available')continue;if(unit.kind==='copy'){const copy=tx.get('copies',unit.copyId);if(copy)copies[unit.copyId]=copy;}else if(unit.kind==='pack'){const pack=tx.get('packs',unit.packId);if(pack){packs[pack.id]=pack;for(const id of pack.copyIds){const copy=tx.get('copies',id);if(copy)copies[id]=copy;}}}}
+      const state={schemaVersion:1,revision:accounting.revision,listings:{[listingId]:listing},copies,packs,events:[],completionObligations:{[obligation.id]:obligation}};
+      const part=summarizeRecords(state);for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
+      recordContexts.set(state,{accounting});
+      try{this.#complete(state,'listing',listingId,()=>release(state,listing,'expired'));for(const field of ['listings','copies','packs','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);for(const event of state.events)tx.append('events',event);tx.reserveListingCompletion(obligation.id);return true;}finally{recordContexts.delete(state);}
+    },{listingCompletion:true});}catch(error){if(['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+  }
   #expire() {
-    const ids=this.#store.read(s=>Object.values(s.trades).filter(trade=>trade.status==='pending'&&Date.parse(trade.expiresAt)<=Date.parse(this.#clock())).map(trade=>trade.id));
+    const ids=this.#store.selectDueExpirations?this.#store.selectDueExpirations('trades',this.#clock(),32):this.#store.read(s=>Object.values(s.trades).filter(trade=>trade.status==='pending'&&Date.parse(trade.expiresAt)<=Date.parse(this.#clock())).slice(0,32).map(trade=>trade.id));
     const completed=[],failed=[];
     for(const tradeId of ids)try{
-      const released=this.#store.transact(s=>{
+      const released=this.#tradeRecords(null,null,'trade.expired',{tradeId},()=>this.#store.transact(s=>{
         const trade=s.trades[tradeId];
-        if(trade?.status!=='pending'||Date.parse(trade.expiresAt)>Date.parse(this.#clock()))return false;
+        if(trade?.status!=='pending'||!(Date.parse(trade.expiresAt)<=Date.parse(this.#clock())))return false;
         this.#complete(s,'trade',trade.id,()=>this.#release(s,trade,'expired'));return true;
-      });
+      }));
       if(released)completed.push(tradeId);
     }catch(error){failed.push({tradeId,code:/^[A-Z][A-Z0-9_]{0,80}$/.test(error?.code)?error.code:'INTERNAL_ERROR'});}
     return {ok:failed.length===0,completed,failed};

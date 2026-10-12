@@ -12,6 +12,7 @@ export class MemoryStore {
   #state = initialState();
   #recordActive=false;
   read(fn) {if(this.#recordActive)throw new Error('Nested storage operations are unsupported');return structuredClone(fn(structuredClone(this.#state))); }
+  selectDueExpirations(collection,at,limit=32){return this.read(s=>Object.values(s[collection]??{}).map((row,ordinal)=>({row,ordinal,due:collection==='trades'&&row.status==='pending'?Date.parse(row.expiresAt):collection==='listings'&&row.status==='active'?Math.min(...[Date.parse(row.endsAt),Date.parse(row.draw?.claimUntil)].filter(Number.isFinite)):NaN})).filter(item=>Number.isFinite(item.due)&&item.due<=Date.parse(at)).sort((a,b)=>a.due-b.due||a.ordinal-b.ordinal).slice(0,limit).map(item=>item.row.id));}
   query(fn) {if(this.#recordActive)throw new Error('Nested storage operations are unsupported');return querySnapshot(memoryQueries(this.#state),fn); }
   measure(state) { const usedBytes=Buffer.byteLength(JSON.stringify(state)),reservedBytes=completionBytes(state);const pool=completionPool(state);return {usedBytes,reservedBytes,totalBytes:usedBytes+reservedBytes,limitBytes:Infinity,completionStoredBytes:pool.storedBytes,completionReservedBytes:pool.reservedBytes}; }
   assertCapacity(state) { return this.measure(state); }

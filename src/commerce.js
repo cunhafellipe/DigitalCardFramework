@@ -938,15 +938,9 @@ export class CommerceService {
   }
   expire(actor) {
     permission(actor, "maintenance.run");
-    const due = (l) =>
-      active(l) &&
-      ((l.endsAt && Date.parse(l.endsAt) <= Date.parse(this.#b.now())) ||
-        (l.draw && Date.parse(l.draw.claimUntil) <= Date.parse(this.#b.now())));
-    if (!this.#b.read((s) => Object.values(s.listings ?? {}).some(due)))
-      return { count: 0 };
-    const ids=this.#b.read(s=>Object.values(s.listings??{}).filter(due).map(l=>l.id)),failed=[];let count=0;
+    const ids=this.#b.selectDueExpirations('listings',this.#b.now(),32),failed=[];let count=0;
     for(const listingId of ids)try{
-      if(this.#b.transact(s=>{const l=s.listings?.[listingId];if(!l||!due(l))return false;this.#b.complete(s,'listing',l.id,()=>this.#release(s,l,'expired'));return true;}))count++;
+      if(this.#b.expireListing(listingId,(s,l,status)=>this.#release(s,l,status)))count++;
     }catch(error){failed.push({listingId,code:/^[A-Z][A-Z0-9_]{0,80}$/.test(error?.code)?error.code:'INTERNAL_ERROR'});}
     return failed.length?{count,failed}:{count};
   }

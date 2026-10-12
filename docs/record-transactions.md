@@ -36,13 +36,23 @@ Encrypted `_copyReferences` rows identify each copy's favorite-account and album
 
 ## Action delivery
 
-Prepared SQLite stores claim, settle and retry actions through addressed record transactions. Schema 5 maintains an index of due pending jobs and expired running leases. Each claim examines at most 32 candidates, ordered by due time and stable insertion order, and rechecks status and lease under the write transaction. Exhausted candidates become dead; later worker cycles continue through the remaining queue. Empty selection performs no write.
+Prepared SQLite stores claim, settle and retry actions through addressed record transactions. Schema 5 introduced an index of due pending jobs and expired running leases. Each claim examines at most 32 candidates, ordered by due time and stable insertion order, and rechecks status and lease under the write transaction. Exhausted candidates become dead; later worker cycles continue through the remaining queue. Empty selection performs no write.
 
 Handlers still execute outside the database transaction with the original job ID as their downstream idempotency key. Settlement rejects expired or replaced leases. Shared completion capacity remains reserved while sibling jobs are active or a parent intent awaits acknowledgment. A manual retry admits new reserved capacity and retains its original keyed result for replay.
 
-Run preparation during planned maintenance to enable this path. Unprepared stores and legacy reservations use compatibility recovery, which may scan installation state. MemoryStore retains its snapshot implementation. SQLite database calls remain synchronous; these changes do not establish off-thread execution or bounded automatic expiration.
+Run preparation during planned maintenance to enable this path. Unprepared stores and legacy reservations use compatibility recovery, which may scan installation state. MemoryStore retains its snapshot implementation. SQLite database calls remain synchronous; these changes do not establish off-thread execution. Automatic expiration is described separately below.
 
-Stop all writers and retain a database/key backup before upgrading. Writable opens migrate existing indexed schemas atomically to schema 5; older application versions cannot open the upgraded database. Restore the pre-upgrade backup with its matching application and keys if rollback is required.
+Stop all writers and retain a database/key backup before upgrading. Writable opens migrate existing indexed schemas atomically to schema 6; older application versions cannot open the upgraded database. Restore the pre-upgrade backup with its matching application and keys if rollback is required.
+
+## Automatic expiration
+
+SQLite schema 6 indexes pending trade deadlines and active listing deadlines, including raffle claim deadlines. Each sweep selects at most 32 candidates per family, rechecks their current status and deadline inside the write transaction, and reports failures per item. Selection rotates across due records so repeated failures do not prevent later healthy records from being processed. The cursor is local to the store instance and resets on restart.
+
+Prepared stores refund trade escrow, release offered copies, and append expiration events and notifications through the existing completion reservation. Listing expiration releases only available stock and matching listing locks, including cards inside sealed packs, and appends its expiration event and outbox jobs atomically. These are expiration outcomes, not user cancellations. Empty or stale selections do not write state.
+
+Unprepared and legacy stores retain compatibility recovery. Oversized completion scopes may use that fallback rather than lose an admitted obligation. MemoryStore and custom snapshot stores retain snapshot costs. Automatic raffle drawing, other commerce commands and synchronous database execution are separate paths; this does not make all maintenance bounded. A sweep may leave additional due records for the next cycle.
+
+Schema 6 upgrades require the same stopped-writer, database/key backup and rollback precautions described above. Older applications cannot open the upgraded database.
 
 ## Preparation and mixed writers
 

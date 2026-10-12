@@ -12,14 +12,14 @@ import {FrameworkError,check} from './catalog.js';
 import {initialState} from './store.js';
 import {cloneResult,completionBytes,querySnapshot} from './storage-query.js';
 import {copySnapshotFiles} from './storage-snapshot.js';
-import {STORAGE_SCHEMA,schemaSql,schemaSqlV2,schemaSqlV3,schemaSqlV4,actionSchemaSql,migrateActionWork,notificationSchemaSql,codeHolderSchemaSql,migrateCodeHolders,encodeState,readState,writeDifference,sqliteQueries,storageRecordKey,decodeRecordEnvelope,encodedRecordBytes,encodeRecordPayload,encodeEntity} from './indexed-storage.js';
+import {STORAGE_SCHEMA,schemaSql,schemaSqlV2,schemaSqlV3,schemaSqlV4,schemaSqlV5,expirationSchemaSql,migrateExpirationWork,actionSchemaSql,migrateActionWork,notificationSchemaSql,codeHolderSchemaSql,migrateCodeHolders,encodeState,readState,writeDifference,sqliteQueries,storageRecordKey,decodeRecordEnvelope,encodedRecordBytes,encodeRecordPayload,encodeEntity} from './indexed-storage.js';
 
 const emptyRecords=()=>({fields:new Map(),entities:new Map(),usedBytes:0});
 const marker={format:'digital-card.indexed-state',version:STORAGE_SCHEMA,recordKeys:'blind-v1'};
 const expectedSchemas=new Map();
 const schemaEntries=db=>db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").all().filter(row=>row.name.startsWith('framework_')||row.tbl_name.startsWith('framework_')).map(row=>({...row,sql:row.sql?.replace(/\s+/g,' ').trim()}));
 function validateSchema(db,storageVersion) {
-  if(!expectedSchemas.has(storageVersion)){const model=new DatabaseSync(':memory:');try{model.exec(storageVersion===2?schemaSqlV2:storageVersion===3?schemaSqlV3:storageVersion===4?schemaSqlV4:schemaSql);expectedSchemas.set(storageVersion,schemaEntries(model));}finally{model.close();}}
+  if(!expectedSchemas.has(storageVersion)){const model=new DatabaseSync(':memory:');try{model.exec(storageVersion===2?schemaSqlV2:storageVersion===3?schemaSqlV3:storageVersion===4?schemaSqlV4:storageVersion===5?schemaSqlV5:schemaSql);expectedSchemas.set(storageVersion,schemaEntries(model));}finally{model.close();}}
   if(!isDeepStrictEqual(schemaEntries(db),expectedSchemas.get(storageVersion)))throw new Error('Database schema does not match its declared version');
 }
 function version(db) {
@@ -28,7 +28,7 @@ function version(db) {
   const tables=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row=>row.name));
   if(tables.has('framework_meta')){
     const row=db.prepare('SELECT schema_version,codec_check FROM framework_meta WHERE id=1').get();
-    if(!row||![2,3,4,STORAGE_SCHEMA].includes(row.schema_version)||pragma!==row.schema_version||tables.has('framework_state'))throw new Error('Unsupported database schema version');
+    if(!row||![2,3,4,5,STORAGE_SCHEMA].includes(row.schema_version)||pragma!==row.schema_version||tables.has('framework_state'))throw new Error('Unsupported database schema version');
     validateSchema(db,row.schema_version);
     return {version:row.schema_version,check:row.codec_check};
   }
@@ -71,7 +71,7 @@ function inspect(path,authenticate) {
 
 /** Indexed durable queries with serialized commands. Legacy command callbacks materialize state. */
 export class SQLiteStore {
-  #db;#codec;#maxBytes;#maxCompletionBytes;#identity;#recordKey;#readOnly;#storageVersion=STORAGE_SCHEMA;#active=false;#decoded=0;#materializations=0;#writes=0;
+  #db;#codec;#maxBytes;#maxCompletionBytes;#identity;#recordKey;#readOnly;#expirationCursors=new Map();#storageVersion=STORAGE_SCHEMA;#active=false;#decoded=0;#materializations=0;#writes=0;
   constructor(path=':memory:',{encryptionKey,maxStateBytes=64*1024*1024,maxCompletionBytes=64*1024*1024,readOnly=false,onMigration}={}) {
     if(!Number.isSafeInteger(maxStateBytes)||maxStateBytes<1)throw new Error('Invalid storage capacity');
     if(!Number.isSafeInteger(maxCompletionBytes)||maxCompletionBytes<1)throw new Error('Invalid completion capacity');this.#maxCompletionBytes=maxCompletionBytes;
@@ -87,7 +87,7 @@ export class SQLiteStore {
     this.#db=new DatabaseSync(path,{readOnly,timeout:5000});
     try {
       this.#db.exec('PRAGMA foreign_keys=ON;');
-      if(readOnly){this.#db.exec('BEGIN');const found=version(this.#db);this.#storageVersion=found.version;this.#authenticate(found);if(![3,4,STORAGE_SCHEMA].includes(found.version))throw new Error('Database migration requires writable access');this.#db.exec('COMMIT');return;}
+      if(readOnly){this.#db.exec('BEGIN');const found=version(this.#db);this.#storageVersion=found.version;this.#authenticate(found);if(![3,4,5,STORAGE_SCHEMA].includes(found.version))throw new Error('Database migration requires writable access');this.#db.exec('COMMIT');return;}
       this.#db.exec('BEGIN IMMEDIATE');
       try {
         const found=version(this.#db);this.#authenticate(found);
@@ -98,7 +98,7 @@ export class SQLiteStore {
           if(found.version>=2){
             if(found.version===2)this.#db.exec(codeHolderSchemaSql);
             if(found.version<4)this.#db.exec(notificationSchemaSql);
-            this.#db.exec(actionSchemaSql);migrateActionWork(this.#db,encoded);
+            if(found.version<5){this.#db.exec(actionSchemaSql);migrateActionWork(this.#db,encoded);}this.#db.exec(expirationSchemaSql);migrateExpirationWork(this.#db,encoded);
             if(found.version===2)migrateCodeHolders(this.#db,encoded);
             if(this.#db.prepare("SELECT payload,owner_id FROM framework_entities WHERE collection='notifications'").all().some(row=>{const envelope=this.#codec.decode(row.payload);return envelope.key!==envelope.value.id||row.owner_id!==envelope.value.userId;})){
               const oldBytes=this.#db.prepare("SELECT COALESCE(SUM(length(CAST(payload AS BLOB))),0) AS n FROM framework_entities WHERE collection='notifications'").get().n;
@@ -143,6 +143,18 @@ export class SQLiteStore {
   }
   read(fn) {return this.#snapshot(()=>{this.#materializations++;return fn(readState(this.#db,this.#codec,this.#recordKey));});}
   query(fn) {return this.#snapshot(()=>querySnapshot(sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey,()=>this.#decoded++),fn));}
+  selectDueExpirations(collection,at,limit=32){
+    check(this.#storageVersion>=6,'RECORD_MIGRATION_REQUIRED','Expiration selection requires writable schema migration',503);
+    check(['trades','listings'].includes(collection)&&Number.isFinite(Date.parse(at))&&Number.isSafeInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Invalid expiration selection');
+    return this.#snapshot(()=>{
+      const cursor=this.#expirationCursors.get(collection),select=(direction,maximum)=>{
+        const predicate=cursor?' AND (w.due_at,w.ordinal,w.entity_key)'+direction+'(?,?,?)':'',args=[collection,Date.parse(at),...(cursor?[cursor.due_at,cursor.ordinal,cursor.entity_key]:[]),maximum];
+        return this.#db.prepare('SELECT w.due_at,w.ordinal,e.entity_key,e.payload FROM framework_expiration_work AS w INDEXED BY framework_expiration_due JOIN framework_entities AS e ON e.collection=w.collection AND e.entity_key=w.entity_key WHERE w.collection=? AND w.due_at IS NOT NULL AND w.due_at<=?'+predicate+' ORDER BY w.due_at,w.ordinal,w.entity_key LIMIT ?').all(...args);
+      };
+      const rows=select('>',limit);if(cursor&&rows.length<limit)rows.push(...select('<=',limit-rows.length));if(rows.length){const {due_at,ordinal,entity_key}=rows.at(-1);this.#expirationCursors.set(collection,{due_at,ordinal,entity_key});}
+      return rows.map(row=>{this.#decoded++;return decodeRecordEnvelope(this.#codec,row.payload,collection,row.entity_key,this.#recordKey).key;});
+    });
+  }
   selectDueActions(at,limit=32){
     check(this.#storageVersion>=5,'RECORD_MIGRATION_REQUIRED','Action selection requires writable schema migration',503);
     check(Number.isFinite(Date.parse(at))&&Number.isSafeInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Invalid action selection');
@@ -232,6 +244,10 @@ export class SQLiteStore {
           partial[row.collection]??=kind==='array'?[]:Object.create(null);
           if(row.value!==undefined){if(kind==='array')partial[row.collection].push(row.value);else partial[row.collection][row.key]=row.value;}
           if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);
+        }
+        if(options.listingCompletion)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
+          const obligation=scope.api.get('completionObligations','pack:'+pack.key);check(obligation?.status==='reserved','COMPLETION_MIGRATION_REQUIRED','Listed pack requires its existing reservation',503);
+          previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);previousPartial.completionObligations[obligation.id]=obligation;partial.completionObligations[obligation.id]=obligation;
         }
         const oldPart=summarizeRecords(previousPartial);
         // The selected job may share a completion with unselected siblings.

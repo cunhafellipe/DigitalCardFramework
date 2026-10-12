@@ -55,8 +55,23 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false}={}){
+export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false}={}){
   if(!plan.changes.length&&!plan.scalars.length&&!plan.completion)return;
+  if(listingCompletion){
+    check(!plan.scalars.length&&plan.completion&&!plan.completion.admission,'INVALID_STATE','Listing completion requires its admitted reservation',500);
+    const listing=plan.changes.find(row=>row.collection==='listings'),reservation=plan.changes.find(row=>row.collection==='completionObligations'&&row.key===plan.completion.id);
+    check(plan.changes.filter(row=>row.collection==='listings').length===1&&listing?.old?.value.status==='active'&&listing.value.status==='expired'&&reservation?.old?.value.kind==='listing'&&reservation.old.value.entityId===listing.key&&reservation.old.value.status==='reserved'&&reservation.value.status==='completed'&&reservation.key==='listing:'+listing.key,'INVALID_STATE','Invalid listing expiration',500);
+    check([listing.old.value.endsAt,listing.old.value.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(listing.value.closedAt)),'INVALID_STATE','Listing deadline has not elapsed',500);
+    const expected=clone(listing.old.value);expected.status='expired';expected.closedAt=listing.value.closedAt;for(const unit of expected.units)if(unit.status==='available')unit.status='released';check(isDeepStrictEqual(expected,listing.value),'INVALID_STATE','Listing terms are immutable',500);
+    const units=listing.old.value.units.filter(unit=>unit.status==='available'),packs=plan.loaded.filter(row=>row.collection==='packs'&&units.some(unit=>unit.kind==='pack'&&unit.packId===row.key)),copies=new Set(units.filter(unit=>unit.kind==='copy').map(unit=>unit.copyId));for(const pack of packs)for(const id of pack.old?.value.copyIds??[])copies.add(id);
+    for(const row of plan.changes){
+      check(['listings','copies','packs','events','actionJobs','completionObligations'].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside listing completion scope',409);
+      if(['copies','packs'].includes(row.collection)){check(row.old&&(row.collection==='copies'?copies.has(row.key):units.some(unit=>unit.kind==='pack'&&unit.packId===row.key)),'INVALID_STATE','Only listing stock may change',500);const expected=clone(row.old.value);if(expected.lockedBy==='market:'+listing.key)delete expected.lockedBy;check(isDeepStrictEqual(expected,row.value),'INVALID_STATE','Listing may release only its own stock lock',500);}
+      else if(row.collection==='completionObligations'){check(row===reservation&&isDeepStrictEqual(Object.fromEntries(Object.entries(row.old.value).filter(([key])=>!['status','usedBytes'].includes(key))),Object.fromEntries(Object.entries(row.value).filter(([key])=>!['status','usedBytes'].includes(key)))),'INVALID_STATE','Reservation terms are immutable',500);}
+      else if(row.collection!=='listings'){check(!row.old&&row.value.completionId===reservation.key,'INVALID_STATE','Listing delivery records require its reservation',500);if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);}
+    }
+    return;
+  }
   if(actionDelivery){
     check(!plan.scalars.length,'RECORD_TRANSACTION_UNSUPPORTED','Action delivery cannot mutate scalars',409);
     const jobs=plan.changes.filter(row=>row.collection==='actionJobs'),reservations=plan.changes.filter(row=>row.collection==='completionObligations');
@@ -77,9 +92,9 @@ export function validateRecordPlan(plan,{intent=false,preferences=false,packComp
   if(tradeProposal||tradeCompletion){
     check(!intent&&!preferences&&!packCompletion&&!plan.scalars.length&&tradeProposal!==tradeCompletion,'RECORD_TRANSACTION_UNSUPPORTED','Invalid trade scope',409);
     const trades=plan.changes.filter(row=>row.collection==='trades');check(trades.length===1,'INVALID_STATE','One trade transition required',500);const trade=trades[0],sender=trade.value.fromUserId;
-    check(tradeProposal?!trade.old&&trade.value.status==='pending':trade.old?.value.status==='pending'&&['cancelled','declined'].includes(trade.value.status),'INVALID_STATE','Invalid trade transition',500);
+    check(tradeProposal?!trade.old&&trade.value.status==='pending':trade.old?.value.status==='pending'&&['cancelled','declined','expired'].includes(trade.value.status),'INVALID_STATE','Invalid trade transition',500);
     const reservation=plan.changes.find(row=>row.collection==='completionObligations'&&row.key==='trade:'+trade.key);check(reservation&&reservation.value.kind==='trade'&&reservation.value.entityId===trade.key,'INVALID_STATE','Trade reservation required',500);
-    if(tradeCompletion){check(plan.completion?.id===reservation.key&&!plan.completion.admission&&reservation.old?.value.status==='reserved'&&reservation.value.status==='completed','INVALID_STATE','Admitted trade reservation required',500);const stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['status','completedAt'].includes(key)));check(isDeepStrictEqual(stable(trade.old.value),stable(trade.value)),'INVALID_STATE','Trade terms are immutable',500);for(const field of ['id','kind','entityId','bytes','events','jobs'])check(isDeepStrictEqual(reservation.old.value[field],reservation.value[field]),'INVALID_STATE','Reservation terms are immutable',500);}
+    if(tradeCompletion){if(trade.value.status==='expired')check(Date.parse(trade.old.value.expiresAt)<=Date.parse(trade.value.completedAt),'INVALID_STATE','Trade deadline has not elapsed',500);check(plan.completion?.id===reservation.key&&!plan.completion.admission&&reservation.old?.value.status==='reserved'&&reservation.value.status==='completed','INVALID_STATE','Admitted trade reservation required',500);const stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!['status','completedAt'].includes(key)));check(isDeepStrictEqual(stable(trade.old.value),stable(trade.value)),'INVALID_STATE','Trade terms are immutable',500);for(const field of ['id','kind','entityId','bytes','events','jobs'])check(isDeepStrictEqual(reservation.old.value[field],reservation.value[field]),'INVALID_STATE','Reservation terms are immutable',500);}
     else check(!plan.completion&&!reservation.old&&reservation.value.status==='reserved','INVALID_STATE','New trade reservation required',500);
     for(const row of plan.changes){
       check(['trades','copies','balances','_tradeEscrow','requests','ledger','events','notifications','actionJobs','completionObligations'].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside trade scope',409);
@@ -152,11 +167,12 @@ export function createRecordTransaction(backend,{maxRecords=4096,maxBytes=16*102
     setScalar(name,value){const metadata=field(name);check(!metadata||metadata.kind==='scalar','INVALID_INPUT','Scalar field required');check(value!==undefined,'INVALID_INPUT','Cannot store undefined');scalars.set(name,{name,old:metadata?.value,value:clone(value)});},
     reserveIntentCompletion(id,{admission=false}={}){live();keyName(id);check(!completion,'INVALID_STATE','Only one intent reservation can fund a transaction',500);completion={id,admission};},
     reserveTradeCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
+    reserveListingCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
     reserveActionCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
     reservePackCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
   };
   return {api,close(){active=false;},finish(){live();const changes=[...records.values()].filter(row=>!isDeepStrictEqual(row.old?.value,row.value)||completion&&row.collection==='completionObligations'&&row.key===completion.id);
     const changedScalars=[...scalars.values()].filter(row=>!isDeepStrictEqual(row.old,row.value));check(changes.length+changedScalars.length<=maxRecords,'TRANSACTION_BUDGET','Record transaction write budget exceeded',507);
     const written=changes.concat(changedScalars).reduce((total,row)=>total+Buffer.byteLength(JSON.stringify(row.value)??''),0);check(written<=maxBytes,'TRANSACTION_BUDGET','Record transaction write byte budget exceeded',507);
-    return {changes,scalars:changedScalars,completion,fields,reads,bytes,written};}};
+    return {changes,scalars:changedScalars,completion,fields,reads,bytes,written,loaded:[...records.values()]};}};
 }

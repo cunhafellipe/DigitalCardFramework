@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added indexed, bounded expiration of trades and listings with atomic refunds, stock release and delivery events. SQLite schema 6 adds expiration indexes; stop writers and back up the database and keys before upgrading. Each maintenance cycle processes at most 32 candidates per family.
+
 - Added indexed action-delivery claims, completion and retries for prepared SQLite stores, retaining delivery identities, lease fencing and shared completion reservations. SQLite schema 5 migrates the action-work index atomically; stop writers and back up the database and encryption keys before upgrading. Older applications cannot open the upgraded database.
 
 - Added album cover, spine and page artwork authoring, editable design references, stable card-to-page assignments, book navigation and typed album contracts. Public artwork publication is separate from album visibility and saving.

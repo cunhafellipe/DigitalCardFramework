@@ -67,6 +67,8 @@ export function updateTradeEscrow(state){
  for(const user of Object.values(state.users??{}))for(const id of user.preferences?.favoriteCopyIds??[])if(references[id])references[id].users.push(user.id);
  for(const album of Object.values(state.albums??{}))for(const placement of album.placements??[])if(references[placement.copyId])references[placement.copyId].albums.push(album.id);
  state._copyReferences=references;
+ const purchases=Object.create(null);for(const order of Object.values(state.orders??{})){const key=JSON.stringify([order.listingId,order.buyerId]),sum=(purchases[key]??0)+order.quantity;check(Number.isSafeInteger(sum)&&sum>=0,'INVALID_STATE','Invalid listing purchase quantity',500);purchases[key]=sum;}
+ state._listingPurchases=purchases;state._listingPurchasesReady=true;state._listingPurchasesRevision=state.revision;
 }
 
 export const recordPreparationMarker='prepare-accounting-v3';

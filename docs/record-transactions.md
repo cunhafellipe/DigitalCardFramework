@@ -54,6 +54,14 @@ Unprepared and legacy stores retain compatibility recovery. Oversized completion
 
 Schema 6 upgrades require the same stopped-writer, database/key backup and rollback precautions described above. Older applications cannot open the upgraded database.
 
+## Listing purchases
+
+Prepared listing quotes read selected records in a read-only snapshot. Purchases recheck eligibility, quoted stock and terms, payment, inventory limits and ownership inside one transaction. Supported card, sealed-pack, custom-action and raffle-claim flows retain their existing rules. Payment, stock, ownership, code entitlements, favorite/album cleanup, order, receipt and delivery jobs commit together. Exact-key replay returns the retained result after restart.
+
+Preparation builds encrypted per-listing/per-buyer purchase totals from existing orders. A separate revision marker prevents an older writer from making stale totals appear current. Current compatibility writers rebuild the projection; bounded writers keep its revision synchronized and purchases update the selected total. Run `store.prepareRecordTransactions()` during writable maintenance to initialize or repair it. Preparation consumes ordinary capacity and is separate from a purchase.
+
+Missing or stale projections and oversized input scopes can use compatibility recovery before invoking host purchase policy. Once that policy is invoked, a failed bounded attempt rolls back without automatically calling it again through fallback. Quotes remain read-only; new purchases require ordinary admission capacity and cannot spend listing expiration reserves. Selling the final available unit releases the listing's unused reservation. Snapshot fallback and synchronous database costs remain; listing creation, cancellation and raffle drawing are separate command paths.
+
 ## Preparation and mixed writers
 
 Call `store.prepareRecordTransactions()` during planned writable maintenance to establish revision-bound capacity accounting. The first incremental purchase, new preferences command or trade admission also prepares it when absent or stale. Preparation scans installation state and consumes ordinary storage capacity; insufficient capacity fails atomically. Read-only inspection does not prepare or modify a database. Preparation is a separate metadata migration; it can remain committed even if subsequent command validation fails, without committing that command's domain changes.

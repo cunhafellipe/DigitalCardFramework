@@ -201,7 +201,7 @@ export class SQLiteStore {
   prepareRecordTransactions({force=false}={}){
     return this.transact(state=>{
       let summary;try{summary=JSON.parse(state[recordAccountingField]);}catch{}
-      if(!force&&validRecordAccounting(summary,state.revision))return {prepared:false};
+      if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision)return {prepared:false};
       state[recordAccountingField]=recordPreparationMarker;
       return {prepared:true};
     });
@@ -245,10 +245,11 @@ export class SQLiteStore {
           if(row.value!==undefined){if(kind==='array')partial[row.collection].push(row.value);else partial[row.collection][row.key]=row.value;}
           if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);
         }
-        if(options.listingCompletion)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
+        if(options.listingCompletion||options.listingPurchase)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
           const obligation=scope.api.get('completionObligations','pack:'+pack.key);check(obligation?.status==='reserved','COMPLETION_MIGRATION_REQUIRED','Listed pack requires its existing reservation',503);
           previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);previousPartial.completionObligations[obligation.id]=obligation;partial.completionObligations[obligation.id]=obligation;
         }
+        if(options.listingPurchase){const listing=plan.changes.find(row=>row.collection==='listings');const obligation=scope.api.get('completionObligations','listing:'+listing.key);previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);if(!previousPartial.completionObligations[obligation.id])previousPartial.completionObligations[obligation.id]=obligation;if(!partial.completionObligations[obligation.id])partial.completionObligations[obligation.id]=obligation;}
         const oldPart=summarizeRecords(previousPartial);
         // The selected job may share a completion with unselected siblings.
         const actionObligation=options.actionDelivery&&plan.changes.find(row=>row.collection==='completionObligations');
@@ -260,6 +261,7 @@ export class SQLiteStore {
         summary.revision=revision+1;
         const scalar=(name,old,value)=>{before.fields.set(name,{kind:'scalar',raw:JSON.stringify(old),value:old});after.fields.set(name,{kind:'scalar',raw:JSON.stringify(value),value});};
         scalar('revision',revision,summary.revision);
+        const purchaseRevision=scope.api.value('_listingPurchasesRevision');if(purchaseRevision===revision){scalar('_listingPurchasesRevision',purchaseRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,purchaseRevision);}
         delta+=encodedRecordBytes(this.#codec,'revision',null,summary.revision)-encodedRecordBytes(this.#codec,'revision',null,revision);
         for(const row of plan.scalars){if(row.old!==undefined)before.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.old),value:row.old});after.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.value),value:row.value});delta+=encodedRecordBytes(this.#codec,row.name,null,row.value)-(row.old===undefined?0:encodedRecordBytes(this.#codec,row.name,null,row.old));}
         const oldAccounting=scope.api.value(recordAccountingField),accountingBytes=encodedRecordBytes(this.#codec,recordAccountingField,null,oldAccounting);

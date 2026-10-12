@@ -1,3 +1,4 @@
+import {recordContexts} from "./record-context.js";
 import { randomUUID, randomInt } from "node:crypto";
 import { check, integer, text, jsonObject } from "./catalog.js";
 import { hasPermission } from "./access.js";
@@ -673,7 +674,7 @@ export class CommerceService {
   #selection(s, l, u, quantity) {
     this.#eligible(s, l, u);
     integer(quantity, "quantity", 1, 1000);
-    const bought = Object.values(s.orders ?? {})
+    const bought = (recordContexts.get(s)?.listingPurchases ?? 0) + Object.values(s.orders ?? {})
       .filter((o) => o.listingId === l.id && o.buyerId === u.id)
       .reduce((n, o) => n + o.quantity, 0);
     check(
@@ -722,7 +723,7 @@ export class CommerceService {
     return { unitId: unit.id, kind: "custom" };
   }
   quote(actor, { listingId, quantity = 1 }) {
-    return this.#b.read((s) => {
+    return this.#b.listingRead(actor, {listingId,quantity}, (s) => {
       const u = this.#b.user(s, actor),
         l = record(s.listings, listingId);
       check(l, "NOT_FOUND", "Listing not found", 404);
@@ -750,7 +751,7 @@ export class CommerceService {
       "INVALID_INPUT",
       "Quoted unit IDs required",
     );
-    return this.#b.command(
+    return this.#b.listingCommand(
       actor,
       key,
       "shop.purchased",

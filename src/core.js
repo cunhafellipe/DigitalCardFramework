@@ -50,6 +50,7 @@ export class CardFramework {
     this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
+      listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn)=>this.#listingRecords(actor,key,input,fn),
       selectDueExpirations:(collection,at,limit)=>store.selectDueExpirations?store.selectDueExpirations(collection,at,limit):store.read(s=>Object.values(s[collection]??{}).filter(l=>l.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(date=>Date.parse(date)<=Date.parse(at))).slice(0,limit).map(l=>l.id)),expireListing:(listingId,release)=>this.#expireListingRecords(listingId,release),
       user:(s,a)=>this.#user(s,a),currency:(s,id)=>this.#currency(s,id),blocked:(s,a,b)=>this.#blocked(s,a,b),
       command:(...args)=>this.#command(...args),operator:(...args)=>this.#operatorCommand(...args),
@@ -147,7 +148,7 @@ export class CardFramework {
     for(const field of ['copies','packs','requests','albums','trades','actionJobs','shops','listings','orders'])if(this.#limits[field]!==undefined)
       check(field==='requests'?ordinaryRequestCount(s)+(completion?0:1)<=this.#limits.requests:Object.values(s[field]??{}).filter(row=>field!=='actionJobs'||!row.completionId).length+(field==='actionJobs'?baseline?.ordinaryJobs??0:baseline?.counts[field]??0)<=this.#limits[field],'INSTALLATION_CAPACITY','Installation '+field+' capacity reached',507);
     if(this.#limits.copiesPerUser!==undefined){const counts={};for(const c of Object.values(s.copies))if(c.state!=='consumed')counts[c.ownerId]=(counts[c.ownerId]??0)+1;for(const [owner,count] of Object.entries(counts))check(count+(context?.ownerCountsById?.[owner]!==undefined?context.ownerCountsById[owner].ownedCopies+context.ownerCountsById[owner].sealedCopies:context?.ownerId===owner?context.ownerCounts.ownedCopies+context.ownerCounts.sealedCopies:0)<=this.#limits.copiesPerUser,'INVENTORY_CAPACITY','Collector inventory capacity reached',507);}
-    if(this.#limits.packsPerUser!==undefined){const counts={};for(const p of Object.values(s.packs))counts[p.ownerId]=(counts[p.ownerId]??0)+1;for(const [owner,count] of Object.entries(counts))check(count+(context?.ownerId===owner?context.ownerCounts.packs:0)<=this.#limits.packsPerUser,'PACK_CAPACITY','Collector pack capacity reached',507);}
+    if(this.#limits.packsPerUser!==undefined){const counts={};for(const p of Object.values(s.packs))counts[p.ownerId]=(counts[p.ownerId]??0)+1;for(const [owner,count] of Object.entries(counts))check(count+(context?.ownerCountsById?.[owner]!==undefined?context.ownerCountsById[owner].packs:context?.ownerId===owner?context.ownerCounts.packs:0)<=this.#limits.packsPerUser,'PACK_CAPACITY','Collector pack capacity reached',507);}
   }
   configureCodePool(actor,input){return this.#codes.configurePool(actor,input);}
   importCodes(actor,input){return this.#codes.importBatch(actor,input);}
@@ -923,6 +924,46 @@ export class CardFramework {
     this.#notify(s,trade.fromUserId,'trade.'+status,{tradeId:trade.id});this.#notify(s,trade.toUserId,'trade.'+status,{tradeId:trade.id});
   });}
 
+  #listingRecords(actor,key,input,fn,purchasing=true){
+    const type='shop.purchased';
+    const fallback=()=>purchasing?this.#command(actor,key,type,input,fn):this.#store.read(s=>fn(s));
+    if(!this.#store.transactRecords)return fallback();if(purchasing)text(key,'idempotency key',128);
+    let invoked=false;
+    const run=purchasing?(fn,options)=>this.#store.transactRecords(fn,options):fn=>this.#query(q=>fn({...q,ownerCounts:id=>q.collectionCounts(id)}));
+    try{return run(tx=>{
+      const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input});
+      if(purchasing){const previous=tx.get('requests',token);if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}}
+      let accounting;const raw=tx.value(recordAccountingField);try{accounting=JSON.parse(raw);}catch{}
+      if(raw!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);
+      check(validRecordAccounting(accounting,tx.value('revision'))&&tx.value('_listingPurchasesReady')===true&&tx.value('_listingPurchasesRevision')===accounting.revision,'RECORD_PATH_UNAVAILABLE','Prepare listing purchase projections',503);
+      const listing=typeof input.listingId==='string'?tx.get('listings',input.listingId):undefined;check(listing,'NOT_FOUND','Listing not found',404);
+      integer(input.quantity,'quantity',1,1000);
+      const quotaKey=JSON.stringify([listing.id,user.id]),purchased=tx.get('_listingPurchases',quotaKey)??0;check(Number.isSafeInteger(purchased)&&purchased>=0,'INVALID_STATE','Invalid listing purchase projection',500);
+      const users=Object.create(null),copies=Object.create(null),packs=Object.create(null),codes=Object.create(null),albums=Object.create(null),references=Object.create(null),obligations=Object.create(null);
+      users[user.id]=user;const loadUser=id=>{if(typeof id==='string'&&!Object.hasOwn(users,id)){const row=tx.get('users',id);check(row,'INVALID_STATE','Referenced account is missing',500);users[id]=row;}};loadUser(listing.sellerId);
+      const winner=listing.raffle?listing.draw?.winners.find(w=>w.userId===user.id):null;
+      const units=listing.units.filter(unit=>unit.status==='available'&&(!listing.raffle||unit.id===winner?.unitId)).slice(0,input.quantity);
+      const copyIds=new Set();for(const unit of units){if(unit.kind==='copy')copyIds.add(unit.copyId);else if(unit.kind==='pack'){const pack=tx.get('packs',unit.packId);if(pack){packs[pack.id]=pack;for(const id of pack.copyIds)copyIds.add(id);if(!pack.receipt){const obligation=tx.get('completionObligations','pack:'+pack.id);check(obligation?.status==='reserved','RECORD_PATH_UNAVAILABLE','Listed pack requires its reservation',409);obligations[obligation.id]=obligation;}}}}
+      for(const id of copyIds){const copy=tx.get('copies',id);if(!copy)continue;copies[id]=copy;loadUser(copy.openedBy);for(const codeId of copy.codeIds??[]){const code=tx.get('codes',codeId);check(code,'INVALID_STATE','Attached code is missing',500);codes[codeId]=code;}if(purchasing){const refs=tx.get('_copyReferences',id);check(refs&&Array.isArray(refs.users)&&Array.isArray(refs.albums),'INVALID_STATE','Copy reference projection is missing; rebuild accounting',500);references[id]=refs;for(const id of refs.users)loadUser(id);for(const id of refs.albums){const album=tx.get('albums',id);check(album,'INVALID_STATE','Referenced album is missing',500);albums[id]=album;}}}
+      const listingObligation=tx.get('completionObligations','listing:'+listing.id);check(listingObligation?.status==='reserved','RECORD_PATH_UNAVAILABLE','Listing requires its reservation',409);obligations[listingObligation.id]=listingObligation;
+      const balances=Object.create(null),refundableEscrow=Object.create(null),ownerCountsById=Object.create(null);for(const id of new Set([user.id,listing.sellerId])){balances[id]=tx.get('balances',id)??{};refundableEscrow[id]=tx.get('_tradeEscrow',id)??{};ownerCountsById[id]=tx.ownerCounts(id);}
+      for(const copy of Object.values(copies)){const counts=ownerCountsById[copy.ownerId]??=tx.ownerCounts(copy.ownerId);if(copy.state==='owned')counts.ownedCopies--;if(copy.state==='sealed')counts.sealedCopies--;}
+      for(const pack of Object.values(packs)){const counts=ownerCountsById[pack.ownerId]??=tx.ownerCounts(pack.ownerId);counts.packs--;if(!pack.openedAt)counts.unopenedPacks--;}
+      const shop=tx.get('shops',listing.shopId),state={schemaVersion:1,revision:accounting.revision,catalog:tx.value('catalog'),adminControls:tx.value('adminControls'),cardAuthoring:tx.value('cardAuthoring'),tradingPolicy:tx.value('tradingPolicy'),commerceSettings:tx.value('commerceSettings'),users,balances,copies,packs,codes,albums,shops:shop?{[shop.id]:shop}:{},listings:{[listing.id]:listing},orders:{},trades:{},requests:{},ledger:[],events:[],notifications:[],completionObligations:obligations};
+      const part=summarizeRecords(state);for(const field of ['copies','packs','albums','shops','listings'])accounting.counts[field]=(accounting.counts[field]??0)-(part.counts[field]??0);for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
+      // Reserve room for command outputs before invoking synchronous host policies.
+      check(copyIds.size*8+Object.keys(users).length+Object.keys(albums).length<3000&&Buffer.byteLength(JSON.stringify(state))<8*1024*1024,'RECORD_PATH_UNAVAILABLE','Listing purchase requires the compatibility scope',409);
+      recordContexts.set(state,{accounting,ownerCountsById,refundableEscrow,listingPurchases:purchased});
+      try{invoked=true;const result=fn(state,user);if(!purchasing)return result;
+        if(listing.units.every(unit=>unit.status!=='available'))listingObligation.status='completed';
+        state.requests[token]={hash,result:clone(result)};this.#event(state,type,{userId:user.id});this.#capacity(state,true);
+        tx.put('_listingPurchases',quotaKey,purchased+input.quantity);
+        for(const [id,refs]of Object.entries(references))tx.put('_copyReferences',id,{users:refs.users.filter(userId=>users[userId]?.preferences?.favoriteCopyIds?.includes(id)),albums:refs.albums.filter(albumId=>albums[albumId].placements.some(row=>row.copyId===id))});
+        for(const field of ['users','albums','balances','copies','packs','codes','listings','orders','requests','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);
+        for(const field of ['ledger','events','notifications'])for(const row of state[field])tx.append(field,row);for(const id of new Set(state.notifications.map(row=>row.userId)))tx.trimNotifications(id);return result;
+      }finally{recordContexts.delete(state);}
+    },purchasing?{listingPurchase:true}:{});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+  }
   #expireListingRecords(listingId,release){
     const due=l=>l?.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(this.#clock()));
     const fallback=()=>this.#store.transact(s=>{const listing=s.listings?.[listingId];if(!due(listing))return false;this.#complete(s,'listing',listingId,()=>release(s,listing,'expired'));return true;});

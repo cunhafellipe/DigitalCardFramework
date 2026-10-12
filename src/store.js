@@ -25,7 +25,7 @@ export class MemoryStore {
     if (!isDeepStrictEqual(draft,this.#state)) {draft.revision++;if(Object.hasOwn(draft,recordAccountingField)&&refreshTradeAccounting(draft)){finalizeRecordAccounting(draft,this.#state,value=>Buffer.byteLength(JSON.stringify(value)));}this.#state = draft;}
     return detachedResult;
   }
-  prepareRecordTransactions({force=false}={}){return this.transact(state=>{let summary;try{summary=JSON.parse(state[recordAccountingField]);}catch{}if(!force&&validRecordAccounting(summary,state.revision))return {prepared:false};state[recordAccountingField]=recordPreparationMarker;return {prepared:true};});}
+  prepareRecordTransactions({force=false}={}){return this.transact(state=>{let summary;try{summary=JSON.parse(state[recordAccountingField]);}catch{}if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision)return {prepared:false};state[recordAccountingField]=recordPreparationMarker;return {prepared:true};});}
   transactRecords(fn,options={}){
     return this.transact(state=>{
       const bytes=value=>Buffer.byteLength(JSON.stringify(value)??''),scope=createRecordTransaction({

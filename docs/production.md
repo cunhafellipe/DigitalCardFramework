@@ -169,6 +169,12 @@ Embedded callers use `createListingAsync(actor, input, {signal})`. A configured 
 
 Use `setRemotePolicyEnabled(actor, {hook: 'canList', enabled: false})` from a trusted SDK operator with `commerce.manage` to stop evaluations. Disabling invalidates in-flight grants; committed listings remain. Runtime enable state belongs to the framework instance, so startup configuration must be set deliberately after restart.
 
+#### Try the Python policy fixture
+
+The [Python standard-library policy example](../examples/plugins/python-listing-policy.py) implements both listing and purchase protocols at `/listing-policy`. Set `LISTING_POLICY_TOKEN` and optionally `LISTING_POLICY_PROVIDER_ID` (default `example.policy`), then run `python examples/plugins/python-listing-policy.py records.json [port]`. It prints a loopback port; use that endpoint with explicit `allowLoopbackHttp: true` in the corresponding trusted policy configuration.
+
+Records contain `actors: [{id, listShopIds, purchaseListingIds}]`. Use framework user IDs and real shop/listing UUIDs. A configured actor may create listings only in its listed shop IDs and purchase only its listed listing IDs. All other actors or targets are denied. This synthetic read-only fixture makes no allocations and changes no records. It accepts at most 100 actors, 100 targets per list, 64 KiB of configuration and 64 KiB per request. Native framework checks still apply after every allow decision.
+
 ### Remote currency providers
 
 The framework-owned bridge uses [the currency settlement schema](currency-provider.schema.json), protocol `digital-card-currency-settlement@1`. Export endpoint configuration from the trusted host module:

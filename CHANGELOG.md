@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a read-only Python listing and purchase policy example with authenticated cross-language conformance checks.
+
 - Added remote listing creation policy checks before allocation, with scoped state revalidation, cancellation, durable replay and asynchronous host/worker routing across supported listing kinds.
 
 - Reject malformed SDK cancellation signals before reserving code or currency provider capacity.

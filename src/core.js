@@ -50,6 +50,9 @@ export class CardFramework {
     this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
+      raffleCommand:(actor,key,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn),
+      raffleOperator:(actor,key,permission,type,input,fn)=>this.#raffleRecords(actor,key,type,input,fn,'draw'),
+      raffleRead:(actor,input,fn)=>this.#raffleRecords(actor,null,null,input,fn,'read'),
       cancelListingCommand:(actor,key,type,input,fn)=>this.#cancelListingRecords(actor,key,input,fn),
       createListingCommand:(actor,key,type,input,fn)=>this.#createListingRecords(actor,key,input,fn),
       listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn)=>this.#listingRecords(actor,key,input,fn),
@@ -102,7 +105,7 @@ export class CardFramework {
   enterRaffle(actor,input){return this.#commerce.enter(actor,input);}
   raffleStatus(actor,input){return this.#commerce.raffleStatus(actor,input);}
   drawRaffle(actor,input){return this.#commerce.draw(actor,input);}
-  drawDueRaffles(actor,{limit=20}={}){this.#admin(actor,'raffles.draw');integer(limit,'draw limit',1,100);const ids=this.#store.read(s=>Object.values(s.listings??{}).filter(l=>l.status==='active'&&l.raffle&&!l.draw&&Date.parse(l.raffle.entryClosesAt)<=Date.parse(this.#clock())&&(!l.endsAt||Date.parse(l.endsAt)>Date.parse(this.#clock()))).slice(0,limit).map(l=>l.id));return ids.map(listingId=>this.drawRaffle(actor,{key:'automatic-draw:'+listingId,listingId}));}
+  drawDueRaffles(actor,{limit=20}={}){this.#admin(actor,'raffles.draw');integer(limit,'draw limit',1,100);const at=this.#clock(),ids=this.#store.selectDueRaffles?this.#store.selectDueRaffles(at,limit):this.#store.read(s=>Object.values(s.listings??{}).filter(l=>l.status==='active'&&l.raffle&&!l.draw&&Date.parse(l.raffle.entryClosesAt)<=Date.parse(at)&&(!l.endsAt||Date.parse(l.endsAt)>Date.parse(at))).slice(0,limit).map(l=>l.id)),results=[];let failure;for(const listingId of ids)try{results.push(this.drawRaffle(actor,{key:'automatic-draw:'+listingId,listingId}));}catch(error){failure??=error;}if(failure)throw failure;return results;}
   openCard(actor,{key,copyId}){return this.#command(actor,key,'card.revealed',{copyId},(s,u)=>{const copy=s.copies[copyId];check(copy?.ownerId===u.id&&copy.state==='owned','NOT_FOUND','Card not found',404);check(!copy.lockedBy,'CARD_LOCKED','Card is reserved',409);this.#openCopy(s,copy,u.id);return this.#copyView(s,copy,u.id);});}
   #openCopy(s,copy,userId){if(copy.openedAt)return;copy.openedAt=this.#clock();copy.openedBy=userId;copy.version++;openingActions(s,copy,userId,copy.openedAt);this.#event(s,'card.opened',{copyId:copy.id,userId,packId:copy.source?.packId??null,openedAt:copy.openedAt});}
   #primaryLock(copy){const lock=copy.transferLock;check(!lock||lock.until&&Date.parse(lock.until)<=Date.parse(this.#clock()),'TRANSFER_BLOCKED',lock?.reason??'Card is locked',409);}
@@ -926,6 +929,34 @@ export class CardFramework {
     this.#notify(s,trade.fromUserId,'trade.'+status,{tradeId:trade.id});this.#notify(s,trade.toUserId,'trade.'+status,{tradeId:trade.id});
   });}
 
+  #raffleRecords(actor,key,type,input,fn,mode='enter'){
+    const reading=mode==='read',drawing=mode==='draw',collection=drawing?'operatorRequests':'requests';
+    const fallback=()=>reading?this.#store.read(s=>fn(s)):drawing?this.#operatorCommand(actor,key,'raffles.draw',type,input,fn):this.#command(actor,key,type,input,fn);
+    if(drawing)this.#admin(actor,'raffles.draw');if(!reading)text(key,'idempotency key',128);
+    if(!this.#store.transactRecords)return fallback();let invoked=false;
+    const run=reading?callback=>this.#query(callback):(callback,options)=>this.#store.transactRecords(callback,options);
+    try{return run(tx=>{
+      const user=drawing?null:this.#queryUser(tx,actor),token=(drawing?(actor.userId??'operator'):user.id)+':'+key,hash=fingerprint({type,input});
+      if(!reading){const previous=tx.get(collection,token);if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT',drawing?'Operator key already used':'Request key was used for another command',409);return previous.result;}}
+      const listing=typeof input.listingId==='string'?tx.get('listings',input.listingId):undefined;check(listing?.raffle,'NOT_FOUND','Raffle not found',404);
+      if(reading){invoked=true;return fn({users:{[user.id]:user},listings:{[listing.id]:listing}},user);}
+      let accounting;const raw=tx.value(recordAccountingField);try{accounting=JSON.parse(raw);}catch{}
+      if(raw!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);
+      check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_PATH_UNAVAILABLE','Prepare revision-bound record accounting',503);
+      const users=user?{[user.id]:user}:{},seller=drawing?null:tx.get('users',listing.sellerId),shop=drawing?null:tx.get('shops',listing.shopId);if(seller)users[seller.id]=seller;
+      const state={schemaVersion:1,revision:accounting.revision,catalog:drawing?null:tx.value('catalog'),adminControls:drawing?null:tx.value('adminControls'),commerceSettings:drawing?null:tx.value('commerceSettings'),users,shops:shop?{[shop.id]:shop}:{},listings:{[listing.id]:listing},copies:{},packs:{},requests:{},operatorRequests:{},events:[],notifications:[],actionJobs:{},completionObligations:{}};
+      const obligation=tx.get('completionObligations','listing:'+listing.id);check(obligation,'RECORD_PATH_UNAVAILABLE','Raffle requires compatibility reservation recovery',409);state.completionObligations[obligation.id]=obligation;
+      const part=summarizeRecords(state);accounting.counts.listings--;if(shop)accounting.counts.shops--;for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
+      // Entries are embedded: this scope grows with this raffle, not unrelated listings.
+      const winners=drawing&&!listing.draw?Math.min(Object.keys(listing.entries).length,listing.raffle.winners,listing.units.length):0;
+      check(winners*3+this.#subscriptions.length*3<3000&&Buffer.byteLength(JSON.stringify(state))*3+winners*1024<8*1024*1024,'RECORD_PATH_UNAVAILABLE','Raffle requires compatibility scope',409);
+      recordContexts.set(state,{accounting});
+      try{invoked=true;const result=fn(state,user);state[collection][token]={hash,result:clone(result)};this.#event(state,type,{userId:drawing?actor.userId??null:user.id});this.#capacity(state,true);
+        for(const field of ['listings',collection,'actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]))tx.put(field,id,row);
+        for(const field of ['events','notifications'])for(const row of state[field])tx.append(field,row);for(const id of new Set(state.notifications.map(row=>row.userId)))tx.trimNotifications(id);return result;
+      }finally{recordContexts.delete(state);}
+    },{raffle:true,raffleDraw:drawing});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+  }
   #createListingRecords(actor,key,input,fn){
     const type='listing.created',fallback=()=>this.#command(actor,key,type,input,fn);text(key,'idempotency key',128);
     if(!this.#store.transactRecords)return fallback();let invoked=false;

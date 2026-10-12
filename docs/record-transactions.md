@@ -50,7 +50,7 @@ SQLite schema 6 indexes pending trade deadlines and active listing deadlines, in
 
 Prepared stores refund trade escrow, release offered copies, and append expiration events and notifications through the existing completion reservation. Listing expiration releases only available stock and matching listing locks, including cards inside sealed packs, and appends its expiration event and outbox jobs atomically. These are expiration outcomes, not user cancellations. Empty or stale selections do not write state.
 
-Unprepared and legacy stores retain compatibility recovery. Oversized completion scopes may use that fallback rather than lose an admitted obligation. MemoryStore and custom snapshot stores retain snapshot costs. Automatic raffle drawing, other commerce commands and synchronous database execution are separate paths; this does not make all maintenance bounded. A sweep may leave additional due records for the next cycle.
+Unprepared and legacy stores retain compatibility recovery. Oversized completion scopes may use that fallback rather than lose an admitted obligation. MemoryStore and custom snapshot stores retain snapshot costs. Raffle drawing is described below. Other commerce commands and synchronous database execution retain their own costs; this does not make all maintenance bounded. A sweep may leave additional due records for the next cycle.
 
 Schema 6 upgrades require the same stopped-writer, database/key backup and rollback precautions described above. Older applications cannot open the upgraded database.
 
@@ -60,13 +60,13 @@ Prepared listing quotes read selected records in a read-only snapshot. Purchases
 
 Preparation builds encrypted per-listing/per-buyer purchase totals from existing orders. A separate revision marker prevents an older writer from making stale totals appear current. Current compatibility writers rebuild the projection; bounded writers keep its revision synchronized and purchases update the selected total. Run `store.prepareRecordTransactions()` during writable maintenance to initialize or repair it. Preparation consumes ordinary capacity and is separate from a purchase.
 
-Missing or stale projections and oversized input scopes can use compatibility recovery before invoking host purchase policy. Once that policy is invoked, a failed bounded attempt rolls back without automatically calling it again through fallback. Quotes remain read-only; new purchases require ordinary admission capacity and cannot spend listing expiration reserves. Selling the final available unit releases the listing's unused reservation. Snapshot fallback and synchronous database costs remain; raffle drawing remains a separate command path.
+Missing or stale projections and oversized input scopes can use compatibility recovery before invoking host purchase policy. Once that policy is invoked, a failed bounded attempt rolls back without automatically calling it again through fallback. Quotes remain read-only; new purchases require ordinary admission capacity and cannot spend listing expiration reserves. Selling the final available unit releases the listing's unused reservation. Snapshot fallback and synchronous database costs remain; raffle behavior is described below.
 
 ## Listing cancellation
 
 Prepared listing cancellation loads the actor, retained receipt, listing, seller/shop display data and available stock. Seller or commerce-manager authorization, matching stock-lock release, cancellation events and receipt commit atomically. Sealed packs and their cards retain issued snapshots. Exact-key replay returns the original public listing result after restart; a conflicting input for the same key is rejected.
 
-An active listing completes through its existing reservation, including an active listing whose stock has sold out. A fresh request for an already-closed listing uses ordinary receipt/event admission; replay does not create additional records. Unprepared, legacy and oversized scopes retain compatibility recovery. This does not change raffle drawing or synchronous storage behavior.
+An active listing completes through its existing reservation, including an active listing whose stock has sold out. A fresh request for an already-closed listing uses ordinary receipt/event admission; replay does not create additional records. Unprepared, legacy and oversized scopes retain compatibility recovery. Database execution remains synchronous.
 
 ## Listing creation
 
@@ -76,7 +76,17 @@ Preparation builds active-listing counts, code identities and available-code pro
 
 Generated codes retain capacity and exact identity-collision checks against existing and newly generated records. A collision fails without regenerating. Compatibility fallback is selected before allocation or host policy invocation; a later failure rolls back without automatically invoking those callbacks again. Imported-code selection preserves eligible allocation order. Code payload reads are limited to the selected allocation scope; SQL index traversal is not a constant-time guarantee.
 
-Legacy, unprepared and oversized scopes retain snapshot fallback. Database execution remains synchronous. Shop configuration and raffle commands are separate paths.
+Legacy, unprepared and oversized scopes retain snapshot fallback. Database execution remains synchronous. Shop configuration remains a separate path.
+
+## Raffles
+
+Prepared raffle entry and drawing load the selected listing and required account/shop settings. Entry limits, permissions, eligibility, deadlines and stock-to-winner assignment keep their existing rules. Status reads use a read-only snapshot. Entries remain embedded in the listing, so work scales with that raffle's entrant count, not only its number of winners.
+
+Draws commit winners, claim deadline, notifications, operator receipt and event/outbox outputs atomically under ordinary admission. Exact-key replay returns the retained result. A later request for an already-drawn raffle preserves its winners. Invalid or throwing random providers roll back; the implementation does not retry them automatically through a fallback path.
+
+An independently revision-fenced due projection supports automatic selection up to the requested candidate batch limit. Expired candidates count toward that limit, so a sweep may draw fewer raffles or none; the local cursor advances to let later sweeps continue. Current writers maintain it; preparation repairs it, and stale projections use a compatibility read. Each sweep attempts selected raffles once using stable automatic command keys. If any attempt fails, it reports the first error after trying the remaining selected items; some draws may already have committed. Repeating the sweep does not redraw committed raffles.
+
+Legacy, unprepared and oversized transaction scopes retain compatibility paths chosen before host policies or randomness. Database calls remain synchronous. Snapshot fallback and embedded-entry costs remain part of deployment capacity planning.
 
 ## Preparation and mixed writers
 

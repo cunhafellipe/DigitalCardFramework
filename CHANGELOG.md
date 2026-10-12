@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added selected-record raffle entry, status and drawing, plus indexed automatic due selection. Draw replay preserves committed winners; automatic sweeps attempt every selected raffle before reporting a failure.
+
 - Added bounded listing creation for prepared stores across owned cards/packs, minted cards/packs and custom actions. Creation preserves stock locks, allocation snapshots, code uniqueness, shop limits and future completion reservations.
 
 - Added bounded listing cancellation for prepared stores, preserving seller/manager authorization, stock release, completion reservations and exact-key receipt replay.

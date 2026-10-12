@@ -71,7 +71,7 @@ function inspect(path,authenticate) {
 
 /** Indexed durable queries with serialized commands. Legacy command callbacks materialize state. */
 export class SQLiteStore {
-  #db;#codec;#maxBytes;#maxCompletionBytes;#identity;#recordKey;#readOnly;#expirationCursors=new Map();#storageVersion=STORAGE_SCHEMA;#active=false;#decoded=0;#materializations=0;#writes=0;
+  #db;#codec;#maxBytes;#maxCompletionBytes;#identity;#recordKey;#readOnly;#expirationCursors=new Map();#raffleCursor;#storageVersion=STORAGE_SCHEMA;#active=false;#decoded=0;#materializations=0;#writes=0;
   constructor(path=':memory:',{encryptionKey,maxStateBytes=64*1024*1024,maxCompletionBytes=64*1024*1024,readOnly=false,onMigration}={}) {
     if(!Number.isSafeInteger(maxStateBytes)||maxStateBytes<1)throw new Error('Invalid storage capacity');
     if(!Number.isSafeInteger(maxCompletionBytes)||maxCompletionBytes<1)throw new Error('Invalid completion capacity');this.#maxCompletionBytes=maxCompletionBytes;
@@ -143,6 +143,22 @@ export class SQLiteStore {
   }
   read(fn) {return this.#snapshot(()=>{this.#materializations++;return fn(readState(this.#db,this.#codec,this.#recordKey));});}
   query(fn) {return this.#snapshot(()=>querySnapshot(sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey,()=>this.#decoded++),fn));}
+  selectDueRaffles(at,limit=20){
+    check(Number.isFinite(Date.parse(at))&&Number.isSafeInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Invalid raffle selection');
+    return this.#snapshot(()=>{
+      const queries=sqliteQueries(this.#db,this.#codec,this.#identity,this.#recordKey,()=>this.#decoded++),now=new Date(at).toISOString();
+      if(queries.value('_raffleDueRevision')!==queries.value('revision')){
+        this.#materializations++;const state=readState(this.#db,this.#codec,this.#recordKey);
+        return Object.values(state.listings??{}).filter(l=>l.status==='active'&&l.raffle&&!l.draw&&Date.parse(l.raffle.entryClosesAt)<=Date.parse(at)&&(!l.endsAt||Date.parse(l.endsAt)>Date.parse(at))).sort((a,b)=>Date.parse(a.raffle.entryClosesAt)-Date.parse(b.raffle.entryClosesAt)).slice(0,limit).map(l=>l.id);
+      }
+      const cursor=this.#raffleCursor,select=(forward,maximum)=>{
+        const predicate=cursor?' AND created_at'+(forward?'>=':'<=')+'? AND (created_at'+(forward?'>':'<')+'? OR (created_at=? AND entity_key'+(forward?'<':'>=')+'?))':'',args=[now,...(cursor?[cursor.created_at,cursor.created_at,cursor.created_at,cursor.entity_key]:[]),maximum];
+        return this.#db.prepare("SELECT created_at,entity_key,payload FROM framework_entities INDEXED BY framework_status WHERE collection='_raffleDue' AND status='pending' AND created_at<=?"+predicate+' ORDER BY created_at ASC,entity_key DESC LIMIT ?').all(...args);
+      };
+      const rows=select(true,limit);if(cursor&&rows.length<limit)rows.push(...select(false,limit-rows.length));if(rows.length){const {created_at,entity_key}=rows.at(-1);this.#raffleCursor={created_at,entity_key};}
+      return rows.flatMap(row=>{this.#decoded++;const envelope=decodeRecordEnvelope(this.#codec,row.payload,'_raffleDue',row.entity_key,this.#recordKey);return envelope.value.state>now?[envelope.key]:[];});
+    });
+  }
   selectDueExpirations(collection,at,limit=32){
     check(this.#storageVersion>=6,'RECORD_MIGRATION_REQUIRED','Expiration selection requires writable schema migration',503);
     check(['trades','listings'].includes(collection)&&Number.isFinite(Date.parse(at))&&Number.isSafeInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Invalid expiration selection');
@@ -201,7 +217,7 @@ export class SQLiteStore {
   prepareRecordTransactions({force=false}={}){
     return this.transact(state=>{
       let summary;try{summary=JSON.parse(state[recordAccountingField]);}catch{}
-      if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision&&state._listingCreationReady===true&&state._listingCreationRevision===state.revision)return {prepared:false};
+      if(!force&&validRecordAccounting(summary,state.revision)&&state._listingPurchasesReady===true&&state._listingPurchasesRevision===state.revision&&state._listingCreationReady===true&&state._listingCreationRevision===state.revision&&state._raffleDueRevision===state.revision)return {prepared:false};
       state[recordAccountingField]=recordPreparationMarker;
       return {prepared:true};
     });
@@ -250,7 +266,7 @@ export class SQLiteStore {
           const obligation=scope.api.get('completionObligations','pack:'+pack.key);check(obligation?.status==='reserved','COMPLETION_MIGRATION_REQUIRED','Listed pack requires its existing reservation',503);
           previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);previousPartial.completionObligations[obligation.id]=obligation;partial.completionObligations[obligation.id]=obligation;
         }
-        if(options.listingPurchase){const listing=plan.changes.find(row=>row.collection==='listings');const obligation=scope.api.get('completionObligations','listing:'+listing.key);previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);if(!previousPartial.completionObligations[obligation.id])previousPartial.completionObligations[obligation.id]=obligation;if(!partial.completionObligations[obligation.id])partial.completionObligations[obligation.id]=obligation;}
+        if(options.listingPurchase||options.raffle){const listing=plan.loaded.find(row=>row.collection==='listings');const obligation=scope.api.get('completionObligations','listing:'+listing.key);previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);if(!previousPartial.completionObligations[obligation.id])previousPartial.completionObligations[obligation.id]=obligation;if(!partial.completionObligations[obligation.id])partial.completionObligations[obligation.id]=obligation;}
         const oldPart=summarizeRecords(previousPartial);
         // The selected job may share a completion with unselected siblings.
         const actionObligation=options.actionDelivery&&plan.changes.find(row=>row.collection==='completionObligations');
@@ -263,6 +279,7 @@ export class SQLiteStore {
         const scalar=(name,old,value)=>{before.fields.set(name,{kind:'scalar',raw:JSON.stringify(old),value:old});after.fields.set(name,{kind:'scalar',raw:JSON.stringify(value),value});};
         scalar('revision',revision,summary.revision);
         const purchaseRevision=scope.api.value('_listingPurchasesRevision');if(purchaseRevision===revision){scalar('_listingPurchasesRevision',purchaseRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_listingPurchasesRevision',null,purchaseRevision);}
+        const raffleRevision=scope.api.value('_raffleDueRevision');if(raffleRevision===revision){scalar('_raffleDueRevision',raffleRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_raffleDueRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_raffleDueRevision',null,raffleRevision);}
         const creationRevision=scope.api.value('_listingCreationRevision');if(creationRevision===revision){scalar('_listingCreationRevision',creationRevision,summary.revision);delta+=encodedRecordBytes(this.#codec,'_listingCreationRevision',null,summary.revision)-encodedRecordBytes(this.#codec,'_listingCreationRevision',null,creationRevision);}
         delta+=encodedRecordBytes(this.#codec,'revision',null,summary.revision)-encodedRecordBytes(this.#codec,'revision',null,revision);
         for(const row of plan.scalars){if(row.old!==undefined)before.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.old),value:row.old});after.fields.set(row.name,{kind:'scalar',raw:JSON.stringify(row.value),value:row.value});delta+=encodedRecordBytes(this.#codec,row.name,null,row.value)-(row.old===undefined?0:encodedRecordBytes(this.#codec,row.name,null,row.old));}

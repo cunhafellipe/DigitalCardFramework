@@ -947,7 +947,7 @@ export class CommerceService {
   }
 
   enter(actor, { key, listingId }) {
-    return this.#b.command(
+    return this.#b.raffleCommand(
       actor,
       key,
       "raffle.entered",
@@ -990,7 +990,7 @@ export class CommerceService {
     };
   }
   raffleStatus(actor, { listingId }) {
-    return this.#b.read((s) => {
+    return this.#b.raffleRead(actor,{listingId},(s) => {
       const u = this.#b.user(s, actor),
         l = record(s.listings, listingId);
       check(
@@ -1006,7 +1006,7 @@ export class CommerceService {
     });
   }
   draw(actor, { key, listingId }) {
-    return this.#b.operator(
+    return this.#b.raffleOperator(
       actor,
       key,
       "raffles.draw",
@@ -1039,12 +1039,13 @@ export class CommerceService {
           const [userId] = entries.splice(n, 1);
           winners.push({ userId, unitId: units[i].id, orderId: null });
         }
+        const at=this.#b.now();
         l.draw = {
           id: randomUUID(),
-          at: this.#b.now(),
+          at,
           claimUntil: new Date(
             Math.min(
-              Date.parse(this.#b.now()) + l.raffle.claimSeconds * 1000,
+              Date.parse(at) + l.raffle.claimSeconds * 1000,
               l.endsAt ? Date.parse(l.endsAt) : Infinity,
             ),
           ).toISOString(),

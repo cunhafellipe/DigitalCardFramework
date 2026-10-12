@@ -2,6 +2,7 @@ import {completionPool,missingCompletions,ordinaryRequestCount} from './completi
 import {check} from './catalog.js';
 
 export const recordAccountingField='_recordAccounting';
+export const raffleDueRecord=listing=>({id:listing.id,status:listing.status==='active'&&listing.raffle&&!listing.draw?'pending':'closed',createdAt:listing.raffle?new Date(listing.raffle.entryClosesAt).toISOString():'',state:listing.endsAt?new Date(listing.endsAt).toISOString():'9999-12-31T23:59:59.999Z'});
 export function validRecordAccounting(summary,revision){
   const count=value=>Number.isSafeInteger(value)&&value>=0;
   return summary?.version===3&&summary.revision===revision&&count(summary.usedBytes)
@@ -71,12 +72,14 @@ export function updateTradeEscrow(state){
  state._listingPurchases=purchases;state._listingPurchasesReady=true;state._listingPurchasesRevision=state.revision;
  const shops=Object.create(null);for(const listing of Object.values(state.listings??{}))if(listing.status==='active')shops[listing.shopId]=(shops[listing.shopId]??0)+1;
  state._shopListingCounts=shops;
+ state._raffleDue=Object.fromEntries(Object.values(state.listings??{}).map(listing=>[listing.id,raffleDueRecord(listing)]));state._raffleDueRevision=state.revision;
  const identities=Object.create(null);for(const code of Object.values(state.codes??{})){identities[JSON.stringify(['fingerprint',code.fingerprint])]=code.id;if(code.externalId)identities[JSON.stringify(['external',code.providerId,code.externalId])]=code.id;}
  state._codeIdentities=identities;state._codeStock=Object.fromEntries(Object.values(state.codes??{}).map(row=>[row.id,{id:row.id,variantId:row.id,poolId:row.poolId,status:row.status,createdAt:row.expiresAt?new Date(row.expiresAt).toISOString():''}]));state._listingCreationReady=true;state._listingCreationRevision=state.revision;
 }
 
 /** Maintain encrypted creation projections alongside record changes. */
 export function updateListingCreationRecords(tx,plan){
+ if(tx.value('_raffleDueRevision')===tx.value('revision'))for(const row of plan.changes)if(row.collection==='listings')tx.put('_raffleDue',row.key,raffleDueRecord(row.value));
  if(tx.value('_listingCreationReady')!==true||tx.value('_listingCreationRevision')!==tx.value('revision'))return;
  for(const row of plan.changes){
   if(row.collection==='listings'){

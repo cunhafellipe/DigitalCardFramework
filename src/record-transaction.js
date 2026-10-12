@@ -1,6 +1,7 @@
 import {isDeepStrictEqual} from 'node:util';
 import {check} from './catalog.js';
 import {missingCompletions,deliveryBytes} from './completion.js';
+import {raffleDueRecord} from './record-accounting.js';
 
 const fieldName=name=>check(typeof name==='string'&&name.length>0&&name.length<=200&&!['__proto__','constructor','prototype'].includes(name),'INVALID_INPUT','Invalid collection');
 const keyName=key=>check(typeof key==='string'&&key.length<=2048,'INVALID_INPUT','Invalid record key');
@@ -55,14 +56,36 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false,listingCreation=false}={}){
-  const derived=plan.changes.filter(row=>['_shopListingCounts','_codeIdentities','_codeStock'].includes(row.collection));
+export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false,listingCreation=false,raffle=false,raffleDraw=false}={}){
+  const derived=plan.changes.filter(row=>['_shopListingCounts','_codeIdentities','_codeStock','_raffleDue'].includes(row.collection));
   for(const row of derived){
-    if(row.collection==='_shopListingCounts'){const delta=plan.changes.filter(item=>item.collection==='listings').reduce((n,item)=>n+Number(item.value?.shopId===row.key&&item.value.status==='active')-Number(item.old?.value.shopId===row.key&&item.old.value.status==='active'),0);check(delta!==0&&row.value===(row.old?.value??0)+delta,'INVALID_STATE','Listing count projection differs',500);}
+    if(row.collection==='_raffleDue')check(plan.changes.some(item=>item.collection==='listings'&&item.key===row.key&&isDeepStrictEqual(row.value,raffleDueRecord(item.value))),'INVALID_STATE','Raffle due projection differs',500);
+    else if(row.collection==='_shopListingCounts'){const delta=plan.changes.filter(item=>item.collection==='listings').reduce((n,item)=>n+Number(item.value?.shopId===row.key&&item.value.status==='active')-Number(item.old?.value.shopId===row.key&&item.old.value.status==='active'),0);check(delta!==0&&row.value===(row.old?.value??0)+delta,'INVALID_STATE','Listing count projection differs',500);}
     else if(row.collection==='_codeStock')check(plan.changes.some(item=>item.collection==='codes'&&item.key===row.key&&isDeepStrictEqual(row.value,{id:item.key,variantId:item.key,poolId:item.value.poolId,status:item.value.status,createdAt:item.value.expiresAt?new Date(item.value.expiresAt).toISOString():''})),'INVALID_STATE','Code stock projection differs',500);
     else check(!row.old&&plan.changes.some(item=>item.collection==='codes'&&!item.old&&item.key===row.value&&(row.key===JSON.stringify(['fingerprint',item.value.fingerprint])||item.value.externalId&&row.key===JSON.stringify(['external',item.value.providerId,item.value.externalId]))),'INVALID_STATE','Code identity projection differs',500);
   }
   plan={...plan,changes:plan.changes.filter(row=>!derived.includes(row))};
+  if(raffle){
+    check(!plan.scalars.length&&!plan.completion,'RECORD_TRANSACTION_UNSUPPORTED','Raffles require ordinary admission',409);
+    const listing=plan.loaded.find(row=>row.collection==='listings'),receipt=raffleDraw?'operatorRequests':'requests';
+    check(listing?.old?.value.raffle,'INVALID_STATE','Existing raffle required',500);
+    const before=listing.old.value,next=listing.value,stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>key!==(raffleDraw?'draw':'entries')));
+    check(isDeepStrictEqual(stable(before),stable(next)),'INVALID_STATE','Raffle terms are immutable',500);
+    if(raffleDraw){
+      if(before.draw)check(isDeepStrictEqual(before.draw,next.draw),'INVALID_STATE','Committed draw is immutable',500);
+      else {const draw=next.draw,available=before.units.filter(unit=>unit.status==='available'),count=Math.min(Object.keys(before.entries).length,before.raffle.winners,available.length);
+        check(before.status==='active'&&draw&&Number.isFinite(Date.parse(draw.at))&&Date.parse(draw.at)>=Date.parse(before.raffle.entryClosesAt)&&(!before.endsAt||Date.parse(draw.at)<Date.parse(before.endsAt))&&Date.parse(draw.claimUntil)===Math.min(Date.parse(draw.at)+before.raffle.claimSeconds*1000,before.endsAt?Date.parse(before.endsAt):Infinity),'INVALID_STATE','Invalid raffle draw deadline',500);
+        check(draw.winners.length===count&&new Set(draw.winners.map(win=>win.userId)).size===count&&draw.winners.every((win,index)=>Object.hasOwn(before.entries,win.userId)&&win.unitId===available[index].id&&win.orderId===null),'INVALID_STATE','Invalid raffle winners',500);
+      }
+    }else {const additions=Object.keys(next.entries).filter(id=>!Object.hasOwn(before.entries,id));check(additions.length<=1&&Object.keys(before.entries).every(id=>isDeepStrictEqual(before.entries[id],next.entries[id])),'INVALID_STATE','Existing entries are immutable',500);}
+    for(const row of plan.changes){
+      check(['listings',receipt,'events','notifications','actionJobs','completionObligations'].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside raffle scope',409);
+      if(row.collection==='listings')check(row.key===listing.key,'INVALID_STATE','Only selected raffle may change',500);
+      else if(row.collection==='notifications'){check(raffleDraw&&next.draw.winners.some(win=>win.userId===(row.value??row.old?.value).userId),'INVALID_STATE','Only winners receive raffle notifications',500);if(row.value)check(!row.old&&row.value.type==='raffle.won'&&row.value.data.listingId===listing.key&&row.value.data.claimUntil===next.draw.claimUntil,'INVALID_STATE','Invalid winner notification',500);}
+      else {check(!row.old&&!row.value.completionId,'INVALID_STATE','Raffle outputs require ordinary append admission',500);if(row.collection==='events')check(row.value.sequence===row.ordinal+1&&row.value.type===(raffleDraw?'raffle.drawn':'raffle.entered'),'INVALID_STATE','Invalid raffle event',500);if(row.collection==='completionObligations')check(row.value.kind==='action','INVALID_STATE','Only delivery reservations may be added',500);}
+    }
+    return;
+  }
   if(listingCreation){
     check(!plan.scalars.length&&!plan.completion,'RECORD_TRANSACTION_UNSUPPORTED','Listing creation requires ordinary admission',409);
     const listings=plan.changes.filter(row=>row.collection==='listings');check(listings.length===1&&!listings[0].old&&listings[0].value.status==='active','INVALID_STATE','One new active listing required',500);

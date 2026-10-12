@@ -55,7 +55,7 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingPurchase=false}={}){
+export function validateRecordPlan(plan,{intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false}={}){
   if(!plan.changes.length&&!plan.scalars.length&&!plan.completion)return;
   if(listingPurchase){
     check(!plan.scalars.length&&!plan.completion,'RECORD_TRANSACTION_UNSUPPORTED','Listing purchases require ordinary admission',409);
@@ -81,15 +81,20 @@ export function validateRecordPlan(plan,{intent=false,preferences=false,packComp
     }
     return;
   }
-  if(listingCompletion){
+  if(listingCancellation&&!plan.completion){
+    check(!plan.scalars.length&&plan.loaded.some(row=>row.collection==='listings'&&row.old?.value.status!=='active'),'INVALID_STATE','Closed listing cancellation requires ordinary admission',500);
+    for(const row of plan.changes){check(['requests','events','actionJobs','completionObligations'].includes(row.collection)&&!row.old,'RECORD_TRANSACTION_UNSUPPORTED','Closed listing cancellation delivery is append-only',409);if(['requests','events','actionJobs'].includes(row.collection))check(!row.value.completionId,'INVALID_STATE','Closed listing cancellation requires ordinary delivery',500);if(row.collection==='events')check(row.value.sequence===row.ordinal+1&&row.value.type==='listing.canceled','INVALID_STATE','Invalid cancellation command event',500);if(row.collection==='completionObligations')check(row.value.kind==='action','INVALID_STATE','Only delivery reservations may be added',500);}
+    check(missingCompletions(Object.fromEntries(['actionJobs','completionObligations'].map(field=>[field,Object.fromEntries(plan.changes.filter(row=>row.collection===field).map(row=>[row.key,row.value]))]))).length===0,'COMPLETION_MIGRATION_REQUIRED','Delivery reservations required',503);return;
+  }
+  if(listingCompletion||listingCancellation){
     check(!plan.scalars.length&&plan.completion&&!plan.completion.admission,'INVALID_STATE','Listing completion requires its admitted reservation',500);
     const listing=plan.changes.find(row=>row.collection==='listings'),reservation=plan.changes.find(row=>row.collection==='completionObligations'&&row.key===plan.completion.id);
-    check(plan.changes.filter(row=>row.collection==='listings').length===1&&listing?.old?.value.status==='active'&&listing.value.status==='expired'&&reservation?.old?.value.kind==='listing'&&reservation.old.value.entityId===listing.key&&reservation.old.value.status==='reserved'&&reservation.value.status==='completed'&&reservation.key==='listing:'+listing.key,'INVALID_STATE','Invalid listing expiration',500);
-    check([listing.old.value.endsAt,listing.old.value.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(listing.value.closedAt)),'INVALID_STATE','Listing deadline has not elapsed',500);
-    const expected=clone(listing.old.value);expected.status='expired';expected.closedAt=listing.value.closedAt;for(const unit of expected.units)if(unit.status==='available')unit.status='released';check(isDeepStrictEqual(expected,listing.value),'INVALID_STATE','Listing terms are immutable',500);
+    check(plan.changes.filter(row=>row.collection==='listings').length===1&&listing?.old?.value.status==='active'&&listing.value.status===(listingCancellation?'canceled':'expired')&&reservation?.old?.value.kind==='listing'&&reservation.old.value.entityId===listing.key&&(reservation.old.value.status==='reserved'||listingCancellation&&reservation.old.value.status==='completed'&&listing.old.value.units.every(unit=>unit.status!=='available'))&&reservation.value.status==='completed'&&reservation.key==='listing:'+listing.key,'INVALID_STATE','Invalid listing expiration',500);
+    if(!listingCancellation)check([listing.old.value.endsAt,listing.old.value.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(listing.value.closedAt)),'INVALID_STATE','Listing deadline has not elapsed',500);
+    const expected=clone(listing.old.value);expected.status=listingCancellation?'canceled':'expired';expected.closedAt=listing.value.closedAt;for(const unit of expected.units)if(unit.status==='available')unit.status='released';check(isDeepStrictEqual(expected,listing.value),'INVALID_STATE','Listing terms are immutable',500);
     const units=listing.old.value.units.filter(unit=>unit.status==='available'),packs=plan.loaded.filter(row=>row.collection==='packs'&&units.some(unit=>unit.kind==='pack'&&unit.packId===row.key)),copies=new Set(units.filter(unit=>unit.kind==='copy').map(unit=>unit.copyId));for(const pack of packs)for(const id of pack.old?.value.copyIds??[])copies.add(id);
     for(const row of plan.changes){
-      check(['listings','copies','packs','events','actionJobs','completionObligations'].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside listing completion scope',409);
+      check(['listings','copies','packs','events','actionJobs','completionObligations',...(listingCancellation?['requests']:[])].includes(row.collection),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside listing completion scope',409);
       if(['copies','packs'].includes(row.collection)){check(row.old&&(row.collection==='copies'?copies.has(row.key):units.some(unit=>unit.kind==='pack'&&unit.packId===row.key)),'INVALID_STATE','Only listing stock may change',500);const expected=clone(row.old.value);if(expected.lockedBy==='market:'+listing.key)delete expected.lockedBy;check(isDeepStrictEqual(expected,row.value),'INVALID_STATE','Listing may release only its own stock lock',500);}
       else if(row.collection==='completionObligations'){check(row===reservation&&isDeepStrictEqual(Object.fromEntries(Object.entries(row.old.value).filter(([key])=>!['status','usedBytes'].includes(key))),Object.fromEntries(Object.entries(row.value).filter(([key])=>!['status','usedBytes'].includes(key)))),'INVALID_STATE','Reservation terms are immutable',500);}
       else if(row.collection!=='listings'){check(!row.old&&row.value.completionId===reservation.key,'INVALID_STATE','Listing delivery records require its reservation',500);if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);}

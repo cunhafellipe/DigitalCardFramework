@@ -245,7 +245,7 @@ export class SQLiteStore {
           if(row.value!==undefined){if(kind==='array')partial[row.collection].push(row.value);else partial[row.collection][row.key]=row.value;}
           if(row.collection==='events')check(row.value.sequence===row.ordinal+1,'INVALID_STATE','Event sequence differs from append position',500);
         }
-        if(options.listingCompletion||options.listingPurchase)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
+        if(options.listingCompletion||options.listingCancellation||options.listingPurchase)for(const pack of plan.changes.filter(row=>row.collection==='packs'&&!row.old.value.receipt)){
           const obligation=scope.api.get('completionObligations','pack:'+pack.key);check(obligation?.status==='reserved','COMPLETION_MIGRATION_REQUIRED','Listed pack requires its existing reservation',503);
           previousPartial.completionObligations??=Object.create(null);partial.completionObligations??=Object.create(null);previousPartial.completionObligations[obligation.id]=obligation;partial.completionObligations[obligation.id]=obligation;
         }

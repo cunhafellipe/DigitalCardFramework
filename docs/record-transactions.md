@@ -60,7 +60,13 @@ Prepared listing quotes read selected records in a read-only snapshot. Purchases
 
 Preparation builds encrypted per-listing/per-buyer purchase totals from existing orders. A separate revision marker prevents an older writer from making stale totals appear current. Current compatibility writers rebuild the projection; bounded writers keep its revision synchronized and purchases update the selected total. Run `store.prepareRecordTransactions()` during writable maintenance to initialize or repair it. Preparation consumes ordinary capacity and is separate from a purchase.
 
-Missing or stale projections and oversized input scopes can use compatibility recovery before invoking host purchase policy. Once that policy is invoked, a failed bounded attempt rolls back without automatically calling it again through fallback. Quotes remain read-only; new purchases require ordinary admission capacity and cannot spend listing expiration reserves. Selling the final available unit releases the listing's unused reservation. Snapshot fallback and synchronous database costs remain; listing creation, cancellation and raffle drawing are separate command paths.
+Missing or stale projections and oversized input scopes can use compatibility recovery before invoking host purchase policy. Once that policy is invoked, a failed bounded attempt rolls back without automatically calling it again through fallback. Quotes remain read-only; new purchases require ordinary admission capacity and cannot spend listing expiration reserves. Selling the final available unit releases the listing's unused reservation. Snapshot fallback and synchronous database costs remain; listing creation and raffle drawing are separate command paths.
+
+## Listing cancellation
+
+Prepared listing cancellation loads the actor, retained receipt, listing, seller/shop display data and available stock. Seller or commerce-manager authorization, matching stock-lock release, cancellation events and receipt commit atomically. Sealed packs and their cards retain issued snapshots. Exact-key replay returns the original public listing result after restart; a conflicting input for the same key is rejected.
+
+An active listing completes through its existing reservation, including an active listing whose stock has sold out. A fresh request for an already-closed listing uses ordinary receipt/event admission; replay does not create additional records. Unprepared, legacy and oversized scopes retain compatibility recovery. This does not change listing creation, raffle drawing or synchronous storage behavior.
 
 ## Preparation and mixed writers
 

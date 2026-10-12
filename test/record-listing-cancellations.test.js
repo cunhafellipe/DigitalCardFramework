@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {SQLiteStore} from '../src/sqlite.js';
+import {CardFramework} from '../src/core.js';
+import {fixture,admin,code} from './helpers.js';
+import {summarizeRecords} from '../src/record-accounting.js';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {randomBytes} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const at='2026-09-30T12:00:00.000Z',later='2026-10-01T12:00:00.000Z';
+const subscriptions=[{id:'cancel',events:['listing.canceled'],handler:'cancel'}];
+function setup(t){const dir=mkdtempSync(join(tmpdir(),'listing-cancel-')),path=join(dir,'state.sqlite'),encryptionKey=randomBytes(32);let store=new SQLiteStore(path,{encryptionKey});const x=fixture({store,eventSubscriptions:subscriptions});t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});return {x,path,encryptionKey,get store(){return store;},restart(options={}){store.close();store=new SQLiteStore(path,{encryptionKey,...options});x.core=new CardFramework({store,clock:()=>at,eventSubscriptions:subscriptions});}};}
+function list(x,items={kind:'mint-card',variantId:'dawn.standard',quantity:1},extra={}){const seller={...x.alice,role:'admin'},shop=x.core.createShop(seller,{key:'shop',name:'Shop',kind:'admin'});return x.core.createListing(seller,{key:'listing',shopId:shop.id,title:'Stock',price:{currencyId:'credits',amount:5},items,endsAt:later,...extra});}
+const cancel=(z,l,key='cancel',actor=z.x.alice)=>z.x.core.cancelListing(actor,{key,listingId:l.id});
+function accounting(store){const state=store.read(s=>s),actual=summarizeRecords(state);actual.usedBytes=store.measure(state).usedBytes;assert.deepEqual(JSON.parse(state._recordAccounting),actual);}
+test('bounded listing cancellation authenticates, releases, queues and replays after restart',t=>{
+ const z=setup(t),copy=z.x.open()[0],l=list(z.x,{kind:'copies',ids:[copy.id]});z.store.prepareRecordTransactions();z.store.transact(s=>{for(let i=0;i<1800;i++)s.requests['history-'+i]={hash:'old',result:{}};});
+ const state=z.store.read(s=>s);assert.throws(()=>cancel(z,l,'denied',z.x.bob),code('NOT_FOUND'));assert.throws(()=>cancel(z,l,''),code('INVALID_INPUT'));assert.throws(()=>cancel(z,l,'disabled',{...z.x.alice,disabled:true}),code('UNAUTHENTICATED'));assert.deepEqual(z.store.read(s=>s),state);
+ const metrics=z.store.diagnostics(),result=cancel(z,l);assert.equal(result.status,'canceled');assert.equal(result.mine,true);assert.equal(result.shopName,'Shop');assert.equal(result.sellerName,'Alice');assert.deepEqual(result.preview,l.preview);assert.equal(z.store.diagnostics().compatibilityMaterializations,metrics.compatibilityMaterializations);assert(z.store.diagnostics().decodedQueryRecords-metrics.decodedQueryRecords<35);
+ const after=z.store.read(s=>s);assert.equal(after.copies[copy.id].lockedBy,undefined);assert.equal(after._listingPurchasesRevision,after.revision);assert.equal(after.events.filter(e=>e.type==='listing.canceled').length,2);assert.equal(Object.values(after.actionJobs).filter(j=>j.source.type==='event').length,2);assert.equal(after.requests[z.x.alice.userId+':cancel'].completionId,'listing:'+l.id);accounting(z.store);
+ z.restart();const replay=z.store.diagnostics();assert.deepEqual(cancel(z,l),result);assert.equal(z.store.diagnostics().recordWrites,replay.recordWrites);assert.throws(()=>cancel(z,{id:'other'}),code('IDEMPOTENCY_CONFLICT'));assert.throws(()=>cancel(z,l,'cancel',{userId:'unknown'}),code('UNAUTHENTICATED'));
+ z.store.transact(s=>{s.listings[l.id].sellerId=z.x.bob.userId;});assert.deepEqual(cancel(z,l),result);
+});
+test('delegated cancellation preserves public projection and closed new keys use ordinary admission',t=>{
+ const z=setup(t),l=list(z.x,undefined,{raffle:{entryClosesAt:'2026-09-30T13:00:00Z',claimSeconds:60,winners:1}});z.x.core.enterRaffle(z.x.bob,{key:'enter',listingId:l.id});z.store.prepareRecordTransactions();const result=cancel(z,l,'manager',{...z.x.bob,role:'admin'});assert.equal(result.mine,false);assert.equal(result.sellerName,'Alice');assert.equal(result.entryCount,1);assert.deepEqual(result.raffle,l.raffle);assert.equal(result.drawnAt,null);assert.equal(result.claimUntil,null);assert.equal(result.remaining,0);
+ const first=z.store.read(s=>s),reservation=structuredClone(first.completionObligations['listing:'+l.id]),next=cancel(z,l,'closed');assert.equal(next.status,'canceled');const state=z.store.read(s=>s);assert.equal(state.requests[z.x.alice.userId+':closed'].completionId,undefined);assert.deepEqual(state.completionObligations['listing:'+l.id],reservation);assert.equal(state.events.filter(e=>e.type==='listing.canceled').length,3);accounting(z.store);
+ const cap=z.store.measure(state).totalBytes;z.restart({maxStateBytes:cap});assert.throws(()=>cancel(z,l,'full-closed'),code('STORAGE_CAPACITY'));assert.deepEqual(z.store.read(s=>s),state);
+});
+test('active cancellation completes at ordinary storage and journal capacity',t=>{
+ const z=setup(t),copy=z.x.open()[0],l=list(z.x,{kind:'copies',ids:[copy.id]});z.store.prepareRecordTransactions();const state=z.store.read(s=>s),cap=z.store.measure(state).totalBytes,requests=summarizeRecords(state).ordinaryRequests,events=summarizeRecords(state).ordinaryEvents;z.restart({maxStateBytes:cap});z.x.core=new CardFramework({store:z.store,clock:()=>at,eventSubscriptions:subscriptions,limits:{requests,events}});const before=z.store.diagnostics();assert.equal(cancel(z,l).status,'canceled');assert.equal(z.store.diagnostics().compatibilityMaterializations,before.compatibilityMaterializations);assert.equal(z.store.read(s=>s.copies[copy.id].lockedBy),undefined);accounting(z.store);
+});
+test('pack cancellation changes only matching locks including children of an unchanged parent',t=>{
+ const z=setup(t);z.x.core.configureCommerce(admin,{key:'packs',expectedRevision:0,settings:{packResale:true}});const pack=z.x.buy().packs[0],l=list(z.x,{kind:'packs',ids:[pack.id]});z.store.prepareRecordTransactions();z.store.transact(s=>{s.packs[pack.id].lockedBy='other';s.copies[s.packs[pack.id].copyIds[0]].lockedBy='market:'+l.id;});const original=z.store.read(s=>s.packs[pack.id]);const metrics=z.store.diagnostics();cancel(z,l);assert.equal(z.store.diagnostics().compatibilityMaterializations,metrics.compatibilityMaterializations);assert.deepEqual(z.store.read(s=>s.packs[pack.id]),original);assert.equal(z.store.read(s=>s.copies[original.copyIds[0]].lockedBy),undefined);accounting(z.store);
+});
+test('soldout active listing uses its completed reservation and exact receipt',t=>{
+ const z=setup(t),l=list(z.x);z.store.prepareRecordTransactions();const quote=z.x.core.quoteListing(z.x.bob,{listingId:l.id,quantity:1});z.x.core.buyListing(z.x.bob,{...quote,key:'buy'});assert.equal(z.store.read(s=>s.completionObligations['listing:'+l.id].status),'completed');const cap=z.store.measure(z.store.read(s=>s)).totalBytes;z.restart({maxStateBytes:cap});const before=z.store.diagnostics(),result=cancel(z,l);assert.equal(result.status,'canceled');assert.equal(result.remaining,0);assert.equal(z.store.diagnostics().compatibilityMaterializations,before.compatibilityMaterializations);assert.deepEqual(cancel(z,l),result);accounting(z.store);
+});
+for(const rival of ['buy','expiry'])test('cancellation serializes with '+rival+' across processes',async t=>{
+ const z=setup(t),l=list(z.x);z.store.prepareRecordTransactions();const quote=z.x.core.quoteListing(z.x.bob,{listingId:l.id,quantity:1}),source=`import {SQLiteStore} from './src/sqlite.js';import {CardFramework} from './src/core.js';const store=new SQLiteStore(process.argv[1],{encryptionKey:Buffer.from(process.argv[2],'hex')});const core=new CardFramework({store,clock:()=>process.argv[3]==='expiry'?${JSON.stringify(later)}:${JSON.stringify(at)}});try{const actor=JSON.parse(process.argv[4]),input=JSON.parse(process.argv[5]);console.log(JSON.stringify({result:process.argv[3]==='cancel'?core.cancelListing(actor,input):process.argv[3]==='buy'?core.buyListing(actor,input):core.expireListings({role:'admin'})}));}catch(error){console.log(JSON.stringify({code:error.code}));}finally{core.close();}`;
+ const run=(op,actor,input)=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,['--input-type=module','-e',source,z.path,z.encryptionKey.toString('hex'),op,JSON.stringify(actor),JSON.stringify(input)],{cwd:new URL('..',import.meta.url),windowsHide:true});let out='',err='';child.stdout.on('data',data=>out+=data);child.stderr.on('data',data=>err+=data);child.on('error',reject);child.on('close',status=>status===0?resolve(JSON.parse(out.trim())):reject(Error(err)));});
+ const results=await Promise.all([run('cancel',z.x.alice,{listingId:l.id,key:'cancel'}),run(rival,z.x.bob,{...quote,key:'buy'})]);assert(results[0].result);const state=z.store.read(s=>s);assert(['canceled','expired'].includes(state.listings[l.id].status));assert.equal(state.events.filter(e=>e.type==='listing.expired'||e.type==='listing.canceled'&&e.data.listingId).length,1);assert(Object.keys(state.orders).length<=1);accounting(z.store);
+});
+
+test('unprepared and oversized scopes retain compatibility cancellation and rollback',t=>{
+ const z=setup(t),l=list(z.x),before=z.store.diagnostics();assert.equal(cancel(z,l).status,'canceled');assert(z.store.diagnostics().compatibilityMaterializations>before.compatibilityMaterializations);z.store.prepareRecordTransactions();const records=z.store.transactRecords.bind(z.store);z.store.transactRecords=(fn,options)=>records(fn,{...options,maxRecords:1});assert.equal(cancel(z,l,'compat-closed').status,'canceled');z.store.transactRecords=records;accounting(z.store);
+});
+test('cancellation rollback retains stock, reservation, receipt and queued delivery',t=>{
+ const z=setup(t),copy=z.x.open()[0],l=list(z.x,{kind:'copies',ids:[copy.id]});z.store.prepareRecordTransactions();const before=z.store.read(s=>s),records=z.store.transactRecords.bind(z.store);z.store.transactRecords=(fn,options)=>records(tx=>{fn(tx);throw Error('Interrupted cancellation');},options);assert.throws(()=>cancel(z,l),/Interrupted cancellation/);assert.deepEqual(z.store.read(s=>s),before);z.store.transactRecords=records;z.restart();assert.equal(cancel(z,l).status,'canceled');accounting(z.store);
+});
+test('closed listing new keys cannot consume reserved ordinary request capacity',t=>{
+ const z=setup(t),l=list(z.x);z.store.prepareRecordTransactions();cancel(z,l);const state=z.store.read(s=>s),limits={requests:summarizeRecords(state).ordinaryRequests};z.x.core=new CardFramework({store:z.store,clock:()=>at,eventSubscriptions:subscriptions,limits});assert.throws(()=>cancel(z,l,'closed-full'),code('INSTALLATION_CAPACITY'));assert.deepEqual(z.store.read(s=>s),state);assert.equal(cancel(z,l).status,'canceled');
+});

@@ -919,7 +919,7 @@ export class CommerceService {
     });
   }
   cancel(actor, { key, listingId }) {
-    return this.#b.command(
+    return this.#b.cancelListingCommand(
       actor,
       key,
       "listing.canceled",

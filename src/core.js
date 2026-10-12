@@ -50,6 +50,7 @@ export class CardFramework {
     this.#externalPurchases=new ExternalPurchaseService({store,clock,user:(s,a)=>this.#user(s,a),capacity:s=>this.#capacity(s,true),capture:(s,u,q)=>this.#captureExternalPurchase(s,u,q),allocate:(s,row)=>this.#allocateExternalPurchase(s,row),legacy:(s,row)=>this.#reconcileLegacyPurchase(s,row),resolveLegacy:(s,row,key)=>this.#resolveLegacyPurchase(s,row,key),resolutionCandidate:(s,row)=>this.#legacyResolutionCandidate(s,row)},{providers:externalPurchaseProviders,limits:externalPurchaseLimits});
     this.#commerce=new CommerceService({
       read:fn=>store.read(fn),transact:fn=>store.transact(fn),now:clock,
+      cancelListingCommand:(actor,key,type,input,fn)=>this.#cancelListingRecords(actor,key,input,fn),
       listingRead:(actor,input,fn)=>this.#listingRecords(actor,null,input,fn,false),listingCommand:(actor,key,type,input,fn)=>this.#listingRecords(actor,key,input,fn),
       selectDueExpirations:(collection,at,limit)=>store.selectDueExpirations?store.selectDueExpirations(collection,at,limit):store.read(s=>Object.values(s[collection]??{}).filter(l=>l.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(date=>Date.parse(date)<=Date.parse(at))).slice(0,limit).map(l=>l.id)),expireListing:(listingId,release)=>this.#expireListingRecords(listingId,release),
       user:(s,a)=>this.#user(s,a),currency:(s,id)=>this.#currency(s,id),blocked:(s,a,b)=>this.#blocked(s,a,b),
@@ -963,6 +964,34 @@ export class CardFramework {
         for(const field of ['ledger','events','notifications'])for(const row of state[field])tx.append(field,row);for(const id of new Set(state.notifications.map(row=>row.userId)))tx.trimNotifications(id);return result;
       }finally{recordContexts.delete(state);}
     },purchasing?{listingPurchase:true}:{});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
+  }
+  #cancelListingRecords(actor,key,input,fn){
+    const type='listing.canceled',fallback=()=>this.#command(actor,key,type,input,fn);
+    text(key,'idempotency key',128);if(!this.#store.transactRecords)return fallback();let invoked=false;
+    try{return this.#store.transactRecords(tx=>{
+      const user=this.#queryUser(tx,actor),token=user.id+':'+key,hash=fingerprint({type,input}),previous=tx.get('requests',token);
+      if(previous){check(previous.hash===hash,'IDEMPOTENCY_CONFLICT','Request key was used for another command',409);return previous.result;}
+      let accounting;const raw=tx.value(recordAccountingField);try{accounting=JSON.parse(raw);}catch{}
+      if(raw!==undefined&&(!accounting||accounting.revision===tx.value('revision')))check(validRecordAccounting(accounting,tx.value('revision')),'INVALID_STATE','Invalid record accounting',500);
+      check(validRecordAccounting(accounting,tx.value('revision')),'RECORD_PATH_UNAVAILABLE','Prepare revision-bound record accounting',503);
+      const listing=typeof input.listingId==='string'?tx.get('listings',input.listingId):undefined;
+      check(listing&&(listing.sellerId===user.id||hasPermission(actor,'commerce.manage')),'NOT_FOUND','Listing not found',404);
+      const active=listing.status==='active',obligation=active?tx.get('completionObligations','listing:'+listing.id):null;
+      if(active)check(obligation&&['reserved','completed'].includes(obligation.status),'RECORD_PATH_UNAVAILABLE','Listing requires compatibility reservation recovery',409);
+      const copies=Object.create(null),packs=Object.create(null),users={[user.id]:user},shop=tx.get('shops',listing.shopId);
+      if(listing.sellerId!==user.id){const seller=tx.get('users',listing.sellerId);if(seller)users[seller.id]=seller;}
+      if(active)for(const unit of listing.units??[]){if(unit.status!=='available')continue;if(unit.kind==='copy'){const copy=tx.get('copies',unit.copyId);if(copy)copies[unit.copyId]=copy;}else if(unit.kind==='pack'){const pack=tx.get('packs',unit.packId);if(pack){packs[pack.id]=pack;for(const id of pack.copyIds){const copy=tx.get('copies',id);if(copy)copies[id]=copy;}}}}
+      const state={schemaVersion:1,revision:accounting.revision,users,shops:shop?{[shop.id]:shop}:{},listings:{[listing.id]:listing},copies,packs,requests:{},events:[],completionObligations:obligation?{[obligation.id]:obligation}:{}};
+      const part=summarizeRecords(state);for(const field of ['copies','packs','shops','listings'])accounting.counts[field]-=part.counts[field]??0;for(const field of Object.keys(accounting.completion))accounting.completion[field]-=part.completion[field];
+      check(Object.keys(copies).length*2+Object.keys(packs).length<3000&&Buffer.byteLength(JSON.stringify(state))<8*1024*1024,'RECORD_PATH_UNAVAILABLE','Listing cancellation requires compatibility scope',409);
+      recordContexts.set(state,{accounting});
+      try{
+        const execute=()=>{invoked=true;const result=fn(state,user),completion=completionContext(state);state.requests[token]={hash,result:clone(result),...(completion?{completionId:completion.id}:{})};this.#event(state,type,{userId:user.id});this.#capacity(state,true);return result;};
+        const result=active?this.#complete(state,'listing',listing.id,execute):execute();
+        for(const field of ['listings','copies','packs','requests','actionJobs','completionObligations'])for(const [id,row]of Object.entries(state[field]??{}))tx.put(field,id,row);for(const event of state.events)tx.append('events',event);
+        if(active)tx.reserveListingCompletion(obligation.id);return result;
+      }finally{recordContexts.delete(state);}
+    },{listingCancellation:true});}catch(error){if(!invoked&&['RECORD_PATH_UNAVAILABLE','TRANSACTION_BUDGET'].includes(error.code))return fallback();throw error;}
   }
   #expireListingRecords(listingId,release){
     const due=l=>l?.status==='active'&&[l.endsAt,l.draw?.claimUntil].some(at=>Date.parse(at)<=Date.parse(this.#clock()));

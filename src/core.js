@@ -562,8 +562,9 @@ export class CardFramework {
     check(row.snapshot,'STALE_QUOTE','Original allocation terms are unavailable',409);
     const currentCatalog=s.catalog,currentValidation=s.cardValidation;
     s.catalog=clone(row.snapshot.catalog);s.cardValidation=clone(row.snapshot.cardValidation);
-    if(plan)this.#allocationAdmissions.set(s,{productId:row.snapshot.product.id,quantity:row.terms.quote.quantity,plan,scope:'external-fulfillment',selection:this.#codeIssuance.within(s,tx=>this.#codeIssuance.admission(tx,s.allocationAttempts[row.allocationAttemptId]))?.batch.selection});
-    const attempt=row.allocationAttemptId?s.allocationAttempts[row.allocationAttemptId]:null,codes=this.#codes.admitAllocation(s,attempt?.codeSnapshot,this.#codeIssuance.within(s,tx=>this.#codeIssuance.admission(tx,attempt)));try{
+    const attempt=row.allocationAttemptId?s.allocationAttempts[row.allocationAttemptId]:null,generated=attempt?.codeSnapshot?.generated?.length?this.#codeIssuance.within(s,tx=>this.#codeIssuance.admission(tx,attempt)):null;
+    if(plan)this.#allocationAdmissions.set(s,{productId:row.snapshot.product.id,quantity:row.terms.quote.quantity,plan,scope:'external-fulfillment',selection:generated?.batch.selection});
+    const codes=this.#codes.admitAllocation(s,attempt?.codeSnapshot,generated);try{
       const purchaseId=id(),packs=this.#allocatePacks(s,user,row.snapshot.product,row.terms.quote.quantity,{purchaseId,externalPreparationId:row.preparationId});
       if(codes)attempt.codeAssignments=clone(codes.assignments);this.#event(s,'packs.purchased',{userId:user.id,preparationId:row.preparationId,purchaseId});
       return {id:purchaseId,packs,paid:clone(row.terms.quote.price)};

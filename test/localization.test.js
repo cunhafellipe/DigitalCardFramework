@@ -60,6 +60,14 @@ test('per-form and total UTF-8 limits apply to portable bundles',()=>{
   invalid(bundle(messages));
 });
 
+test('expanded collector catalog accepts bounded large bundles and retains old bundle compatibility',()=>{
+  assert.equal(localizationSchema.maximumBytes,65536);assert.equal(localizationSchema.maximumMessages,512);
+  const makeMessages=padding=>Object.fromEntries(Object.entries(localizationKeys).map(([key,metadata])=>{const text='x'.repeat(padding)+metadata.placeholders.map(name=>'{'+name+'}').join(' ');return [key,metadata.plural?{other:text}:text];})),large=bundle(makeMessages(70));
+  const bytes=new TextEncoder().encode(JSON.stringify(large)).length;assert(bytes>32768&&bytes<=65536);assert.equal(Object.keys(validateLocalizationBundle(large).messages).length,Object.keys(localizationKeys).length);
+  const oversized=bundle(makeMessages(150));assert(new TextEncoder().encode(JSON.stringify(oversized)).length>65536);invalid(oversized);
+  const oldMessages=Object.fromEntries(Object.entries(englishMessages).slice(0,220));assert.equal(Object.keys(validateLocalizationBundle(bundle(oldMessages,'en')).messages).length,220);
+});
+
 test('independent instances retain their locale and validated message snapshot',()=>{
   const messages={'packs.open':'Ouvrir le paquet'},fr=createLocalization({locale:'fr',messages}),en=createLocalization();messages['packs.open']='Changed';
   assert.equal(fr.text('packs.open'),'Ouvrir le paquet');assert.equal(en.text('packs.open'),'Open pack');assert.equal(fr.number(1234.5),'1 234,5');assert.equal(en.number(1234.5),'1,234.5');

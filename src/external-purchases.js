@@ -131,7 +131,7 @@ export class ExternalPurchaseService {
     return {usedBytes, reservedBytes, totalBytes: usedBytes + reservedBytes, limitBytes: Infinity};
   }
   #consumeReservation(s,row,before,reserve){
-    if(s.allocationAttempts?.[row.allocationAttemptId]?.context.product.strategy.version!==3){row.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));return;}
+    if(!(s.allocationAttempts?.[row.allocationAttemptId]?.context.product.strategy.version>=3)){row.completionBytes=Math.max(0,reserve-Math.max(0,this.#measure(s).usedBytes-before.usedBytes));return;}
     let stable=false;for(let iteration=0;iteration<12;iteration++){
       const draft=clone(s);if(Object.hasOwn(draft,recordAccountingField)){draft.revision++;refreshTradeAccounting(draft);updateRecordAccounting(draft,value=>this.#measure(value).usedBytes);}
       const remaining=Math.max(0,reserve-Math.max(0,this.#measure(draft).usedBytes-before.usedBytes));if(remaining>=row.completionBytes){stable=true;break;}row.completionBytes=remaining;
@@ -161,7 +161,7 @@ export class ExternalPurchaseService {
     }
     let maximumBytes=this.#measure(draft).usedBytes;
     const attempt=row.allocationAttemptId?s.allocationAttempts[row.allocationAttemptId]:null;
-    if(attempt?.context.product.strategy.version===3){
+    if(attempt?.context.product.strategy.version>=3){
       const fulfilled=clone(draft),target=fulfilled.externalPurchases[row.preparationId],completed=fulfilled.allocationAttempts[attempt.id],uuid='ffffffff-ffff-4fff-bfff-ffffffffffff',longest=values=>values.reduce((a,b)=>Buffer.byteLength(JSON.stringify(a))>=Buffer.byteLength(JSON.stringify(b))?a:b,''),product=row.snapshot.product;
       const packCount=row.terms.quote.quantity,maximumCards=product.slots.reduce((n,slot)=>n+slot.count,0);
       const purchase={id:uuid,paid:clone(row.terms.quote.price),packs:Array.from({length:packCount},(_,batchIndex)=>({id:uuid,ownerId:row.terms.userId,productId:product.id,productRevision:product.revision,lineId:product.lineId,catalogVersion:row.snapshot.catalog.version,product:clone(product),purchaseId:uuid,batchIndex,metadata:clone(product.metadata??{}),createdAt:'X'.repeat(32),openedAt:null,cardCount:maximumCards}))};
@@ -185,7 +185,7 @@ export class ExternalPurchaseService {
     }
     const growth = Math.max(0, maximumBytes - this.#measure(s).usedBytes);
     // Decimal reservation fields can grow by at most sixteen bytes; revision metadata is bounded separately.
-    row.completionBytes = growth + (attempt?.context.product.strategy.version===3?1024:64);
+    row.completionBytes = growth + (attempt?.context.product.strategy.version>=3?1024:64);
     this.#fits(s);
   }
   #new(s, actor, input, legacy = false) {

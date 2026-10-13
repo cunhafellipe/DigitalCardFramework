@@ -1,20 +1,23 @@
 import { el, button as baseButton, field, select, section } from "./ui-kit.js";
 import {createCommandRunner} from "./client.js";
+import {createLocalization,localizationKeys} from "./localization.js";
 
 export function renderMarketplace(
   model,
-  { client, cardRenderer, listingRenderer, refresh, mutate, storage } = {},
+  { client, cardRenderer, listingRenderer, refresh, mutate, storage, locale='en',messages={},localization=createLocalization({locale,messages}) } = {},
 ) {
+  const t=localization.text,num=localization.number,date=localization.date,enumLabel=(group,value)=>Object.hasOwn(localizationKeys,'marketplace.'+group+'.'+value)?t('marketplace.'+group+'.'+value):value;
   const enabled=name=>!model.capabilities||model.capabilities.available[name];
   const workflow=kind=>kind==='mint-pack'?'packs':['mint-card','action'].includes(kind)?'directSales':'resale';
   const button=(label,callback,...options)=>baseButton(label,(...args)=>{if(disposed)return;return callback(...args)},...options);
   const node = section(
-      "Marketplace",
-      "Browse upcoming releases, buy reserved stock, or visit player shops.",
+      t('marketplace.title'),
+      t('marketplace.description'),
     ),
     status = el("p", "dc-muted"),
     list = el("div", "dc-market-list"),
     review = el("div", "dc-form-panel");
+  node.setAttribute('lang',localization.locale);node.setAttribute('dir',localization.dir);
   status.setAttribute("role", "status");
   node.append(status, review, list);
   review.style.display = "none";
@@ -47,40 +50,40 @@ export function renderMarketplace(
   async function purchase(listing,{newPurchase=false}={}) {
     await action(async () => {
       const original=run.pending?.('buyListing');
-      if(original&&!original._confirmed&&original.listingId!==listing.id)throw new Error('Resolve the original pending purchase before selecting another listing.');
-      if(newPurchase&&original&&!original._confirmed)throw new Error('Recover the original result before starting another purchase.');
+      if(original&&!original._confirmed&&original.listingId!==listing.id)throw new Error(t('marketplace.resolvePurchase'));
+      if(newPurchase&&original&&!original._confirmed)throw new Error(t('marketplace.recoverPurchase'));
       const quote = !newPurchase&&original ? original : await client.quoteListing({ listingId: listing.id });
       if (disposed) return;
       clearReview();
       review.style.display = "";
       review.replaceChildren(
-        el("h3", "", !newPurchase&&original ? "Retry original purchase" : "Review purchase"),
-        el("p", "", quote.price.amount + " " + quote.price.currencyId),
+        el("h3", "", !newPurchase&&original ? t('marketplace.retryPurchase') : t('marketplace.reviewPurchase')),
+        el("p", "", num(quote.price.amount) + " " + quote.price.currencyId),
       );
       for (const item of quote.items ?? []) {
         if (item.copy && cardRenderer) {
-          const rendered = cardRenderer(item.copy, { interactive: false });
+          const rendered = cardRenderer(item.copy, { interactive: false,localization });
           review.append(rendered.node ?? rendered);
           if (rendered.dispose) reviewCleanups.push(() => rendered.dispose());
         } else
-          review.append(el("p", "", item.pack?.product.name ?? "Custom item"));
+          review.append(el("p", "", item.pack?.product.name ?? t('marketplace.customItem')));
       }
       review.append(
-        button("Confirm purchase", () =>
+        button(t('marketplace.confirmPurchase'), () =>
           action(async () => {
             const order = await (newPurchase&&run.beginNew ? run.beginNew("buyListing",quote) : original&&run.recover ? run.recover("buyListing",quote) : run("buyListing", quote));
             if (disposed) return;
             clearReview();
             review.style.display = "";
             review.replaceChildren(
-              el("p", "", "Purchase complete · " + order.id),
-              button("New purchase",()=>purchase(listing,{newPurchase:true})),
+              el("p", "", t('marketplace.purchased',{id:order.id})),
+              button(t('marketplace.newPurchase'),()=>purchase(listing,{newPurchase:true})),
             );
             if (refresh) await refresh();
             else await load(true);
           }),
         ),
-        button("Close review", clearReview, "dc-quiet"),
+        button(t('marketplace.closeReview'), clearReview, "dc-quiet"),
       );
     });
   }
@@ -92,23 +95,23 @@ export function renderMarketplace(
       el(
         "p",
         "dc-muted",
-        l.shopName + " · " + l.phase + " · " + l.remaining + " available",
+        t('marketplace.listingInfo',{shop:l.shopName,phase:enumLabel('phase',l.phase),count:l.remaining}),
       ),
-      el("p", "", l.price.amount + " " + l.price.currencyId),
-      el("p", "dc-muted", "Release: " + new Date(l.startsAt).toLocaleString()),
+      el("p", "", num(l.price.amount) + " " + l.price.currencyId),
+      el("p", "dc-muted", t('marketplace.release',{date:date(l.startsAt)})),
     );
     if (l.preview?.preallocated)
       card.append(
         el(
           "p",
           "dc-muted",
-          "Sealed, preallocated pack. Personal pity does not apply.",
+          t('marketplace.preallocated'),
         ),
       );
     if (l.mine && l.status === "active")
       card.append(
         button(
-          "Cancel remaining stock",
+          t('marketplace.cancelStock'),
           () =>
             action(async () => {
               await run("cancelListing", { listingId: l.id });
@@ -124,45 +127,44 @@ export function renderMarketplace(
         el(
           "p",
           "",
-          "Free entry for a chance to purchase. Payment is due only when a winner claims.",
+          t('marketplace.raffleTerms'),
         ),
         own,
         button(
-          "Check entry / claim",
+          t('marketplace.checkRaffle'),
           () =>
             action(async () => {
               const r = await client.raffleStatus({ listingId: l.id });
               if (disposed) return;
               own.textContent = r.orderId
-                ? "Claimed"
+                ? t('marketplace.claimed')
                 : r.winner
-                  ? "You won. Claim before " +
-                    new Date(r.claimUntil).toLocaleString()
+                  ? t('marketplace.won',{date:date(r.claimUntil)})
                   : r.drawnAt
-                    ? "Not selected"
+                    ? t('marketplace.notSelected')
                     : r.entered
-                      ? "Entered; awaiting draw"
-                      : "Not entered";
+                      ? t('marketplace.awaitingDraw')
+                      : t('marketplace.notEntered');
               if (r.winner && !r.orderId)
-                own.append(button("Review winner purchase", () => purchase(l)));
+                own.append(button(t('marketplace.reviewWinner'), () => purchase(l)));
             }),
           "dc-quiet",
         ),
       );
       if (l.phase === "entries-open" && enabled(workflow(l.kind)))
         card.append(
-          button("Enter raffle", () =>
+          button(t('marketplace.enterRaffle'), () =>
             action(async () => {
               await run("enterRaffle", { listingId: l.id });
-              if (!disposed) own.textContent = "Entered. No charge.";
+              if (!disposed) own.textContent = t('marketplace.entered');
             }),
           ),
         );
     } else if (l.phase === "live" && enabled(workflow(l.kind)))
-      card.append(button("Review purchase", () => purchase(l)));
+      card.append(button(t('marketplace.reviewPurchase'), () => purchase(l)));
     return card;
   }
-  const more = button("Load more listings", () => load(false), "dc-quiet");
+  const more = button(t('marketplace.more'), () => load(false), "dc-quiet");
   async function load(reset) {
     if(disposed)return;
     const current = ++generation;
@@ -182,7 +184,7 @@ export function renderMarketplace(
           ? listingRenderer(l, {
               purchase,
               defaultRenderer: defaultListing,
-              client,
+              client, localization,
             })
           : defaultListing(l);
         list.append(rendered.node ?? rendered);
@@ -190,14 +192,14 @@ export function renderMarketplace(
       }
       cursor = result.next;
       more.hidden = !cursor;
-      status.textContent = result.total + " listings";
+      status.textContent = t('marketplace.listings',{count:result.total});
     } catch (error) {
       if (!disposed) status.textContent = error.message;
     } finally {
       if(!disposed)more.disabled = false;
     }
   }
-  node.prepend(button("Refresh marketplace", () => load(true), "dc-quiet"));
+  node.prepend(button(t('marketplace.refresh'), () => load(true), "dc-quiet"));
   node.append(more);
   async function compose() {
     if(disposed)return;
@@ -214,26 +216,26 @@ export function renderMarketplace(
         own = shops.items.filter((s) => s.mine);
       if ((enabled('resale') && (settings.effectiveSettings?.playerShops ?? settings.settings.playerShops) && !model.me.adminStatus?.restrictions?.sellingBlocked) || admin) {
         const box = el("details", "dc-form-panel");
-        box.append(el("summary", "", "Create a shop"));
-        const name = field(box, "Shop name"),
+        box.append(el("summary", "", t('marketplace.createShop')));
+        const name = field(box, t('marketplace.shopName')),
           kind = select(
             box,
-            "Shop type",
+            t('marketplace.shopType'),
             admin
               ? [
-                  { id: "admin", name: "Admin shop" },
-                  ...(enabled('resale')?[{ id: "player", name: "Player shop" }]:[]),
+                  { id: "admin", name: t('marketplace.adminShop') },
+                  ...(enabled('resale')?[{ id: "player", name: t('marketplace.playerShop') }]:[]),
                 ]
-              : [{ id: "player", name: "Player shop" }],
+              : [{ id: "player", name: t('marketplace.playerShop') }],
           );
         box.append(
-          button("Create shop", () =>
+          button(t('marketplace.createShopButton'), () =>
             action(async () => {
               await run("createShop", { name: name.value, kind: kind.value });
               if (refresh) await refresh();
               else if (!disposed)
                 status.textContent =
-                  "Shop created. Reload this view to add its stock.";
+                  t('marketplace.shopCreated');
             }),
           ),
         );
@@ -241,42 +243,42 @@ export function renderMarketplace(
       }
       if (own.length && (admin||enabled('resale'))) {
         const box = el("details", "dc-form-panel");
-        box.append(el("summary", "", "List stock for sale"));
+        box.append(el("summary", "", t('marketplace.listStock')));
         const shop = select(
             box,
-            "Shop",
+            t('marketplace.shop'),
             own.map((s) => ({ id: s.id, name: s.name })),
           ),
-          title = field(box, "Listing title"),
-          currency = select(box, "Currency", model.catalog.currencies),
-          amount = field(box, "Unit price", { type: "number", value: "1" }),
-          kind = select(box, "Stock source", [
-            ...(enabled('resale')?[{ id: "copies", name: "Owned card" }]:[]),
+          title = field(box, t('marketplace.listingTitle')),
+          currency = select(box, t('marketplace.currency'), model.catalog.currencies),
+          amount = field(box, t('marketplace.unitPrice'), { type: "number", value: "1" }),
+          kind = select(box, t('marketplace.stockSource'), [
+            ...(enabled('resale')?[{ id: "copies", name: t('marketplace.ownedCard') }]:[]),
             ...(enabled('resale')&&settings.settings.packResale
-              ? [{ id: "packs", name: "Owned sealed pack" }]
+              ? [{ id: "packs", name: t('marketplace.ownedPack') }]
               : []),
             ...(admin
               ? [
-                  { id: "mint-card", name: "Issue card stock" },
-                  { id: "mint-pack", name: "Issue sealed packs" },
-                  { id: "action", name: "Custom action item" },
+                  { id: "mint-card", name: t('marketplace.issueCard') },
+                  { id: "mint-pack", name: t('marketplace.issuePack') },
+                  { id: "action", name: t('marketplace.actionItem') },
                 ]
               : []),
           ].filter(item=>enabled(workflow(item.id)))),
-          target = select(box, "Stock item", []),
-          quantity = field(box, "Stock quantity (new stock)", {
+          target = select(box, t('marketplace.stockItem'), []),
+          quantity = field(box, t('marketplace.stockQuantity'), {
             type: "number",
             value: "1",
           }),
-          handler = field(box, "Custom handler (server installed)"),
-          params = field(box, "Custom item parameters", {
+          handler = field(box, t('marketplace.handler')),
+          params = field(box, t('marketplace.params'), {
             type: "textarea",
             value: "{}",
           }),
-          preview = field(box, "Preview time (ISO, optional)"),
-          starts = field(box, "Release time (ISO, optional)"),
-          ends = field(box, "End time (ISO, optional)"),
-          raffle = field(box, "Raffle terms JSON (optional)", {
+          preview = field(box, t('marketplace.previewTime')),
+          starts = field(box, t('marketplace.releaseTime')),
+          ends = field(box, t('marketplace.endTime')),
+          raffle = field(box, t('marketplace.raffleJson'), {
             type: "textarea",
             value: "",
           });
@@ -315,9 +317,9 @@ export function renderMarketplace(
         let formVersion=0,stockQuote=null,reviewedListing=null,stockAttempt=null,stockBlocked=false;
         const stockNote=el('p','dc-muted'),attemptNote=el('p','dc-muted');stockNote.setAttribute('role','status');attemptNote.setAttribute('role','status');
         const principal=model.me.userId;
-        function stockDeckVersion(){const strategy=model.catalog.products.find(product=>product.id===target.value)?.allocationStrategy;return strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3))?strategy.version:0;}
+        function stockDeckVersion(){const strategy=model.catalog.products.find(product=>product.id===target.value)?.allocationStrategy;return strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3)||(strategy.algorithm==='weighted-deck@4'&&strategy.version===4))?strategy.version:0;}
         const ticketStock=()=>kind.value==='mint-pack'&&stockDeckVersion()>0;
-        function fence(version=formVersion){if(disposed||!node.contains(box)||typeof client.principal==='function'&&client.principal()!==principal)throw new Error('The listing view or signed-in account changed. Review the listing again.');if(version!==formVersion)throw new Error('The listing changed. Review the stock allocation again.');}
+        function fence(version=formVersion){if(disposed||!node.contains(box)||typeof client.principal==='function'&&client.principal()!==principal)throw new Error(t('marketplace.changedView'));if(version!==formVersion)throw new Error(t('marketplace.changedListing'));}
         function listingInput(){
               const items =
                 kind.value === "copies" || kind.value === "packs"
@@ -350,44 +352,44 @@ export function renderMarketplace(
                 ...(raffle.value ? { raffle: JSON.parse(raffle.value) } : {}),
               };
         }
-        const create=button('Reserve stock and publish listing',async()=>{
+        const create=button(t('marketplace.createListing'),async()=>{
           await action(async()=>{const version=formVersion;fence(version);updateStock();try{
-            let input=listingInput();if(ticketStock()){if(!stockQuote||!reviewedListing||JSON.stringify(input)!==JSON.stringify(reviewedListing))throw new Error('Review the stock allocation before creating the listing');input={...reviewedListing,allocationDigest:stockQuote.allocationDigest};}
-            const original=run.pending?.('createListing');if(original&&!original._confirmed)throw new Error('Resolve the original listing before creating another');
+            let input=listingInput();if(ticketStock()){if(!stockQuote||!reviewedListing||JSON.stringify(input)!==JSON.stringify(reviewedListing))throw new Error(t('marketplace.reviewStockFirst'));input={...reviewedListing,allocationDigest:stockQuote.allocationDigest};}
+            const original=run.pending?.('createListing');if(original&&!original._confirmed)throw new Error(t('marketplace.resolveListing'));
             await (original?._confirmed&&run.beginNew?run.beginNew('createListing',input):run('createListing',input));fence(version);stockQuote=reviewedListing=null;formVersion++;if(refresh)await refresh();else await load(true);
-          }catch(error){if(!disposed){stockQuote=reviewedListing=null;if(ticketStock()&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){stockBlocked=true;stockNote.textContent='The stock allocation needs review. Check its attempt before acknowledging it and reviewing new stock.';}}throw error;}});if(!disposed)updateStock();
+          }catch(error){if(!disposed){stockQuote=reviewedListing=null;if(ticketStock()&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){stockBlocked=true;stockNote.textContent=t('marketplace.stockNeedsReview');}}throw error;}});if(!disposed)updateStock();
         });
-        const quoteStock=button('Review stock allocation',async()=>{
-          await action(async()=>{const version=formVersion;fence(version);updateStock();if(!ticketStock())throw new Error('Select a product with ticket allocation');const pending=run.pending?.('createListing');if(pending&&!pending._confirmed)throw new Error('Resolve the original listing before requesting a new allocation');
-            stockQuote=reviewedListing=null;stockNote.textContent='Checking current stock allocation…';const input=listingInput(),quoted=await client.quoteMintPackStock({shopId:input.shopId,productId:input.items.productId,quantity:input.items.quantity});fence(version);
-            if(quoted.shopId!==input.shopId||quoted.productId!==input.items.productId||quoted.quantity!==input.items.quantity||typeof quoted.allocationDigest!=='string'||!/^[a-f0-9]{64}$/.test(quoted.allocationDigest))throw new Error('Invalid stock allocation quote');
-            stockQuote=structuredClone(quoted);reviewedListing=structuredClone(input);stockNote.textContent='Review '+quoted.quantity+' sealed pack'+(quoted.quantity===1?'':'s')+' for '+(own.find(item=>item.id===quoted.shopId)?.name??'this shop')+'. Listing “'+input.title+'” sells each pack for '+input.price.amount+' '+input.price.currencyId+'. '+(stockDeckVersion()>=2?'Stock ignores personal inventory and pity. ':'')+(stockDeckVersion()===3?'Availability depends on current imported-code supply. ':'')+(stockQuote.bindingActivation?'Up to '+stockQuote.bindingActivation.maximum+' attached reward'+(stockQuote.bindingActivation.maximum===1?'':'s')+' may require activation after stock creation. Pending rewards cannot be used, and affected packs cannot be sold until activation is confirmed. If activation remains pending, contact the operator to recover the original activation. ':'')+'Reserve stock and publish listing to confirm.';
+        const quoteStock=button(t('marketplace.reviewStock'),async()=>{
+          await action(async()=>{const version=formVersion;fence(version);updateStock();if(!ticketStock())throw new Error(t('marketplace.selectTicketProduct'));const pending=run.pending?.('createListing');if(pending&&!pending._confirmed)throw new Error(t('marketplace.resolveBeforeQuote'));
+            stockQuote=reviewedListing=null;stockNote.textContent=t('marketplace.checkingStock');const input=listingInput(),quoted=await client.quoteMintPackStock({shopId:input.shopId,productId:input.items.productId,quantity:input.items.quantity});fence(version);
+            if(quoted.shopId!==input.shopId||quoted.productId!==input.items.productId||quoted.quantity!==input.items.quantity||typeof quoted.allocationDigest!=='string'||!/^[a-f0-9]{64}$/.test(quoted.allocationDigest))throw new Error(t('marketplace.invalidQuote'));
+            stockQuote=structuredClone(quoted);reviewedListing=structuredClone(input);stockNote.textContent=[t('marketplace.reviewStockCount',{count:quoted.quantity,shop:own.find(item=>item.id===quoted.shopId)?.name??t('marketplace.thisShop')}),t('marketplace.listingPrice',{title:input.title,amount:input.price.amount,currency:input.price.currencyId}),...(stockDeckVersion()>=2?[t('marketplace.stockPersonal')]:[]),...(stockDeckVersion()>=3?[t('marketplace.stockCodeSupply')]:[]),...(stockDeckVersion()>=4?[t('shop.feasibleTickets')]:[]),...(stockQuote.bindingActivation?[t('marketplace.stockActivation',{count:stockQuote.bindingActivation.maximum})]:[]),t('marketplace.confirmStock')].join(' ');
           });if(!disposed)updateStock();
         });
-        const inspectStock=button('Check stock allocation attempt',async()=>{
+        const inspectStock=button(t('marketplace.checkStock'),async()=>{
           await action(async()=>{const version=formVersion;fence(version);updateStock();const result=await client.stockAllocationStatus({shopId:shop.value,productId:target.value});fence(version);
-            if(result.shopId!==shop.value||result.productId!==target.value||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||![null,'purchase','createListing','commitExternalPurchase'].includes(result.command)||result.attemptShopId!==null&&typeof result.attemptShopId!=='string'||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error('Invalid stock allocation status');
+            if(result.shopId!==shop.value||result.productId!==target.value||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||![null,'purchase','createListing','commitExternalPurchase'].includes(result.command)||result.attemptShopId!==null&&typeof result.attemptShopId!=='string'||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error(t('marketplace.invalidStatus'));
             stockAttempt=result;stockBlocked=['prepared','stale'].includes(result.state);if(stockBlocked)stockQuote=reviewedListing=null;if(result.state==='acknowledged'&&result.command==='createListing'&&result.attemptShopId===shop.value)await confirmOriginalListing(version);showStockAttempt();
           });if(!disposed)updateStock();
         });
-        const acknowledgeStock=button('Acknowledge stock allocation attempt',async()=>{
-          await action(async()=>{const version=formVersion;fence(version);updateStock();if(!stockAttempt||stockAttempt.command!=='createListing'||stockAttempt.attemptShopId!==shop.value||!['prepared','stale'].includes(stockAttempt.state))throw new Error('Recover the allocation in its original purchase or shop');
-            const result=await client.acknowledgeAllocation({attemptId:stockAttempt.attemptId});fence(version);if(result.attemptId!==stockAttempt.attemptId||result.state!=='acknowledged')throw new Error('Invalid stock allocation acknowledgement');
+        const acknowledgeStock=button(t('marketplace.ackStock'),async()=>{
+          await action(async()=>{const version=formVersion;fence(version);updateStock();if(!stockAttempt||stockAttempt.command!=='createListing'||stockAttempt.attemptShopId!==shop.value||!['prepared','stale'].includes(stockAttempt.state))throw new Error(t('marketplace.recoverOriginalAllocation'));
+            const result=await client.acknowledgeAllocation({attemptId:stockAttempt.attemptId});fence(version);if(result.attemptId!==stockAttempt.attemptId||result.state!=='acknowledged')throw new Error(t('marketplace.invalidAcknowledgement'));
             stockAttempt={...stockAttempt,state:'acknowledged',errorCode:null};stockBlocked=false;stockQuote=reviewedListing=null;await confirmOriginalListing(version);showStockAttempt();
           });if(!disposed)updateStock();
         });
-        const retryListing=button('Retry original listing',async()=>{
-          await action(async()=>{fence();updateStock();if(stockAttempt?.command==='commitExternalPurchase')throw new Error('Recover the original payment through its payment provider');const original=run.pending?.('createListing');if(!original||original._confirmed)throw new Error('No unresolved listing to retry');await (run.recover?run.recover('createListing',original):run('createListing',original));fence();stockQuote=reviewedListing=null;formVersion++;if(refresh)await refresh();else await load(true);});if(!disposed)updateStock();
+        const retryListing=button(t('marketplace.retryListing'),async()=>{
+          await action(async()=>{fence();updateStock();if(stockAttempt?.command==='commitExternalPurchase')throw new Error(t('marketplace.recoverPayment'));const original=run.pending?.('createListing');if(!original||original._confirmed)throw new Error(t('marketplace.noListingRetry'));await (run.recover?run.recover('createListing',original):run('createListing',original));fence();stockQuote=reviewedListing=null;formVersion++;if(refresh)await refresh();else await load(true);});if(!disposed)updateStock();
         });
         async function confirmOriginalListing(version){const original=run.pending?.('createListing');if(original&&!original._confirmed&&original.shopId===shop.value&&original.items?.kind==='mint-pack'&&original.items.productId===target.value&&typeof run.confirmFailed==='function'){await run.confirmFailed('createListing',original);fence(version);}}
         function showStockAttempt(){
           const attempt=stockAttempt;if(!attempt){attemptNote.textContent='';return;}
-          if(attempt.command==='commitExternalPurchase'){attemptNote.textContent='This product’s allocation belongs to a payment-provider purchase. Use the original payment provider’s recovery flow. This stock form cannot retry or acknowledge that payment.';return;}
-          if(attempt.command==='purchase'){attemptNote.textContent='This product’s allocation belongs to a wallet purchase. Return to Discover to recover or acknowledge that original purchase. This stock form cannot acknowledge it.';return;}
-          if(attempt.command==='createListing'&&attempt.attemptShopId!==shop.value){attemptNote.textContent='This product’s allocation belongs to '+(own.find(item=>item.id===attempt.attemptShopId)?.name??'another shop')+'. Recover or acknowledge the original listing in that shop.';return;}
-          if(attempt.state==='completed'){attemptNote.textContent='This stock allocation completed. Recover the original listing result before creating another listing.';return;}
-          if(['prepared','stale'].includes(attempt.state)){attemptNote.textContent=(attempt.state==='stale'?'The stock allocation is stale.':'A stock allocation is pending.')+' Acknowledge this inactive attempt to abandon it. This does not create a listing.';return;}
-          const pending=run.pending?.('createListing');attemptNote.textContent=pending&&!pending._confirmed?'Retry the original listing to resolve its saved result before reviewing new stock.':'No active stock allocation. Select Review stock allocation for a fresh quote.';
+          if(attempt.command==='commitExternalPurchase'){attemptNote.textContent=t('marketplace.externalAttempt');return;}
+          if(attempt.command==='purchase'){attemptNote.textContent=t('marketplace.walletAttempt');return;}
+          if(attempt.command==='createListing'&&attempt.attemptShopId!==shop.value){attemptNote.textContent=t('marketplace.otherShopAttempt',{shop:own.find(item=>item.id===attempt.attemptShopId)?.name??t('marketplace.otherShop')});return;}
+          if(attempt.state==='completed'){attemptNote.textContent=t('marketplace.completedAttempt');return;}
+          if(['prepared','stale'].includes(attempt.state)){attemptNote.textContent=(attempt.state==='stale'?t('marketplace.staleAttempt'):t('marketplace.pendingAttempt'))+' '+t('marketplace.abandonAttempt');return;}
+          const pending=run.pending?.('createListing');attemptNote.textContent=pending&&!pending._confirmed?t('marketplace.retryOriginal'):t('marketplace.freshStock');
         }
         function updateStock(){
           const tickets=ticketStock(),pending=run.pending?.('createListing'),unresolved=!!pending&&!pending._confirmed;
@@ -395,7 +397,7 @@ export function renderMarketplace(
           inspectStock.disabled=busy;acknowledgeStock.hidden=!tickets||stockAttempt?.command!=='createListing'||stockAttempt.attemptShopId!==shop.value||!['prepared','stale'].includes(stockAttempt.state);acknowledgeStock.disabled=busy;
           retryListing.hidden=!unresolved||stockAttempt?.command==='commitExternalPurchase';retryListing.disabled=busy;
           create.disabled=busy||unresolved||tickets&&(!stockQuote||stockBlocked);stockNote.hidden=attemptNote.hidden=!tickets;
-          if(tickets&&!stockQuote&&!stockNote.textContent){const product=model.catalog.products.find(product=>product.id===target.value),protectedStock=stockDeckVersion()>=2&&product.duplicatePolicy.scope!=='none';stockNote.textContent='Ticket allocation draws this stock batch without replacement. Finite supply can reduce available tickets. '+(stockDeckVersion()>=2?'Stock ignores personal inventory and pity. ':'')+(protectedStock?'Ordinary card draws avoid repeating card identities within each pack; special inserts bypass this check. '+(product.duplicatePolicy.fallback==='allow'?'The fallback allows a repeat when no unseen eligible card remains. ':'Stock creation fails if no unseen eligible card can fill a protected draw. '):'')+(stockDeckVersion()===3?'Imported-code supply also limits eligible stock. Shared code pools may change before stock is reserved. ':'')+'Review an allocation quote before reserving the packs.';}
+          if(tickets&&!stockQuote&&!stockNote.textContent){const product=model.catalog.products.find(product=>product.id===target.value),protectedStock=stockDeckVersion()>=2&&product.duplicatePolicy.scope!=='none';stockNote.textContent=[t('marketplace.stockDeck'),...(stockDeckVersion()>=2?[t('marketplace.stockPersonal')]:[]),...(protectedStock?[t('marketplace.stockDuplicates'),t(product.duplicatePolicy.fallback==='allow'?'marketplace.stockRepeat':'marketplace.stockReject')]:[]),...(stockDeckVersion()>=3?[t('marketplace.stockImported')]:[]),...(stockDeckVersion()>=4?[t('shop.feasibleTickets')]:[]),t('marketplace.quoteBeforeStock')].join(' ');}
         }
         function invalidateStock(){formVersion++;stockQuote=reviewedListing=stockAttempt=null;stockBlocked=false;stockNote.textContent=attemptNote.textContent='';updateStock();}
         invalidateStockForm=invalidateStock;
@@ -433,11 +435,11 @@ export function renderMarketplace(
     }
   }
   const history = el("details", "dc-form-panel");
-  history.append(el("summary", "", "Purchase and sale history"));
+  history.append(el("summary", "", t('marketplace.history')));
   const orders = el("div");
   let orderCursor = null;
   const orderMore = button(
-    "Load orders",
+    t('marketplace.loadOrders'),
     () =>
       action(async () => {
         const result = await client.orders({ limit: 24, after: orderCursor });
@@ -447,15 +449,7 @@ export function renderMarketplace(
             el(
               "p",
               "",
-              o.id +
-                " · " +
-                o.quantity +
-                " items · " +
-                o.paid.amount +
-                " " +
-                o.paid.currencyId +
-                " · " +
-                o.fulfillment,
+              t('marketplace.order',{id:o.id,count:o.quantity,amount:o.paid.amount,currency:o.paid.currencyId,fulfillment:enumLabel('fulfillment',o.fulfillment)}),
             ),
           );
         orderCursor = result.next;
@@ -467,7 +461,7 @@ export function renderMarketplace(
   node.append(history);
   const ready = Promise.all([load(true), compose()]).then(()=>{
     if(disposed)return;const original=run.pending?.('buyListing');
-    if(original){status.textContent='A previous purchase needs confirmation. Retry its original terms before buying again.';const retry=button('Retry original purchase',()=>purchase({id:original.listingId}));node.insertBefore(retry,review);}
+    if(original){status.textContent=t('marketplace.previousPurchase');const retry=button(t('marketplace.retryPurchase'),()=>purchase({id:original.listingId}));node.insertBefore(retry,review);}
   });
   return {
     node,

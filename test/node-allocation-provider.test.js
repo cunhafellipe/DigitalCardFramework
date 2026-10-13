@@ -8,9 +8,9 @@ import {request as httpRequest} from 'node:http';
 import {createRemoteAllocationStrategy,allocationStrategyProtocol,validateAllocationStrategyResponse} from '../src/remote-allocation-strategy.js';
 import {createRemoteStockAllocationStrategy,stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse} from '../src/remote-stock-allocation-strategy.js';
 import {createRemoteExternalAllocationStrategy,externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse} from '../src/remote-external-allocation-strategy.js';
-import {allocationStrategyV2Protocol,allocationStrategyV3Protocol,validateAllocationStrategyV2Response,validateAllocationStrategyV3Response} from '../src/allocation-strategy-contracts.js';
-import {stockAllocationStrategyV2Protocol,stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV2Response,validateStockAllocationStrategyV3Response} from '../src/stock-allocation-strategy-contracts.js';
-import {externalAllocationStrategyV2Protocol,externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV2Response,validateExternalAllocationStrategyV3Response} from '../src/external-allocation-strategy-contracts.js';
+import {allocationStrategyV2Protocol,allocationStrategyV3Protocol,validateAllocationStrategyV2Response,validateAllocationStrategyV3Response,allocationStrategyV4Protocol,validateAllocationStrategyV4Response} from '../src/allocation-strategy-contracts.js';
+import {stockAllocationStrategyV2Protocol,stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV2Response,validateStockAllocationStrategyV3Response,stockAllocationStrategyV4Protocol,validateStockAllocationStrategyV4Response} from '../src/stock-allocation-strategy-contracts.js';
+import {externalAllocationStrategyV2Protocol,externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV2Response,validateExternalAllocationStrategyV3Response,externalAllocationStrategyV4Protocol,validateExternalAllocationStrategyV4Response} from '../src/external-allocation-strategy-contracts.js';
 import {planAllocation} from '../src/allocation-planner.js';
 
 const executable=fileURLToPath(new URL('../examples/plugins/node-allocation-provider.mjs',import.meta.url));
@@ -54,7 +54,7 @@ async function post(receiver,value,status=200,options={}){
     request.end(body.length>1048576?undefined:body);
   });
   assert.equal(result.status,status);assert.ok(result.body.length<=262144);assert.equal(result.headers['cache-control'],'no-store');const resultValue=JSON.parse(result.body);
-  if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response],[allocationStrategyV3Protocol,validateAllocationStrategyV3Response],[stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV3Response],[externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV3Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
+  if(status===200||status===503)new Map([[allocationStrategyProtocol,validateAllocationStrategyResponse],[stockAllocationStrategyProtocol,validateStockAllocationStrategyResponse],[externalAllocationStrategyProtocol,validateExternalAllocationStrategyResponse],[allocationStrategyV2Protocol,validateAllocationStrategyV2Response],[stockAllocationStrategyV2Protocol,validateStockAllocationStrategyV2Response],[externalAllocationStrategyV2Protocol,validateExternalAllocationStrategyV2Response],[allocationStrategyV3Protocol,validateAllocationStrategyV3Response],[allocationStrategyV4Protocol,validateAllocationStrategyV4Response],[stockAllocationStrategyV3Protocol,validateStockAllocationStrategyV3Response],[stockAllocationStrategyV4Protocol,validateStockAllocationStrategyV4Response],[externalAllocationStrategyV3Protocol,validateExternalAllocationStrategyV3Response],[externalAllocationStrategyV4Protocol,validateExternalAllocationStrategyV4Response]]).get(resultValue.protocol)(resultValue);else assert.deepEqual(resultValue,{});return resultValue;
 }
 test('Node allocation provider computes and replays actual plans through framework transport without effects',async()=>{
   const receiver=await start(),remote=createRemoteAllocationStrategy({algorithm:'weighted-deck@1',scope:'catalog-purchase',providerId,url:receiver.url,token,allowLoopbackHttp:true});
@@ -202,4 +202,30 @@ test('Node v3 allocation uses shared imported-code counts and returns only selec
     const valid=await post(wallet,request);assert.throws(()=>validateAllocationStrategyV3Response({...valid,codeIds:['synthetic-code-id']}));
     const depleted=makeV3();depleted.context.codePools[0].available=0;assert.deepEqual(await post(wallet,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
   }finally{await stop(wallet);}
+});
+
+test('Node v4 provider preserves feasible overlapping supply across all three scopes',async()=>{
+  const receiver=await start();
+  try{
+    for(const [scope,path,factory] of [['catalog-purchase','allocate-packs',createRemoteAllocationStrategy],['commerce-stock','allocate-stock',createRemoteStockAllocationStrategy],['external-fulfillment','allocate-external',createRemoteExternalAllocationStrategy]]){
+      const request=make();request.protocol=({'catalog-purchase':allocationStrategyProtocol,'commerce-stock':stockAllocationStrategyProtocol,'external-fulfillment':externalAllocationStrategyProtocol}[scope]).replace('@1','@4');request.scope=scope;
+      Object.assign(request.context,{mode:scope==='commerce-stock'?'stock':'personalized',quantity:1,ownedCards:[],pityCount:0,codePools:[]});
+      Object.assign(request.context.product,{strategy:{algorithm:'weighted-deck@4',version:4,deckScope:'purchase-slot'},duplicatePolicy:{scope:'none',fallback:'reject'},pity:null,slots:[
+        {id:'first',role:'card',count:1,probability:{numerator:1,denominator:1},pool:[{variantId:'blue',weight:1},{variantId:'red',weight:1}]},
+        {id:'last',role:'card',count:1,probability:{numerator:1,denominator:1},pool:[{variantId:'blue',weight:1}]},
+      ]});
+      request.context.variants=['blue','red'].map(id=>({id,cardId:id+'-card',rarityRank:0,remaining:1,codeDemand:[]}));
+      if(scope==='commerce-stock')request.context.shop={id:randomUUID(),ownerId:'merchant'};
+      if(scope==='external-fulfillment')request.context.preparationId='ep_'+'e'.repeat(64);
+      const endpoint={...receiver,url:receiver.url.replace('allocate-packs',path)},remote=factory({algorithm:'weighted-deck@4',scope,providerId,url:endpoint.url,token,allowLoopbackHttp:true});
+      try{
+        Object.assign(request,remote.grant());const snapshot=structuredClone(request),result=await remote.evaluate(request);
+        assert.deepEqual(result,{...echo(request),status:'planned',allocations:[{packIndex:0,slotId:'first',variantIds:['red']},{packIndex:0,slotId:'last',variantIds:['blue']}]});
+        assert.deepEqual(await remote.evaluate(request),result);assert.deepEqual(request,snapshot);
+        const depleted=structuredClone(request);depleted.context.variants[1].remaining=0;
+        assert.deepEqual(await post(endpoint,depleted,503),{...echo(depleted),status:'error',errorCode:'unavailable'});
+        await post(endpoint,{...request,protocol:request.protocol.replace('@4','@3')},400);
+      }finally{remote.close();}
+    }
+  }finally{await stop(receiver);}
 });

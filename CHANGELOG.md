@@ -4,6 +4,8 @@
 
 - Added portable localization bundles for the collector wallet, pack purchase and opening workflow, with per-instance locales, English fallback, plural and number formatting, and Python/Go Spanish bundle examples.
 - Extended collector localization to collection filters, favorites, wishlists, trade-up controls, card inspection and comparison, including standalone renderer options.
+- Added localization for album, trade and marketplace workflows, with translated review and recovery controls.
+- Added version 4 allocation for finite supply shared across slots, using bounded feasibility checks before weighted ticket selection.
 
 - Added host-installed declarative Studio panels for selected-layer position and rotation, with bounded field grants and Python/Go manifest examples.
 

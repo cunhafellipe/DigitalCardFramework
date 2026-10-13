@@ -1,4 +1,5 @@
 import {allocationCodeDemand} from './allocation-planner.js';
+import {validateAllocationSolverAdmission} from './allocation-feasibility.js';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {FrameworkError} from './catalog.js';
 
@@ -51,3 +52,14 @@ export function validateAllocationCodeEligibility(value){
   if(new Set(codePools.map(p=>p.id)).size!==codePools.length||codePools.length!==demand.size||codePools.some(p=>!demand.has(p.id)||p.available>demand.get(p.id))||context.variants.some(v=>new Set(v.codeDemand.map(d=>d.poolId)).size!==v.codeDemand.length||v.codeDemand.reduce((n,d)=>n+d.count,0)>8))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation resource snapshot',400);return value;
 }
 export function validateAllocationStrategyV3Response(value){if(!responseV3(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}
+
+export const allocationStrategyV4Protocol='digital-card-pack-allocation@4';
+export const allocationStrategyV4Schema=structuredClone(allocationStrategyV3Schema);
+allocationStrategyV4Schema.$id='https://digital-card.invalid/pack-allocation/v4';
+for(const schema of [allocationStrategyV4Schema.$defs.request,...allocationStrategyV4Schema.$defs.response.oneOf])schema.properties.protocol.const=allocationStrategyV4Protocol;
+const contextV4=allocationStrategyV4Schema.$defs.request.properties.context;
+contextV4.properties.product.properties.strategy.properties.algorithm.const='weighted-deck@4';contextV4.properties.product.properties.strategy.properties.version.const=4;
+compiler.addSchema(allocationStrategyV4Schema);const requestV4=compiler.compile({$ref:allocationStrategyV4Schema.$id+'#/$defs/request'}),responseV4=compiler.compile({$ref:allocationStrategyV4Schema.$id+'#/$defs/response'});
+export function validateAllocationFeasibilityEligibility(value){validateAllocationCodeEligibility(value);validateAllocationSolverAdmission(value.context);return value;}
+export function validateAllocationStrategyV4Request(value){if(!requestV4(value))throw new FrameworkError('INVALID_ALLOCATION_REQUEST','Invalid allocation strategy request',400);return validateAllocationFeasibilityEligibility(value);}
+export function validateAllocationStrategyV4Response(value){if(!responseV4(value))throw new FrameworkError('INVALID_ALLOCATION_RESPONSE','Invalid allocation strategy response',502);return value;}

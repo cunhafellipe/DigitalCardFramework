@@ -134,13 +134,15 @@ export function renderTiltInspector(copy,{cardRenderer=renderCard,metadataRender
   }
   grid.append(card,details);node.append(grid);return node;
 }
-export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={}}={}) {
+export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={},locale='en',messages={},localization=createLocalization({locale,messages})}={}) {
+  const t=localization.text;
   const custom=Object.hasOwn(layouts,model.layout?.id)?layouts[model.layout.id]:null;
-  if(custom) return custom(model,{cardRenderer,onSelect});
+  if(custom) return custom(model,{cardRenderer,onSelect,localization});
   const node=element('div','dc-album');if(model.layout?.id==='panorama')node.classList.add('dc-panorama');
   const columns=Number(model.layout?.columns??3);if(Number.isInteger(columns)&&columns>=1&&columns<=12)node.style.setProperty('--dc-album-columns',String(columns));
   const gap=Number(model.layout?.gap??18);if(Number.isFinite(gap)&&gap>=0&&gap<=100)node.style.setProperty('--dc-album-gap',gap+'px');
   const host=element('div','dc-album-host'),shadow=host.attachShadow({mode:'open'}),wrap=element('div','dc-root dc-album-isolated'),style=element('style');
+  host.setAttribute('lang',localization.locale);host.setAttribute('dir',localization.dir);
   const abort=new AbortController(),images=new Set();let disposed=false,pageAbort,cardNodes=[];
   Object.assign(host.style,{position:'relative',contain:'layout paint',isolation:'isolate',overflow:'hidden',maxWidth:'100%',minWidth:'0'});
   style.textContent=defaultCSS+'\n.dc-root.dc-album-isolated{padding:0;border:0;background:transparent;'+themes.map(name=>name+':inherit').join(';')+'}';
@@ -150,21 +152,21 @@ export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={}}=
     if(!image?.src)return;
     const figure=element('figure'),img=element('img'),caption=element('figcaption','dc-muted');
     figure.style.margin='0';img.src=assetURL(image.src);img.alt=image.alt??label;img.style.maxWidth='100%';img.style.maxHeight='240px';img.style.objectFit='contain';
-    img.addEventListener('error',()=>{if(disposed)return;img.hidden=true;caption.textContent=(image.alt??label)+' · artwork unavailable';},{once:true,signal});
+    img.addEventListener('error',()=>{if(disposed)return;img.hidden=true;caption.textContent=t('albums.artworkUnavailable',{label:image.alt??label});},{once:true,signal});
     images.add(img);figure.append(img,caption);container.append(figure);return img;
   }
-  if(!bookMode){for(const {copy} of model.cards){const card=cardRenderer(copy,{onSelect});cardNodes.push(card);node.append(card);}wrap.append(node);}
+  if(!bookMode){for(const {copy} of model.cards){const card=cardRenderer(copy,{onSelect,localization});cardNodes.push(card);node.append(card);}wrap.append(node);}
   else{
     let pageSize;try{pageSize=validateAlbumPageSize(model.layout.pageSize??12);}catch{pageSize=12;}
     const pages=artwork.pages??[],known=new Set(pages.map(page=>page.id)),automatic=model.cards.map((item,index)=>({item,index})).filter(({item})=>!known.has(item.placement?.data?.pageId)),
-      pageCount=Math.max(1,pages.length,Math.ceil(((automatic.at(-1)?.index??-1)+1)/pageSize)),book=element('section','dc-album-book'),jacket=element('div'),content=element('div'),controls=element('div','dc-row'),heading=element('h3'),previous=button('Previous album page',()=>setPage(current-1)),next=button('Next album page',()=>setPage(current+1)),pageSelect=element('select');
+      pageCount=Math.max(1,pages.length,Math.ceil(((automatic.at(-1)?.index??-1)+1)/pageSize)),book=element('section','dc-album-book'),jacket=element('div'),content=element('div'),controls=element('div','dc-row'),heading=element('h3'),previous=button(t('albums.previous'),()=>setPage(current-1)),next=button(t('albums.next'),()=>setPage(current+1)),pageSelect=element('select');
     let current=0;
-    book.tabIndex=0;book.setAttribute('aria-label',model.name??'Album book');Object.assign(book.style,{maxWidth:'100%',minWidth:'0'});
+    book.tabIndex=0;book.setAttribute('aria-label',model.name??t('albums.book'));Object.assign(book.style,{maxWidth:'100%',minWidth:'0'});
     Object.assign(jacket.style,{display:'flex',gap:'12px',alignItems:'stretch',overflow:'hidden'});
     const spine=element('div'),cover=element('div');spine.style.maxWidth='64px';spine.style.flex='0 0 48px';cover.style.minWidth='0';cover.style.flex='1';
-    if(artwork.spine)imageSurface(artwork.spine,'Album spine',spine);if(artwork.cover)imageSurface(artwork.cover,'Album cover',cover);
+    if(artwork.spine)imageSurface(artwork.spine,t('albums.spine'),spine);if(artwork.cover)imageSurface(artwork.cover,t('albums.cover'),cover);
     if(artwork.spine)jacket.append(spine);if(artwork.cover)jacket.append(cover);book.append(jacket,heading,controls,content);
-    pageSelect.setAttribute('aria-label','Album page');for(let index=0;index<pageCount;index++){const option=element('option','',pages[index]?.title??'Page '+(index+1));option.value=String(index);pageSelect.append(option);}
+    pageSelect.setAttribute('aria-label',t('albums.pageSelect'));for(let index=0;index<pageCount;index++){const option=element('option','',pages[index]?.title??t('albums.page',{number:index+1}));option.value=String(index);pageSelect.append(option);}
     pageSelect.addEventListener('change',()=>setPage(Number(pageSelect.value)),{signal:abort.signal});
     book.addEventListener('keydown',event=>{if(event.target!==book)return;if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setPage(current+(event.key==='ArrowRight'?1:-1));}},{signal:abort.signal});
     controls.append(previous,pageSelect,next);applyAlbumAppearance(book,albumAppearance(model.layout));wrap.append(book);
@@ -173,12 +175,12 @@ export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={}}=
       for(const img of [...images])if(content.contains(img)){img.removeAttribute('src');images.delete(img);}
       content.replaceChildren();pageAbort=new AbortController();
       const page=pages[current],background=element('div');Object.assign(background.style,{position:'relative',minHeight:'240px',overflow:'hidden'});
-      const pageImage=imageSurface(page,'Album page '+(current+1),background,pageAbort.signal);
+      const pageImage=imageSurface(page,t('albums.pageArtwork',{number:current+1}),background,pageAbort.signal);
       if(pageImage)Object.assign(pageImage.style,{position:'absolute',inset:'0',width:'100%',height:'100%',maxHeight:'none',objectFit:'cover',pointerEvents:'none'});
       const gallery=node.cloneNode(false);Object.assign(gallery.style,{position:'relative',minHeight:'240px'});if(pageImage)gallery.style.backgroundColor='transparent';
       const automaticPage=new Set(automatic.filter(({index})=>Math.floor(index/pageSize)===current).map(({item})=>item));
-      for(const item of model.cards)if((page&&item.placement?.data?.pageId===page.id)||automaticPage.has(item)){const card=cardRenderer(item.copy,{onSelect});cardNodes.push(card);gallery.append(card);}
-      background.append(gallery);content.append(background);heading.textContent=(page?.title??'Page '+(current+1))+' · '+(current+1)+' of '+pageCount;
+      for(const item of model.cards)if((page&&item.placement?.data?.pageId===page.id)||automaticPage.has(item)){const card=cardRenderer(item.copy,{onSelect,localization});cardNodes.push(card);gallery.append(card);}
+      background.append(gallery);content.append(background);heading.textContent=t('albums.pageProgress',{title:page?.title??t('albums.page',{number:current+1}),number:current+1,total:pageCount});
       pageSelect.value=String(current);previous.disabled=current===0;next.disabled=current===pageCount-1;
     }
     host.setPage=setPage;setPage(0);
@@ -305,7 +307,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     for(const product of model.catalog.products.filter(p=>p.enabled!==false)) {
       const box=element('article','dc-product');box.append(packArt(product));
       const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0),strategy=product.allocationStrategy,
-        deckVersion=strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3))?strategy.version:0,ticketDeck=deckVersion>0;
+        deckVersion=strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3)||(strategy.algorithm==='weighted-deck@4'&&strategy.version===4))?strategy.version:0,ticketDeck=deckVersion>0;
     info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',t('shop.cardsPerPack',{count})+((!ticketDeck||deckVersion>=2)&&product.duplicatePolicy.scope!=='none'?t('shop.duplicateProtection'):'')));
     if(product.pity){const progress=model.pity[product.id]??0,rarity=model.catalog.rarities.find(r=>r.id===product.pity.rarityId)?.name??product.pity.rarityId;info.append(element('p','dc-pity-note',t(deckVersion>=2?'shop.pityPersonal':'shop.pityLegacy',{rarity,after:product.pity.after,progress})));}
     if(deckVersion>=2&&product.duplicatePolicy.scope!=='none'){
@@ -319,7 +321,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
         const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',t('shop.draws',{count:slot.count})+(ticketDeck?t('shop.poolTickets',{count:total}):':')));
         for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?t('shop.remaining',{count:remaining}):'')),element('strong','',ticketDeck?t('shop.tickets',{count:entry.weight}):rate(entry.weight/total*100)+'%'));details.append(row);}
       }
-      details.append(element('p','dc-muted',ticketDeck?[t('shop.deckExplanation'),...(deckVersion>=2?[t('shop.conditionalTickets')]:[]),...(deckVersion===3?[t('shop.codeSupply')]:[]),t('shop.quoteSupply')].join(' '):t('shop.baseRates')));info.append(details);
+      details.append(element('p','dc-muted',ticketDeck?[t('shop.deckExplanation'),...(deckVersion>=2?[t('shop.conditionalTickets')]:[]),...(deckVersion>=3?[t('shop.codeSupply')]:[]),...(deckVersion>=4?[t('shop.feasibleTickets')]:[]),t('shop.quoteSupply')].join(' '):t('shop.baseRates')));info.append(details);
       const purchase=element('div','dc-purchase-row'),quantity=field(purchase,t('shop.quantity'),'number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
       let pendingPurchase=commands.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id,reviewedQuote=null,quoteGeneration=0,allocationState=null,allocationBlocked=false;
       const allocationNote=element('p','dc-muted');allocationNote.setAttribute('role','status');
@@ -332,7 +334,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
           try{
             const quote=recover?pendingPurchase:reviewedQuote??await client.quote({productId:product.id,quantity:requestedQuantity});fence();
             if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error(t('shop.changedQuantity'));
-            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent=[t('shop.review',{count:quote.quantity,amount:quote.price.amount,currency:currencyName(quote.price.currencyId)}),...(deckVersion===3?[t('shop.reviewCodeSupply')]:[]),t('shop.reviewAllocation')].join(' ');return {review:true,activation:!!reviewedQuote.bindingActivation};}
+            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent=[t('shop.review',{count:quote.quantity,amount:quote.price.amount,currency:currencyName(quote.price.currencyId)}),...(deckVersion>=3?[t('shop.reviewCodeSupply')]:[]),...(deckVersion>=4?[t('shop.feasibleTickets')]:[]),t('shop.reviewAllocation')].join(' ');return {review:true,activation:!!reviewedQuote.bindingActivation};}
             if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error(t('shop.changedPrice'));}
             const original=commands.pending('purchase');const receipt=await (!recover&&original?._confirmed?commands.beginNew('purchase',quote):recover?commands.recover('purchase',quote):commands('purchase',quote));fence();active='packs';if(ticketDeck)await refresh();return receipt;
           }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent=t('allocation.needsReview');}}throw error;}
@@ -395,7 +397,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
-  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:'Trading controls',admin:'Administration',marketplace:'Marketplace',rewards:'Account rewards',codes:'Code history',albums:'Albums',trades:'Trade lounge',...viewLabels};
+  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:'Trading controls',admin:'Administration',marketplace:t('nav.marketplace'),rewards:'Account rewards',codes:'Code history',albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};
   function renderView() {
     if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();nav.replaceChildren();dashboard.replaceChildren();
     root.classList.toggle('dc-with-nav',navigation==='tabs');
@@ -408,7 +410,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     if(model.recoverable?.length){
       const recovery=element('section','dc-panel');recovery.setAttribute('aria-label',t('recovery.title'));recovery.append(element('h2','',t('recovery.title')),element('p','',t('recovery.description')));
       const names={purchase:'pack purchase',openPack:'pack opening',buyListing:'marketplace purchase',configureAdmin:'settings change',administerCards:'card administration',convert:'currency conversion',tradeUp:'trade-up',saveAlbum:'album change',proposeTrade:'trade offer',acceptTrade:'trade acceptance',cancelTrade:'trade cancellation',counterTrade:'counteroffer',preferences:'preferences',readNotifications:'notification update',commitImport:'catalog import',reportCodeUsage:'code usage report',createShop:'shop creation',createListing:'listing creation',cancelListing:'listing cancellation',enterRaffle:'raffle entry',openCard:'card opening',consumeBinding:'attached action'};
-      for(const intent of model.recoverable){const label=['purchase','openPack','convert','preferences','tradeUp'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
+      for(const intent of model.recoverable){const label=['purchase','openPack','convert','preferences','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','counterTrade','buyListing','createShop','createListing','cancelListing','enterRaffle'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
     }
     for(const name of (navigation==='tabs'?[active]:effectiveSections)){const view=typeof name==='function'?()=>name(model,{client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,localization}):views[name];if(view){const result=view();content.append(result.node??result);if(result.dispose)viewDisposers.push(result.dispose);if(result.requestLeave)viewLeave=result.requestLeave;}}
   }

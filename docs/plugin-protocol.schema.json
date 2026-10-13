@@ -398,8 +398,7 @@
           "visibility",
           "transfer",
           "holderId",
-          "state",
-          "data"
+          "state"
         ],
         "properties": {
           "visibility": {
@@ -422,7 +421,9 @@
           "state": {
             "enum": [
               "active",
-              "used"
+              "used",
+              "activation-pending",
+              "activation-failed"
             ]
           },
           "data": {
@@ -433,7 +434,42 @@
             "format": "date-time"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "active",
+                    "used"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "data"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "data"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "usedAt"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "CodeSummary": {
         "type": "object",
@@ -1141,6 +1177,20 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maximum"
+            ],
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         },
         "additionalProperties": false
@@ -1210,6 +1260,20 @@
           },
           "price": {
             "$ref": "#/components/schemas/Money"
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maximum"
+            ],
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         },
         "additionalProperties": false
@@ -1359,6 +1423,24 @@
           },
           "paid": {
             "$ref": "#/components/schemas/Money"
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "count"
+            ],
+            "properties": {
+              "state": {
+                "const": "pending"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         }
       },

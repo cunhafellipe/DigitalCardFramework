@@ -379,7 +379,7 @@ export class CodeService {
   }
   verifyVault(actor) {
     operator(actor,'codes.manage');
-    return this.#store.read(s=>{if(!Object.keys(s.codes??{}).length&&!Object.keys(s.codeIssuances??{}).length)return {count:0};const vault=this.#checkVault(s);for(const row of Object.values(s.codes)){const code=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code}),'CODE_INTEGRITY','Code lookup fingerprint does not match its encrypted value',500);}return {count:Object.keys(s.codes??{}).length+(this.#custody?.(s,vault)??0)};});
+    return this.#store.read(s=>{if(!Object.keys(s.codes??{}).length&&!Object.keys(s.codeIssuances??{}).length&&!Object.keys(s.bindingFactoryReservations??{}).length)return {count:0};const vault=this.#checkVault(s);for(const row of Object.values(s.codes??{})){const code=vault.open(row.secret,context(row));check(row.fingerprint===vault.fingerprint({providerId:row.providerId,code}),'CODE_INTEGRITY','Code lookup fingerprint does not match its encrypted value',500);}return {count:Object.keys(s.codes??{}).length+(this.#custody?.(s,vault)??0)};});
   }
 }
 

@@ -1,6 +1,6 @@
 import {completionContext,withCompletion,reserveDelivery,deliveryBytes,completionCapacity,completionDefaults} from './completion.js';
 import { randomUUID } from "node:crypto";
-import { check, integer, text, jsonObject } from "./catalog.js";
+import { check, integer, text, jsonObject,FrameworkError } from "./catalog.js";
 import { hasPermission } from "./access.js";
 import { contentDigest } from "./importer.js";
 import {validRecordAccounting,recordAccountingField} from './record-accounting.js';
@@ -80,10 +80,30 @@ const view = (job) => ({
   history: job.history ?? [],
 });
 export class ActionService {
+  #bindingActivation;
   #store;
   #clock;
   #handlers;
   #options;
+  #compactBindingHistory(job){
+    const history=job.history??[];if(history.length<=128)return;
+    const summary={type:'history-summary',at:history[0].at,entries:0,attempts:0,unconfirmed:0,retries:0};
+    for(const row of history.slice(0,-127)){if(row.type==='history-summary'){for(const key of ['entries','attempts','unconfirmed','retries'])summary[key]+=row[key]??0;}else{summary.entries++;summary.attempts+=Number(row.type==='attempt-started');summary.unconfirmed+=Number(row.type==='unconfirmed');summary.retries+=Number(row.type==='retry-requested');}}
+    for(const key of ['entries','attempts','unconfirmed','retries'])check(Number.isSafeInteger(summary[key]),'INSTALLATION_CAPACITY','Binding recovery counter capacity reached',507);
+    job.history=[summary,...history.slice(-127)];
+  }
+  setBindingActivation(handler){this.#bindingActivation=handler;}
+  claimBindingActivation(jobId,{retry=false}={}){
+    return this.#store.transactRecords(tx=>{
+      const job=tx.get('actionJobs',jobId);check(job?.source.type==='binding.activation','ACTION_STATE','Binding activation job required',409);
+      this.#compactBindingHistory(job);
+      if(retry&&job.status==='dead'){job.status='pending';job.attempts=0;job.nextAt=this.#clock();job.error=null;job.history.push({type:'retry-requested',at:this.#clock(),actorId:null});}
+      else if(retry&&job.status==='pending')job.nextAt=this.#clock();
+      const now=Date.parse(this.#clock());if(!((job.status==='pending'&&Date.parse(job.nextAt)<=now)||(job.status==='running'&&Date.parse(job.leaseUntil)<=now)))return null;
+      const result=this.#startJob(job,this.#clock(),now);tx.put('actionJobs',jobId,job);const obligation=tx.get('completionObligations',job.completionId);tx.put('completionObligations',obligation.id,obligation);tx.reserveActionCompletion(obligation.id);return result;
+    },{bindingFactories:true,maxRecords:16,maxBytes:1048576});
+  }
+  finishBindingActivation(tx,job,succeeded){const live=tx.get('actionJobs',job.id);check(live?.source.type==='binding.activation'&&live.status==='running'&&live.leaseToken===job.leaseToken&&Date.parse(live.leaseUntil)>Date.parse(this.#clock()),'ACTION_LEASE','Binding activation lease is no longer current',409);this.#finishJob(live,succeeded);this.#compactBindingHistory(live);tx.put('actionJobs',live.id,live);return view(live);}
   #limits;
   #completeJob(s,job,fn){
     const measure=state=>this.#store.measure?.(state)??{usedBytes:Buffer.byteLength(JSON.stringify(state))},before=measure(s).usedBytes;
@@ -162,6 +182,7 @@ export class ActionService {
       );
       const j = s.actionJobs?.[jobId];
       check(j, "NOT_FOUND", "Action not found", 404);
+      check(j.source.type!=='binding.activation','BINDING_ACTIVATION_REQUIRED','Use binding factory recovery for activation jobs',409);
       check(
         j.status === "dead",
         "ACTION_STATE",
@@ -224,6 +245,7 @@ export class ActionService {
     );
     return this.#store.transact((s) => {
       const j = s.actionJobs?.[jobId];
+      check(j?.source.type!=='binding.activation','BINDING_ACTIVATION_REQUIRED','Binding activation requires authenticated typed settlement',409);
       check(
         j?.status === "running" &&
           j.leaseToken === leaseToken &&
@@ -308,6 +330,7 @@ export class ActionService {
       const old=tx.get('actionRetryRequests',token);if(old){check(old.jobId===input.jobId,'IDEMPOTENCY_CONFLICT','Retry key already used',409);return old.result;}
       check(tx.count('actionRetryRequests')<20000,'INSTALLATION_CAPACITY','Action retry capacity reached',507);
       const result=this.#recordJob(tx,input.jobId,(j,row)=>{
+        check(j.source.type!=='binding.activation','BINDING_ACTIVATION_REQUIRED','Use binding factory recovery for activation jobs',409);
         check(j.status==='dead','ACTION_STATE','Only dead actions can be retried',409);
         check((j.history?.length??0)<=1997,'INSTALLATION_CAPACITY','Action history capacity reached; operator review required',507);
         row.bytes+=deliveryBytes;j.status='pending';j.attempts=0;j.nextAt=this.#clock();j.error=null;j.retryCount=(j.retryCount??0)+1;
@@ -323,9 +346,10 @@ export class ActionService {
     for(const jobId of selected){
       try{const result=this.#store.transactRecords(tx=>{
         const at=this.#clock(),now=Date.parse(at),job=tx.get('actionJobs',jobId);
+        if(job?.source.type==='binding.activation')throw new FrameworkError('BINDING_JOB','Use typed binding activation delivery',409);
         if(!job||!((job.status==='pending'&&Date.parse(job.nextAt)<=now)||(job.status==='running'&&Date.parse(job.leaseUntil)<=now)))return null;
         return this.#recordJob(tx,jobId,j=>this.#startJob(j,at,now));
-      },this.#actionOptions());if(result)return result;}catch(error){if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#claimLegacy(actor);throw error;}
+      },this.#actionOptions());if(result)return result;}catch(error){if(error.code==='BINDING_JOB'){const result=this.claimBindingActivation(jobId);if(result)return result;continue;}if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#claimLegacy(actor);throw error;}
     }
     return null;
   }
@@ -334,6 +358,7 @@ export class ActionService {
     operator(actor,'actions.dispatch');check(typeof input.succeeded==='boolean','INVALID_INPUT','Delivery result must be boolean');
     try{return this.#store.transactRecords(tx=>{
       const job=tx.get('actionJobs',input.jobId);
+      check(job?.source.type!=='binding.activation','BINDING_ACTIVATION_REQUIRED','Binding activation requires authenticated typed settlement',409);
       check(job?.status==='running'&&job.leaseToken===input.leaseToken&&Date.parse(job.leaseUntil)>Date.parse(this.#clock()),'ACTION_LEASE','Delivery lease is no longer current',409);
       return this.#recordJob(tx,input.jobId,j=>this.#finishJob(j,input.succeeded));
     },this.#actionOptions());}catch(error){if(error.code==='RECORD_PATH_UNAVAILABLE')return this.#settleLegacy(actor,input);throw error;}
@@ -345,6 +370,10 @@ export class ActionService {
     for (let i = 0; i < limit && !signal?.aborted; i++) {
       const job = this.claim(actor);
       if (!job) break;
+      if(job.source.type==='binding.activation'){
+        check(this.#bindingActivation,'BINDING_FACTORY_PENDING','Binding activation provider is unavailable',503);
+        try{results.push(await this.#bindingActivation(job,signal));}catch(error){if(error.code!=='ACTION_LEASE')throw error;results.push({id:job.id,status:'lease-lost'});}continue;
+      }
       const controller = new AbortController();
       let timer, abort;
       let succeeded = false;

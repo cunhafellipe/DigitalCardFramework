@@ -166,3 +166,37 @@ book.dispose();
 In book mode, a placement's string `data.pageId` must name an existing page. Omitted or null values use the card's ordinal position and page size. Legacy gallery albums preserve arbitrary placement extensions. The server validates page references on save. The artist editor materializes stable assignments when pages are reordered and blocks deletion of an occupied page.
 
 Default books support independent page controls, keyboard navigation and image failure captions. `renderAlbum` returns a DOM node with `dispose()` and, in book mode, `setPage(index)`. Custom `albumRenderer` implementations may return a DOM node or `{node,dispose}`; the album editor disposes both draft and public previews when replaced or unmounted. Trusted `layouts` replacements retain responsibility for implementing book features they need.
+
+## Install a declarative Studio panel
+
+A host can install a data-only panel that edits the selected layer's horizontal position, vertical position and rotation. Panel authors can generate the same JSON from Python or Go; they do not need to write a JavaScript panel callback.
+
+Generate a manifest with either example:
+
+```sh
+python examples/plugins/python-editor-panel.py > print-layout.json
+go run examples/plugins/go-editor-panel/main.go > print-layout.json
+```
+
+Load the JSON as host configuration and pass it when mounting Studio. For example, a host that imports JSON through its bundler can use:
+
+```js
+import { mountStudio } from '@digital-card/framework/presentation/studio';
+import printLayout from './print-layout.json';
+
+const studio = mountStudio(root, {
+  initialPackage,
+  editorContributions: [printLayout],
+  editorContributionGrants: {
+    x: { minimum: -1000, maximum: 1000 },
+    y: { minimum: -1000, maximum: 1000 },
+    rotation: { minimum: -180, maximum: 180 },
+  },
+});
+```
+
+This is the standard host registration; the generated manifest supplies the controls. Select a layer, use the labelled numeric fields, preview the change, then use the editor's undo and save controls. Reopening the saved project preserves the edited layer values. The host must reinstall its panel configuration when mounting a new Studio instance; the card project does not install extensions itself.
+
+The [panel schema](editor-contribution.schema.json) describes the manifest structure; the runtime validator also enforces unique control identifiers and fields, ordered ranges and the encoded-size limit. Each manifest declares `protocol: 'digital-card-editor-contribution@1'`, an `id`, semantic `version`, `title`, and up to eight numeric `controls`. Each control has an `id`, `label`, `field`, `minimum`, `maximum` and positive `step`. Supported fields are `x`, `y` and `rotation`; arbitrary property paths, scripts, styles and asset URLs are not supported. A manifest is limited to 16 KiB, with at most sixteen panels per Studio instance.
+
+Host grants narrow the requested ranges. An explicit grants map enables only its listed fields; omitting the map allows x/y from -1,000,000 to 1,000,000 and rotation from -360 to 360. Existing layer locks and project policy still apply. Labels render as text, and contributions receive no live project object or credentials. Existing JavaScript `panels` callbacks remain a separate trusted host extension mechanism.

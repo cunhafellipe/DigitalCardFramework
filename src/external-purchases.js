@@ -69,7 +69,7 @@ export class ExternalPurchaseService {
   #init(s) { s.externalPurchases ??= {}; s.externalPurchaseProofs ??= {}; s.externalPurchaseKeys ??= {}; }
   #projection(row, provider = false) {
     const result = {};
-    for (const field of ['preparationId', 'fingerprint', 'allocationAttemptId', 'codeIssuanceBatchId', 'state', 'terms', 'preparedAt', 'fulfilledAt', 'purchase', 'failureCode', 'compensationId', 'refundRequiredAt', 'cancelledAt', 'compensatedAt', 'quarantinedAt', 'legacyResolution']) if (row[field] !== undefined) result[field] = clone(row[field]);
+    for (const field of ['preparationId', 'fingerprint', 'allocationAttemptId', 'codeIssuanceBatchId', 'bindingFactoryBatchId', 'state', 'terms', 'preparedAt', 'fulfilledAt', 'purchase', 'failureCode', 'compensationId', 'refundRequiredAt', 'cancelledAt', 'compensatedAt', 'quarantinedAt', 'legacyResolution']) if (row[field] !== undefined) result[field] = clone(row[field]);
     if (provider && row.debitReference) result.debitReference = row.debitReference;
     return result;
   }
@@ -138,9 +138,9 @@ export class ExternalPurchaseService {
     }
     check(stable,'EXTERNAL_PURCHASE_INVARIANT','Completion reservation accounting did not stabilize',500);
   }
-  #fits(s,previousTotal=0) {
+  #fits(s,previousTotal=0,completionGrowth=0) {
     const measured = this.#measure(s);
-    check(measured.totalBytes <= measured.limitBytes || measured.totalBytes<=previousTotal, 'STORAGE_CAPACITY', 'External purchase completion exceeds storage capacity', 507);
+    check(measured.totalBytes <= measured.limitBytes || measured.totalBytes<=previousTotal+completionGrowth, 'STORAGE_CAPACITY', 'External purchase completion exceeds storage capacity', 507);
   }
   #reserve(s, row, resolutionCandidate=null) {
     // Bound the largest failure/confirmation record and both proof-index entries before debit.
@@ -267,7 +267,7 @@ export class ExternalPurchaseService {
     });
     if(claimed.native)return this.commit(principal,reviewed);if(claimed.result)return claimed.result;
     return this.#b.runAllocation(claimed.attempt,signal,async combined=>{
-      let evaluation;try{evaluation=await this.#b.evaluateAllocation(claimed.attempt,combined);}catch(error){if(!(error instanceof FrameworkError))throw error;if(error.code==='CODE_ISSUANCE_PENDING')return this.status(principal,{preparationId:reviewed.preparationId});return this.#finishRemote(principal,reviewed,null,error);}
+      let evaluation;try{evaluation=await this.#b.evaluateAllocation(claimed.attempt,combined);}catch(error){if(!(error instanceof FrameworkError))throw error;if(['CODE_ISSUANCE_PENDING','BINDING_FACTORY_PENDING'].includes(error.code))return this.status(principal,{preparationId:reviewed.preparationId});return this.#finishRemote(principal,reviewed,null,error);}
       return this.#finishRemote(principal,reviewed,evaluation);
     });
   }
@@ -279,9 +279,9 @@ export class ExternalPurchaseService {
       if(failure)this.#refund(row,failure.code);else{
         const draft=clone(s),candidate=draft.externalPurchases[row.preparationId];let plan;
         try{plan=this.#b.validateAllocation(draft,candidate,evaluation);candidate.purchase=this.#b.allocate(draft,candidate,plan);candidate.state='fulfilled';candidate.fulfilledAt=this.#now();candidate.completionBytes=0;this.#b.completeAllocation(draft,candidate,plan,evaluation);delete candidate.snapshot;this.#b.capacity(draft);}catch(error){if(!(error instanceof FrameworkError))throw error;this.#refund(row,error.code);}
-        if(row.state==='allocation_pending'){const measured=this.#measure(draft);if(measured.totalBytes>measured.limitBytes)this.#refund(row,'STORAGE_CAPACITY');else Object.assign(s,draft);}
+        if(row.state==='allocation_pending'){const measured=this.#measure(draft),growth=Math.max(0,(measured.completionStoredBytes??0)-(before.completionStoredBytes??0));if(measured.totalBytes>measured.limitBytes&&measured.totalBytes>before.totalBytes+growth)this.#refund(row,'STORAGE_CAPACITY');else Object.assign(s,draft);}
       }
-      const current=s.externalPurchases[row.preparationId];if(current.state==='refund_required'){this.#b.cancelAllocationEffects?.(s,current);this.#consumeReservation(s,current,before,reserve);}this.#fits(s,before.totalBytes);return this.#projection(current,true);
+      const current=s.externalPurchases[row.preparationId];if(current.state==='refund_required'){this.#b.cancelAllocationEffects?.(s,current);this.#consumeReservation(s,current,before,reserve);}this.#fits(s,before.totalBytes,Math.max(0,(this.#measure(s).completionStoredBytes??0)-(before.completionStoredBytes??0)));return this.#projection(current,true);
     });
   }
   cancel(actor, input) {

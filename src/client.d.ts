@@ -1,6 +1,6 @@
 import type { Operations, Schemas } from './wire-types.js';
 type QueryOperation = 'adminUsers' | 'adminHistory' | 'shops' | 'listings' | 'orders' | 'fulfillments' | 'actionJobs' | 'directory' | 'notifications' | 'codeHistory' | 'codeInventory';
-type DirectOperation = 'recoverCodeIssuance' | 'quote' | 'purchase' | 'openPack' | 'convert' | 'tradeUp' | 'saveAlbum' | 'albums' | 'proposeTrade' | 'trades' | 'acceptTrade' | 'cancelTrade' | 'consumeBinding' | 'catalog' | 'me' | 'wallet' | 'history' | 'packs' | 'publicAlbums' | 'bindings' | 'availability' | 'readNotifications' | 'counterTrade' | 'operatorCatalog' | 'previewImport' | 'commitImport' | 'reconcileCurrency' | 'revealCode' | 'reportCodeUsage' | 'reconcileCode' | 'codePools' | 'configureCodePool' | 'importCodes' | 'confirmCodeStatus' | 'tradingPolicy' | 'configureTrading' | 'setCardTransferLock' | 'commerceSettings' | 'configureCommerce' | 'createShop' | 'setShopEnabled' | 'createListing' | 'quoteListing' | 'buyListing' | 'cancelListing' | 'enterRaffle' | 'raffleStatus' | 'drawRaffle' | 'openCard' | 'retryAction' | 'cardPolicies' | 'effectiveCardPolicy' | 'saveCardPolicy' | 'previewCardPolicy' | 'activateCardPolicy' | 'retireCardPolicy' | 'restoreCardPolicy' | 'saveCardResource' | 'retireCardResource' | 'restoreCardResource' | 'updateCopyStats' | 'adminOverview' | 'configureAdmin' | 'administerCards' | 'registerCommandIntent' | 'executeCommandIntent' | 'acknowledgeCommandIntent';
+type DirectOperation = 'recoverBindingFactories' | 'recoverCodeIssuance' | 'quote' | 'purchase' | 'openPack' | 'convert' | 'tradeUp' | 'saveAlbum' | 'albums' | 'proposeTrade' | 'trades' | 'acceptTrade' | 'cancelTrade' | 'consumeBinding' | 'catalog' | 'me' | 'wallet' | 'history' | 'packs' | 'publicAlbums' | 'bindings' | 'availability' | 'readNotifications' | 'counterTrade' | 'operatorCatalog' | 'previewImport' | 'commitImport' | 'reconcileCurrency' | 'revealCode' | 'reportCodeUsage' | 'reconcileCode' | 'codePools' | 'configureCodePool' | 'importCodes' | 'confirmCodeStatus' | 'tradingPolicy' | 'configureTrading' | 'setCardTransferLock' | 'commerceSettings' | 'configureCommerce' | 'createShop' | 'setShopEnabled' | 'createListing' | 'quoteListing' | 'buyListing' | 'cancelListing' | 'enterRaffle' | 'raffleStatus' | 'drawRaffle' | 'openCard' | 'retryAction' | 'cardPolicies' | 'effectiveCardPolicy' | 'saveCardPolicy' | 'previewCardPolicy' | 'activateCardPolicy' | 'retireCardPolicy' | 'restoreCardPolicy' | 'saveCardResource' | 'retireCardResource' | 'restoreCardResource' | 'updateCopyStats' | 'adminOverview' | 'configureAdmin' | 'administerCards' | 'registerCommandIntent' | 'executeCommandIntent' | 'acknowledgeCommandIntent';
 type DirectMethods = {
     [K in DirectOperation]: Operations[K]['request'] extends undefined ? () => Promise<Operations[K]['response']> : (input: Operations[K]['request']) => Promise<Operations[K]['response']>;
 };
@@ -15,6 +15,9 @@ export interface QueryOptions {
     [key: string]: string | number | boolean | null | undefined;
 }
 export interface Client extends DirectMethods, QueryMethods {
+    bindingFactoryStatus(options: {
+        batchId: string;
+    }): Promise<Operations['bindingFactoryStatus']['response']>;
     codeIssuanceStatus(options: {
         batchId: string;
     }): Promise<Operations['codeIssuanceStatus']['response']>;

@@ -116,7 +116,10 @@
     "./external-allocation-strategy-contracts": "./src/external-allocation-strategy-contracts.js",
     "./remote-external-allocation-strategy": "./src/remote-external-allocation-strategy.js",
     "./code-issuance-contracts": "./src/code-issuance-contracts.js",
-    "./remote-code-issuer": "./src/remote-code-issuer.js"
+    "./remote-code-issuer": "./src/remote-code-issuer.js",
+    "./binding-factory-contracts": "./src/binding-factory-contracts.js",
+    "./remote-binding-factory": "./src/remote-binding-factory.js",
+    "./presentation/editor-contributions": "./src/presentation/editor-contributions.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

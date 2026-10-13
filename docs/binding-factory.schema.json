@@ -1,0 +1,718 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/binding-factory/v1",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "digital-card-binding-factory@1"
+        },
+        "operation": {
+          "enum": [
+            "produce",
+            "provision",
+            "activate",
+            "lookup",
+            "cancel"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+        },
+        "grantId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "batchId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+        },
+        "inputDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+        },
+        "deadline": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entries": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "invocationId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "inputDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                  },
+                  "attemptId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "namespace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9-]+\\.[a-zA-Z0-9._-]+(?![\\s\\S])"
+                  },
+                  "factoryName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "factoryRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "kind": {
+                    "enum": [
+                      "pure",
+                      "provision",
+                      "activation"
+                    ]
+                  },
+                  "packIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 99
+                  },
+                  "slotId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                  },
+                  "slotOrdinal": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 99
+                  },
+                  "input": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "copy": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                          },
+                          "ownerId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "cardId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                          },
+                          "variantId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                          },
+                          "lineId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                          },
+                          "rarityId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                          },
+                          "state": {
+                            "const": "sealed"
+                          },
+                          "serialNumber": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "editionTotal": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "maxLength": 32
+                          },
+                          "openedAt": {
+                            "type": "null"
+                          },
+                          "openedBy": {
+                            "type": "null"
+                          },
+                          "acquiredAt": {
+                            "type": "string",
+                            "maxLength": 32
+                          },
+                          "source": {
+                            "type": "object"
+                          },
+                          "version": {
+                            "const": 1
+                          },
+                          "definition": {
+                            "type": "object"
+                          },
+                          "variant": {
+                            "type": "object"
+                          },
+                          "bindings": {
+                            "type": "object"
+                          },
+                          "metadata": {
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ownerId",
+                          "cardId",
+                          "variantId",
+                          "lineId",
+                          "rarityId",
+                          "state",
+                          "serialNumber",
+                          "editionTotal",
+                          "createdAt",
+                          "openedAt",
+                          "openedBy",
+                          "acquiredAt",
+                          "source",
+                          "version",
+                          "definition",
+                          "variant",
+                          "bindings",
+                          "metadata"
+                        ]
+                      },
+                      "user": {
+                        "type": "object"
+                      },
+                      "spec": {
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "copy",
+                      "user",
+                      "spec"
+                    ]
+                  }
+                },
+                "required": [
+                  "invocationId",
+                  "inputDigest",
+                  "attemptId",
+                  "copyId",
+                  "userId",
+                  "namespace",
+                  "factoryName",
+                  "factoryRevision",
+                  "kind",
+                  "packIndex",
+                  "slotId",
+                  "slotOrdinal",
+                  "input"
+                ]
+              }
+            }
+          },
+          "required": [
+            "entries"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "operation",
+        "requestId",
+        "providerId",
+        "grantId",
+        "generation",
+        "batchId",
+        "inputDigest",
+        "deadline",
+        "context"
+      ]
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-binding-factory@1"
+            },
+            "operation": {
+              "enum": [
+                "produce",
+                "provision",
+                "activate",
+                "lookup",
+                "cancel"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "batchId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "processed"
+            },
+            "results": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "invocationId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9-]+\\.[a-zA-Z0-9._-]+(?![\\s\\S])"
+                      },
+                      "factoryName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "factoryRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "kind": {
+                        "enum": [
+                          "pure",
+                          "provision",
+                          "activation"
+                        ]
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "state": {
+                        "const": "ready"
+                      },
+                      "data": {
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "invocationId",
+                      "inputDigest",
+                      "attemptId",
+                      "copyId",
+                      "userId",
+                      "namespace",
+                      "factoryName",
+                      "factoryRevision",
+                      "kind",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "state",
+                      "data"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "invocationId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9-]+\\.[a-zA-Z0-9._-]+(?![\\s\\S])"
+                      },
+                      "factoryName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "factoryRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "kind": {
+                        "enum": [
+                          "pure",
+                          "provision",
+                          "activation"
+                        ]
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "state": {
+                        "enum": [
+                          "pending",
+                          "not-created",
+                          "cancelled",
+                          "not-activated"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "invocationId",
+                      "inputDigest",
+                      "attemptId",
+                      "copyId",
+                      "userId",
+                      "namespace",
+                      "factoryName",
+                      "factoryRevision",
+                      "kind",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "state"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "invocationId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "inputDigest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+                      },
+                      "attemptId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "copyId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+                      },
+                      "userId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9-]+\\.[a-zA-Z0-9._-]+(?![\\s\\S])"
+                      },
+                      "factoryName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "factoryRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "kind": {
+                        "enum": [
+                          "pure",
+                          "provision",
+                          "activation"
+                        ]
+                      },
+                      "packIndex": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "slotId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+                      },
+                      "slotOrdinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 99
+                      },
+                      "state": {
+                        "const": "error"
+                      },
+                      "errorCode": {
+                        "enum": [
+                          "unavailable",
+                          "conflict",
+                          "invalid-request"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "invocationId",
+                      "inputDigest",
+                      "attemptId",
+                      "copyId",
+                      "userId",
+                      "namespace",
+                      "factoryName",
+                      "factoryRevision",
+                      "kind",
+                      "packIndex",
+                      "slotId",
+                      "slotOrdinal",
+                      "state",
+                      "errorCode"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "batchId",
+            "inputDigest",
+            "deadline",
+            "status",
+            "results"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "digital-card-binding-factory@1"
+            },
+            "operation": {
+              "enum": [
+                "produce",
+                "provision",
+                "activate",
+                "lookup",
+                "cancel"
+              ]
+            },
+            "requestId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "providerId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*(?![\\s\\S])"
+            },
+            "grantId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "batchId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            },
+            "inputDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}(?![\\s\\S])"
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "const": "error"
+            },
+            "errorCode": {
+              "enum": [
+                "invalid-request",
+                "unauthenticated",
+                "rate-limited",
+                "unavailable"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "operation",
+            "requestId",
+            "providerId",
+            "grantId",
+            "generation",
+            "batchId",
+            "inputDigest",
+            "deadline",
+            "status",
+            "errorCode"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -3,6 +3,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {check} from './catalog.js';
 import {missingCompletions,deliveryBytes} from './completion.js';
 import {raffleDueRecord} from './record-accounting.js';
+import {safeData} from './data.js';
 
 const fieldName=name=>check(typeof name==='string'&&name.length>0&&name.length<=200&&!['__proto__','constructor','prototype'].includes(name),'INVALID_INPUT','Invalid collection');
 const keyName=key=>check(typeof key==='string'&&key.length<=2048,'INVALID_INPUT','Invalid record key');
@@ -57,7 +58,52 @@ function validateTradeExchange(plan,counter){
  }
  for(const row of trades){const reservation=plan.changes.find(item=>item.collection==='completionObligations'&&item.key==='trade:'+row.key);check(reservation,'INVALID_STATE','Exchange reservation is missing',500);}
 }
-export function validateRecordPlan(plan,{codeIssuance=false,allocationJournal=false,allocationPurchase=false,allocationListing=false,intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false,listingCreation=false,raffle=false,raffleDraw=false}={}){
+const bindingFactoryAdmissionData=new WeakMap();
+function validateBindingActivationChanges(plan){
+ const admissions=plan.bindingFactoryAdmissions??[];check(Array.isArray(admissions)&&admissions.every(value=>bindingFactoryAdmissionData.has(value)),'INVALID_STATE','Binding result admission provenance is required',500);
+ const admitted=admissions.map(value=>bindingFactoryAdmissionData.get(value));
+ const invocations=plan.changes.filter(row=>row.collection==='bindingFactoryInvocations'&&row.old?.value.state==='activation_pending'&&['active','activation_failed'].includes(row.value?.state));
+ check(admitted.length===invocations.length&&new Set(admitted.map(value=>value.invocationId)).size===admitted.length,'INVALID_STATE','Each activation settlement requires one authenticated admission',500);
+ const copies=plan.changes.filter(row=>row.collection==='copies'),events=plan.changes.filter(row=>row.collection==='events');
+ const stable=(value,mutable)=>Object.fromEntries(Object.entries(value).filter(([key])=>!mutable.includes(key)));
+ for(const row of copies){
+  const before=row.old?.value,next=row.value,settled=invocations.filter(value=>value.value.copyId===row.key);
+  check(before&&next&&settled.length&&next.version===before.version+1&&isDeepStrictEqual(stable(before,['bindings','version']),stable(next,['bindings','version']))&&isDeepStrictEqual(Object.keys(before.bindings).sort(),Object.keys(next.bindings).sort()),'INVALID_STATE','Activation may only settle its own pending bindings',500);
+  for(const [namespace,binding]of Object.entries(before.bindings)){
+   const invocation=settled.find(value=>value.value.namespace===namespace),after=next.bindings[namespace];
+   if(!invocation){check(isDeepStrictEqual(binding,after),'INVALID_STATE','Unrelated binding changed',500);continue;}
+   const value=invocation.value,admission=admitted.find(row=>row.invocationId===invocation.key);
+   check(admission?.state===value.state,'INVALID_STATE','Binding result admission differs',500);
+   check(binding.state==='activation-pending'&&binding.activationId===invocation.key&&binding.holderId===value.userId&&before.ownerId===value.userId&&!Object.hasOwn(binding,'data')&&isDeepStrictEqual(stable(binding,['state','activationId','data']),stable(after,['state','activationId','data']))&&!Object.hasOwn(after,'activationId')&&after.state===(value.state==='active'?'active':'activation-failed'),'INVALID_STATE','Binding authority and terminal state must be preserved',500);
+   if(value.state==='active'){check(value.inputCustody&&value.resultCustody&&after.data&&typeof after.data==='object'&&!Array.isArray(after.data),'INVALID_STATE','Active binding requires prepared custody and data',500);safeData(after.data,{maxBytes:32768,maxDepth:16,maxNodes:10000});check(isDeepStrictEqual(after.data,admission.data),'INVALID_STATE','Binding data differs from authenticated result',500);}
+   else check(!Object.hasOwn(after,'data'),'INVALID_STATE','Failed activation cannot expose data',500);
+  }
+ }
+ for(const invocation of invocations){
+  const row=invocation.value,admission=admitted.find(value=>value.invocationId===invocation.key),job=plan.changes.find(value=>value.collection==='actionJobs'&&value.key===row.jobId),copy=copies.find(value=>value.key===row.copyId),event=events.find(value=>value.value?.data?.copyId===row.copyId&&value.value.data.namespace===row.namespace&&value.value.type===(row.state==='active'?'binding.activated':'binding.activation-failed'));
+  check(copy&&job?.old&&job.old.value.source?.invocationId===invocation.key&&job.old.value.source.copyId===row.copyId&&job.old.value.source.namespace===row.namespace&&job.old.value.userId===row.userId&&job.value.leaseToken===null&&job.value.leaseUntil===null&&job.value.status===(row.state==='active'?'succeeded':'dead'),'INVALID_STATE','Activation requires its own typed job and copy settlement',500);
+  check(event&&!event.old,'INVALID_STATE','Activation settlement requires its material-free event',500);
+  if(!admission.dependencyOf){check(invocation.old.value.inputCustody&&admission.jobId===job.key&&admission.leaseToken===job.old.value.leaseToken&&event&&!event.old&&job.old.value.status==='running'&&typeof job.old.value.leaseToken==='string'&&job.old.value.leaseToken.length>0&&Date.parse(job.old.value.leaseUntil)>Date.parse(event.value.at),'INVALID_STATE','Activation confirmation requires a current lease and event',500);}
+  else {const origin=invocations.find(value=>value.key===admission.dependencyOf),originalAdmission=admitted.find(value=>value.invocationId===admission.dependencyOf);let previous=invocation.old.value.dependsOn;const seen=new Set();while(previous&&previous!==origin?.key&&!seen.has(previous)){seen.add(previous);previous=invocations.find(value=>value.key===previous)?.old?.value.dependsOn;}check(row.state==='activation_failed'&&!invocation.old.value.inputCustody&&origin?.value.state==='activation_failed'&&origin.value.copyId===row.copyId&&previous===origin.key&&originalAdmission&&!originalAdmission.dependencyOf&&admission.jobId===originalAdmission.jobId&&admission.leaseToken===originalAdmission.leaseToken,'INVALID_STATE','Unsent dependency failure requires a confirmed predecessor refusal',500);}
+
+ }
+ for(const event of events)check(invocations.some(row=>row.value.copyId===event.value.data?.copyId&&row.value.namespace===event.value.data.namespace&&event.value.type===(row.value.state==='active'?'binding.activated':'binding.activation-failed')),'INVALID_STATE','Activation event requires a matching settlement',500);
+}
+export function validateRecordPlan(plan,{bindingFactories=false,codeIssuance=false,allocationJournal=false,allocationPurchase=false,allocationListing=false,intent=false,preferences=false,packCompletion=false,tradeProposal=false,tradeCompletion=false,tradeAcceptance=false,tradeCounter=false,actionDelivery=false,actionRetry=false,listingCompletion=false,listingCancellation=false,listingPurchase=false,listingCreation=false,raffle=false,raffleDraw=false}={}){
+  const factoryCollections=new Set(['allocationSelections','bindingFactoryReservations','bindingFactoryQuota','bindingFactoryBatches','bindingFactoryInvocations','bindingFactoryCopies']);
+  const factoryChanges=plan.changes.filter(row=>factoryCollections.has(row.collection)||row.collection==='completionObligations'&&row.value?.kind==='binding-factory'||row.collection==='actionJobs'&&row.value?.source.type==='binding.activation'||row.collection==='events'&&['binding.activated','binding.activation-failed'].includes(row.value?.type));
+  check(!factoryChanges.length||bindingFactories||allocationJournal||allocationPurchase||allocationListing,'RECORD_TRANSACTION_UNSUPPORTED','Binding effects require their dedicated transaction scope',409);
+  for(const row of factoryChanges){check(row.value,'INVALID_STATE','Binding effect identities cannot be forgotten',500);const next=row.value,before=row.old?.value;if(['allocationSelections','bindingFactoryCopies'].includes(row.collection))check(!before||isDeepStrictEqual(before,next),'INVALID_STATE','Pinned binding mint draft is immutable',500);
+    if(row.collection==='bindingFactoryInvocations'){check(before?.state!=='activation_pending'||bindingFactories&&['activation_pending','active','activation_failed'].includes(next.state),'INVALID_STATE','Committed activation requires typed settlement',500);const mutable=new Set(['state','inputDigest','inputCustody','resultCustody','jobId','errorCode']),stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!mutable.has(key)));check(row.key===next.invocationId&&(!before||isDeepStrictEqual(stable(before),stable(next)))&&(!before?.inputDigest||before.inputDigest===next.inputDigest)&&(!before?.inputCustody||isDeepStrictEqual(before.inputCustody,next.inputCustody))&&(!before?.resultCustody||isDeepStrictEqual(before.resultCustody,next.resultCustody))&&(!['active','attached','cancelled','activation_failed'].includes(before?.state)||before.state===next.state),'INVALID_STATE','Binding invocation identity is immutable',500);}
+    if(row.collection==='bindingFactoryReservations')check(row.key===next.attemptId&&(!before||['attemptId','batchId','count','bytes','userCustody'].every(key=>isDeepStrictEqual(before[key],next[key]))),'INVALID_STATE','Binding reservation identity is immutable',500);
+    if(row.collection==='bindingFactoryQuota')check(row.key==='global'&&Number.isSafeInteger(next.reserved)&&next.reserved>=0,'INVALID_STATE','Invalid binding quota',500);
+    if(row.collection==='bindingFactoryBatches')check(row.key===next.id&&(!before||['id','attemptId','userId','entries'].every(key=>isDeepStrictEqual(before[key],next[key]))),'INVALID_STATE','Binding batch identity is immutable',500);
+    if(row.collection==='completionObligations')check(row.key===next.id&&(!before||['id','kind','entityId','bytes','events','jobs','subscriptions'].every(key=>isDeepStrictEqual(before[key],next[key]))),'INVALID_STATE','Binding completion identity is immutable',500);
+    if(row.collection==='actionJobs')check(next.handler==='framework.binding.activation'&&next.source.invocationId===next.params.invocationId&&next.completionId==='binding-factory:'+next.params.batchId&&(!before||['id','handler','params','userId','source','createdAt','completionId'].every(key=>isDeepStrictEqual(before[key],next[key]))),'INVALID_STATE','Activation delivery identity is immutable',500);
+    if(row.collection==='events')check(!before&&next.sequence===row.ordinal+1,'INVALID_STATE','Binding event sequence differs',500);
+  }
+  if(bindingFactories){check(!plan.scalars.length&&plan.changes.every(row=>factoryChanges.includes(row)||row.collection==='copies'),'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside binding factory scope',409);validateBindingActivationChanges(plan);return;}
+  if(factoryChanges.length)plan={...plan,changes:plan.changes.filter(row=>!factoryChanges.includes(row)),completion:plan.completion&&factoryChanges.some(row=>row.collection==='completionObligations'&&row.key===plan.completion.id)?undefined:plan.completion};
   const issuance=plan.changes.filter(row=>['_codeIssuanceIdentities','codeIssuances','codeIssuanceBatches','codeIssuanceReservations','codeIssuanceQuota'].includes(row.collection)||row.collection==='completionObligations'&&row.value.kind==='code-issuance');
   if(issuance.length){for(const row of issuance){check(row.value,'INVALID_STATE','Code issuance rows cannot be forgotten',500);if(row.collection==='codeIssuances'){const mutable=new Set(['state','custody','errorCode']),stable=value=>Object.fromEntries(Object.entries(value).filter(([key])=>!mutable.has(key)));check(row.key===row.value.issuanceId&&(!row.old||isDeepStrictEqual(stable(row.old.value),stable(row.value)))&&(!['attached','cancelled'].includes(row.old?.value.state)||row.value.state===row.old.value.state)&&(row.old?.value.state!=='issued'||['issued','attached','cancelled'].includes(row.value.state)),'INVALID_STATE','Code issuance identity is immutable',500);}if(row.collection==='codeIssuanceQuota')check(row.key==='global'&&Number.isSafeInteger(row.value.reserved)&&row.value.reserved>=0,'INVALID_STATE','Invalid issuance quota',500);if(row.collection==='completionObligations')check(row.value.id===row.key&&(!row.old||['id','kind','entityId','bytes','events','jobs'].every(key=>isDeepStrictEqual(row.old.value[key],row.value[key]))),'INVALID_STATE','Issuance reservation identity is immutable',500);}}
   if(codeIssuance){check(!plan.scalars.length&&issuance.length===plan.changes.length,'RECORD_TRANSACTION_UNSUPPORTED','Collection is outside code issuance scope',409);return;}
@@ -237,7 +283,7 @@ export function createRecordTransaction(backend,{maxRecords=4096,maxBytes=16*102
   check(Number.isSafeInteger(maxRecords)&&maxRecords>=1&&maxRecords<=100000,'INVALID_INPUT','Invalid record budget');
   check(Number.isSafeInteger(maxBytes)&&maxBytes>=1&&maxBytes<=64*1024*1024,'INVALID_INPUT','Invalid byte budget');
   let active=true,reads=0,bytes=0;
-  const fields=new Map(),records=new Map(),nextOrdinals=new Map(),createdKinds=new Map(),scalars=new Map();let completion;
+  const fields=new Map(),records=new Map(),nextOrdinals=new Map(),createdKinds=new Map(),scalars=new Map(),bindingFactoryAdmissions=[];let completion;
   const live=()=>check(active,'TRANSACTION_ENDED','Record transaction has ended',409);
   const charge=size=>{live();reads++;bytes+=size;check(reads<=maxRecords&&bytes<=maxBytes,'TRANSACTION_BUDGET','Record transaction read budget exceeded',507);};
   const field=name=>{live();fieldName(name);if(!fields.has(name))fields.set(name,backend.field(name,charge));return fields.get(name);};
@@ -263,13 +309,14 @@ export function createRecordTransaction(backend,{maxRecords=4096,maxBytes=16*102
     reserveIntentCompletion(id,{admission=false}={}){live();keyName(id);check(!completion,'INVALID_STATE','Only one intent reservation can fund a transaction',500);completion={id,admission};},
     reserveTradeCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
     reserveListingCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
+    admitBindingFactoryResult(value){live();check(value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(key=>['invocationId','jobId','leaseToken','state','data','dependencyOf'].includes(key))&&['active','activation_failed'].includes(value.state),'INVALID_STATE','Invalid binding result admission',500);for(const key of ['invocationId','jobId','leaseToken'])keyName(value[key]);check(value.leaseToken.length>0&&value.invocationId.length>0&&value.jobId.length>0,'INVALID_STATE','Binding result identity is required',500);if(value.dependencyOf){keyName(value.dependencyOf);check(value.state==='activation_failed','INVALID_STATE','Only failure may propagate to a dependency',500);}if(value.state==='active'){check(value.data&&typeof value.data==='object'&&!Array.isArray(value.data),'INVALID_STATE','Active result requires data',500);safeData(value.data,{maxBytes:32768,maxDepth:16,maxNodes:10000});}else check(!Object.hasOwn(value,'data'),'INVALID_STATE','Failed result cannot carry data',500);const token=Object.freeze({invocationId:value.invocationId});bindingFactoryAdmissionData.set(token,clone(value));bindingFactoryAdmissions.push(token);return token;},
     reserveActionCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
     reservePackCompletion(id){live();keyName(id);check(!completion,'INVALID_STATE','Only one reservation can fund a transaction',500);completion={id,admission:false};},
   };
   return {api,close(){active=false;},finish(){live();const changes=[...records.values()].filter(row=>!isDeepStrictEqual(row.old?.value,row.value)||completion&&row.collection==='completionObligations'&&row.key===completion.id);
     const changedScalars=[...scalars.values()].filter(row=>!isDeepStrictEqual(row.old,row.value));check(changes.length+changedScalars.length<=maxRecords,'TRANSACTION_BUDGET','Record transaction write budget exceeded',507);
     const written=changes.concat(changedScalars).reduce((total,row)=>total+Buffer.byteLength(JSON.stringify(row.value)??''),0);check(written<=maxBytes,'TRANSACTION_BUDGET','Record transaction write byte budget exceeded',507);
-    return {changes,scalars:changedScalars,completion,fields,reads,bytes,written,loaded:[...records.values()]};}};
+    return {changes,scalars:changedScalars,completion,fields,reads,bytes,written,bindingFactoryAdmissions:Object.freeze([...bindingFactoryAdmissions]),loaded:[...records.values()]};}};
 }
 
 function validateImportedAllocationChanges(plan,attempt){

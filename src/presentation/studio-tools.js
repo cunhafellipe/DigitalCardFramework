@@ -29,6 +29,7 @@ import {
   fontDiagnostics,
 } from "./text.js";
 import { importPackage } from "./package.js";
+import {createEditorContributions} from './editor-contributions.js';
 
 const el = (tag, text) => {
   const e = document.createElement(tag);
@@ -49,7 +50,12 @@ export function mountAuthoringTools({
   policyProvider,
   context = {},
   panels = [],
+  editorContributions = [],
+  editorContributionGrants,
 }) {
+  let portablePanels,portablePanelError=null;
+  try{portablePanels=createEditorContributions(editorContributions,{grants:editorContributionGrants});}
+  catch{portablePanels=createEditorContributions();portablePanelError='An editor contribution was rejected. The ordinary editor remains available.';}
   let entries = [],
     effective = null,
     clipboard = null,
@@ -216,6 +222,7 @@ export function mountAuthoringTools({
     disposePanels();
     const p = getProject();
     root.replaceChildren(el("h2", "Text, stats & templates"));
+    if(portablePanelError)root.append(el('p',portablePanelError));
     if (!p) {
       root.append(el("p", "Open a card to edit."));
       return;
@@ -1198,6 +1205,13 @@ export function mountAuthoringTools({
     for (const diagnostic of textDiagnostics)
       button(diagnostics, diagnostic.face + " / " + (diagnostic.node.name ?? diagnostic.node.id) + ": " + diagnostic.message,
         () => navigateIssue({ path: diagnostic.node.id, ...diagnostic }));
+    const selectedLayer=()=>{
+      const project=getProject(),side=getSide();if(!project)return null;
+      const selected=getSelected();
+      function find(nodes,locked=false){for(const node of nodes){const inherited=locked||!!node.locked;if(node.id===selected)return {project,side,node,locked:inherited};const child=find(node.children??[],inherited);if(child)return child;}return null;}
+      return find(project.scenes.get(project.manifest.faces[side].scene).nodes);
+    };
+    mountedPanels.push(portablePanels.mount({root,getSelection:selectedLayer,edit,run,report}));
     for (const panel of panels) {
       const contribution = panel({
         project: p,
@@ -1221,6 +1235,7 @@ export function mountAuthoringTools({
     ready,
     render,
     refreshPolicy,
+    setEditorContributionEnabled:portablePanels.setEnabled,
     async validate() {
       await Promise.all(pending);
       return effective;
@@ -1229,6 +1244,7 @@ export function mountAuthoringTools({
       disposed = true;
       generation++;
       disposePanels();
+      portablePanels.dispose();
       root.remove();
     },
   };

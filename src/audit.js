@@ -50,6 +50,7 @@ export function auditState(s){
   auditRelationships(s,add);
   auditExternalPurchases(s,add);
   auditCodeIssuance(s,add);
+  auditBindingFactories(s,add);
   const intents=Object.entries(s.commandIntents??{}),heads=s.commandIntentHeads??{};
   if((s.commandIntentCount??0)!==intents.length)add('COMMAND_INTENT_COUNT','Retained command intent count differs');
   for(const [id,row]of intents){
@@ -386,4 +387,58 @@ function auditCodeIssuance(s,add){
   for(const [id,obligation] of Object.entries(s.completionObligations??{})){
     if(obligation?.kind==='code-issuance'&&(!reservedBatches.has(obligation.entityId)||id!=='code-issuance:'+obligation.entityId))add('CODE_ISSUANCE_OBLIGATION_ORPHAN',id);
   }
+}
+
+function auditBindingFactories(s,add){
+  const object=value=>Boolean(value&&typeof value==='object'&&!Array.isArray(value));
+  const section=name=>{const value=s[name];if(value===undefined)return {};if(!object(value)){add('BINDING_FACTORY_SECTION_INVALID',name);return {};}return value;};
+  const reservations=section('bindingFactoryReservations'),batches=section('bindingFactoryBatches'),rows=section('bindingFactoryInvocations'),drafts=section('bindingFactoryCopies'),quotas=section('bindingFactoryQuota');
+  const terminalBatches=new Set(['attached','active','cancelled','activation_failed']),states=new Set(['prepared','effect_pending','ready','deferred','attached','activation_pending','active','activation_failed','cancelled']);
+  const refs=new Map(),batchFor=new Map(),safe=(value,min=0,max=Number.MAX_SAFE_INTEGER)=>Number.isSafeInteger(value)&&value>=min&&value<=max;
+  // Diagnostics identify relationships only; custody and binding data are never inspected or echoed.
+  const detail='Binding factory lifecycle relationship differs';
+  let reserved=0;
+  for(const [id,row]of Object.entries(reservations)){
+    if(!object(row)||row.attemptId!==id||typeof row.batchId!=='string'||!safe(row.count,1,1000)||!safe(row.bytes,1)||!['reserved','released'].includes(row.state)||!object(row.userCustody)){add('BINDING_FACTORY_RESERVATION_INVALID',detail);continue;}
+    if(row.state==='reserved')reserved+=row.count;
+    const attempt=s.allocationAttempts?.[id],batch=batches[row.batchId],obligation=s.completionObligations?.['binding-factory:'+row.batchId];
+    if(!attempt||attempt.id!==id||!s.users[attempt.userId]||attempt.factorySnapshot?.maximum!==row.count||!safe(attempt.factorySnapshot?.activationMaximum,0,row.count))add('BINDING_FACTORY_ATTEMPT_INVALID',detail);
+    if(!object(obligation)||obligation.id!=='binding-factory:'+row.batchId||obligation.kind!=='binding-factory'||obligation.entityId!==row.batchId||obligation.bytes!==row.bytes||!safe(obligation.usedBytes,0,row.bytes)||!safe(obligation.events,0,row.count)||!safe(obligation.jobs,0,row.count)||obligation.status!==(row.state==='reserved'?'reserved':'completed'))add('BINDING_FACTORY_OBLIGATION_INVALID',detail);
+    if(batch&&(batch.attemptId!==id||batch.id!==row.batchId||terminalBatches.has(batch.state)!==(row.state==='released'))||!batch&&row.state==='released')add('BINDING_FACTORY_RELEASE_INVALID',detail);
+  }
+  const quota=quotas.global?.reserved??0;
+  if(!safe(reserved)||!safe(quota)||quota!==reserved||Object.hasOwn(quotas,'global')&&!object(quotas.global)||Object.keys(quotas).some(key=>key!=='global'))add('BINDING_FACTORY_QUOTA_INVALID',detail);
+  for(const [id,batch]of Object.entries(batches)){
+    const reservation=reservations[batch?.attemptId],attempt=s.allocationAttempts?.[batch?.attemptId];
+    if(!object(batch)||batch.id!==id||reservation?.batchId!==id||batch.userId!==attempt?.userId||!s.users[batch.userId]||!['pending','ready','attached','activation_pending','active','activation_failed','cancel_pending','cancelled','quarantined'].includes(batch.state)||!Array.isArray(batch.entries)||batch.entries.some(key=>typeof key!=='string')||batch.entries.length>(reservation?.count??0)||new Set(batch.entries).size!==batch.entries.length){add('BINDING_FACTORY_BATCH_INVALID',detail);continue;}
+    if(['attached','active','activation_pending','activation_failed'].includes(batch.state)&&attempt?.state!=='completed')add('BINDING_FACTORY_ATTEMPT_INVALID',detail);
+    for(const invocationId of batch.entries){refs.set(invocationId,(refs.get(invocationId)??0)+1);batchFor.set(invocationId,batch);if(!rows[invocationId]||rows[invocationId].attemptId!==batch.attemptId||rows[invocationId].userId!==batch.userId)add('BINDING_FACTORY_BATCH_ENTRY_INVALID',detail);}
+    const entries=batch.entries.map(key=>rows[key]);
+    const allowed=batch.state==='ready'?new Set(['ready','deferred']):batch.state==='attached'?new Set(['attached']):batch.state==='active'?new Set(['attached','active']):batch.state==='activation_failed'?new Set(['attached','active','activation_failed']):batch.state==='cancelled'?new Set(['cancelled']):null;
+    if(allowed&&(entries.some(row=>!row||!allowed.has(row.state))||batch.state==='activation_failed'&&!entries.some(row=>row?.state==='activation_failed')))add('BINDING_FACTORY_BATCH_STATE_INVALID',detail);
+  }
+  for(const [id,row]of Object.entries(rows)){
+    const batch=batchFor.get(id),draft=drafts[row?.copyId];
+    if(!object(row)||row.invocationId!==id||refs.get(id)!==1||!states.has(row.state)||!['pure','provision','activation'].includes(row.kind)||!safe(row.factoryRevision,1)||typeof row.factoryName!=='string'||typeof row.namespace!=='string'||!safe(row.packIndex,0,99)||!safe(row.slotOrdinal,0,99)||typeof row.slotId!=='string'||row.attemptId!==batch?.attemptId||row.userId!==batch?.userId){add('BINDING_FACTORY_INVOCATION_INVALID',detail);continue;}
+    if(!object(draft)||draft.copyId!==row.copyId||draft.attemptId!==row.attemptId||!object(draft.custody))add('BINDING_FACTORY_DRAFT_INVALID',detail);
+    const input=object(row.inputCustody),result=object(row.resultCustody),dispatched=['effect_pending','ready','attached','active'].includes(row.state);
+    if(row.inputCustody!=null&&!input||row.resultCustody!=null&&!result||(input||dispatched||result)&&(!input||typeof row.inputDigest!=='string'||!/^[a-f0-9]{64}(?![\s\S])/.test(row.inputDigest))||['ready','attached','active'].includes(row.state)&&!result)add('BINDING_FACTORY_CUSTODY_MISSING',detail);
+    const copy=s.copies[row.copyId],binding=copy?.bindings?.[row.namespace];
+    if(['attached','active','activation_pending','activation_failed'].includes(row.state)){
+      if(!copy||!binding||!s.users[binding.holderId]||(['attached','active'].includes(row.state)?!['active','used'].includes(binding.state)||!object(binding.data):row.state==='activation_pending'?binding.state!=='activation-pending'||binding.activationId!==id||copy.ownerId!==row.userId||binding.holderId!==row.userId||Object.hasOwn(binding,'data'):binding.state!=='activation-failed'||Object.hasOwn(binding,'data'))||row.state!=='activation_pending'&&Object.hasOwn(binding??{},'activationId'))add('BINDING_FACTORY_COPY_INVALID',detail);
+    }
+    if(row.state==='activation_pending'||row.state==='active'||row.state==='activation_failed'||row.jobId){
+      const job=s.actionJobs?.[row.jobId];
+      if(!job||job.id!==row.jobId||job.handler!=='framework.binding.activation'||job.userId!==row.userId||job.params?.batchId!==batch.id||job.params?.invocationId!==id||job.source?.type!=='binding.activation'||job.source.invocationId!==id||job.source.copyId!==row.copyId||job.source.namespace!==row.namespace||job.completionId!=='binding-factory:'+batch.id||(row.state==='active'?job.status!=='succeeded'||!Number.isFinite(Date.parse(job.completedAt)):row.state==='activation_failed'?job.status!=='dead'||!Number.isFinite(Date.parse(job.completedAt)):row.state==='activation_pending'?!['pending','running','dead'].includes(job.status):true))add('BINDING_FACTORY_ACTION_INVALID',detail);
+    }
+  }
+  for(const [id,draft]of Object.entries(drafts))if(!object(draft)||draft.copyId!==id||!object(draft.custody)||!reservations[draft.attemptId]||!batches[reservations[draft.attemptId]?.batchId])add('BINDING_FACTORY_DRAFT_ORPHAN',detail);
+  for(const copy of Object.values(s.copies))for(const binding of Object.values(copy.bindings??{}))if(binding.state==='activation-pending'){
+    const row=rows[binding.activationId];if(!row||row.state!=='activation_pending'||row.copyId!==copy.id||copy.bindings[row.namespace]!==binding)add('BINDING_FACTORY_PENDING_ORPHAN',detail);
+  }
+  for(const [id,job]of Object.entries(s.actionJobs??{}))if(job?.handler==='framework.binding.activation'){
+    const row=rows[job.params?.invocationId];if(!row||row.jobId!==id)add('BINDING_FACTORY_ACTION_ORPHAN',detail);
+  }
+  const reservedBatches=new Set(Object.values(reservations).filter(object).map(row=>row.batchId));
+  for(const [id,obligation]of Object.entries(s.completionObligations??{}))if(obligation?.kind==='binding-factory'&&(id!=='binding-factory:'+obligation.entityId||!reservedBatches.has(obligation.entityId)))add('BINDING_FACTORY_OBLIGATION_ORPHAN',detail);
 }

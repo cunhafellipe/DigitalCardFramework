@@ -123,7 +123,7 @@ export function renderTiltInspector(copy,{cardRenderer=renderCard,metadataRender
     for(const [name,value]of Object.entries(fields))list.append(element('dt','',name),element('dd','',value));
     for(const [name,value]of Object.entries({...copy.definition.metadata,...copy.variant.metadata,...copy.metadata}))
       list.append(element('dt','',name),element('dd','',typeof value==='object'?JSON.stringify(value):value));
-    for(const [name,b]of Object.entries(copy.bindings))list.append(element('dt','',name+' · '+b.state),element('dd','',JSON.stringify(b.data)));
+    for(const [name,b]of Object.entries(copy.bindings))list.append(element('dt','',name+' · '+b.state),element('dd','',b.state==='activation-pending'?'Reward activation pending. This reward cannot be used yet. Contact the operator to recover the original activation.':b.state==='activation-failed'?'Reward activation failed. This reward is unavailable. Contact the operator for help.':JSON.stringify(b.data)));
     details.append(list);
   }
   grid.append(card,details);node.append(grid);return node;
@@ -315,6 +315,8 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
       const purchase=element('div','dc-purchase-row'),quantity=field(purchase,'Packs','number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
       let pendingPurchase=commands.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id,reviewedQuote=null,quoteGeneration=0,allocationState=null,allocationBlocked=false;
       const allocationNote=element('p','dc-muted');allocationNote.setAttribute('role','status');
+      const activationNote=element('p','dc-binding-activation-note');activationNote.setAttribute('role','status');info.append(activationNote);
+      function showActivation(quote){activationNote.textContent=quote?.bindingActivation?'Up to '+quote.bindingActivation.maximum+' attached reward'+(quote.bindingActivation.maximum===1?'':'s')+' may require activation after purchase. Pack delivery does not confirm reward activation. These rewards cannot be used until activation is confirmed. If activation remains pending, contact the operator to recover the original activation.':'';}
       if(recover){quantity.value=String(pendingPurchase.quantity);quantity.disabled=true;}
       const buy=button('',async()=>{
         await action(async()=>{
@@ -322,18 +324,19 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
           try{
             const quote=recover?pendingPurchase:reviewedQuote??await client.quote({productId:product.id,quantity:requestedQuantity});fence();
             if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error('The pack quantity changed. Review the purchase again.');
-            if(ticketDeck&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);allocationNote.textContent='Review '+quote.quantity+' pack'+(quote.quantity===1?'':'s')+' for '+num(quote.price.amount)+' '+currencyName(quote.price.currencyId)+'. '+(deckVersion===3?'Availability depends on current imported-code supply. ':'')+'Buying uses this reviewed allocation quote.';return {review:true};}
+            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent='Review '+quote.quantity+' pack'+(quote.quantity===1?'':'s')+' for '+num(quote.price.amount)+' '+currencyName(quote.price.currencyId)+'. '+(deckVersion===3?'Availability depends on current imported-code supply. ':'')+'Buying uses this reviewed allocation quote.';return {review:true,activation:!!reviewedQuote.bindingActivation};}
             if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error('The pack price changed. Review the updated price before buying.');}
             const original=commands.pending('purchase');const receipt=await (!recover&&original?._confirmed?commands.beginNew('purchase',quote):recover?commands.recover('purchase',quote):commands('purchase',quote));fence();active='packs';if(ticketDeck)await refresh();return receipt;
           }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent='The allocation attempt needs review. Check its status before acknowledging it and requesting a fresh quote.';}}throw error;}
-        },{refreshAfter:!ticketDeck,message:r=>r.review?'Purchase quote ready. Review the pack quantity and price before buying.':'Purchased '+r.packs.length+' pack'+(r.packs.length===1?'':'s')+'. Choose Open pack to reveal your cards.'});
+        },{refreshAfter:!ticketDeck,message:r=>r.review?'Purchase quote ready. Review the pack quantity and price'+(r.activation?' and reward activation notice':'')+' before buying.':'Purchased '+r.packs.length+' pack'+(r.packs.length===1?'':'s')+'. Choose Open pack to reveal your cards.'+(r.bindingActivation?' '+r.bindingActivation.count+' attached reward'+(r.bindingActivation.count===1?' was':'s were')+' pending activation at delivery. Check current card details for activation status.':'')});
         if(!disposed&&!shopDisposed)update();
       });
       function update(){
         pendingPurchase=commands.pending('purchase');recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id;
         quantity.disabled=!!recover;
         const total=recover?pendingPurchase.price.amount:reviewedQuote?.price.amount??product.price.amount*Number(quantity.value),currency=recover?pendingPurchase.price.currencyId:reviewedQuote?.price.currencyId??product.price.currencyId,available=model.availability?.products.find(p=>p.id===product.id)?.available!==false;
-        buy.textContent=recover?'Retry original purchase · '+num(total)+' '+currencyName(currency):available?(ticketDeck?(reviewedQuote?'Buy reviewed packs · ':'Review purchase · '):'Buy · ')+num(total)+' '+currencyName(currency):'Currently unavailable';
+        buy.textContent=recover?'Retry original purchase · '+num(total)+' '+currencyName(currency):available?(ticketDeck||reviewedQuote?(reviewedQuote?'Buy reviewed packs · ':'Review purchase · '):'Buy · ')+num(total)+' '+currencyName(currency):'Currently unavailable';
+        showActivation(recover?pendingPurchase:reviewedQuote);
         buy.disabled=!recover&&(!available||allocationBlocked||!!pendingPurchase&&!pendingPurchase._confirmed||!Number.isInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>product.maxQuantity||total>(model.wallet[currency]??0));
       }
       quantity.addEventListener('input',()=>{quoteGeneration++;reviewedQuote=null;allocationNote.textContent='';update();});update();purchase.append(buy);info.append(purchase);

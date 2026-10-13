@@ -3,13 +3,19 @@ import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
 import {randomUUID} from 'node:crypto';
 import {fixture} from './helpers.js';
-import {renderCard,renderAlbum,renderInspector,mountFramework,mountOpener,renderPack} from '../src/ui.js';
+import {renderCard,renderAlbum,renderInspector,renderTiltInspector,mountFramework,mountOpener,renderPack} from '../src/ui.js';
 import {renderTrading} from '../src/trading-ui.js';
 import {renderAlbums,renderCollection} from '../src/collection-ui.js';
 import {renderStudio} from '../src/studio-ui.js';
 import {createCommandRunner,createRevealController} from '../src/client.js';
 
 const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setImmediate(r));};
+
+test('both card inspectors explain pending and failed activation without displaying unusable data',()=>{
+  const x=setup();try{const original=x.core.inventory(x.alice)[0],copy={...original,bindings:{pending:{state:'activation-pending',data:{secret:'UNUSABLE-PENDING'}},failed:{state:'activation-failed',data:{secret:'UNUSABLE-FAILED'}},active:{state:'active',data:{reward:'Available reward'}},used:{state:'used',data:{reward:'Used reward'}}}};
+    for(const render of [renderInspector,renderTiltInspector]){const node=render(copy);assert.match(node.textContent,/Reward activation pending/);assert.match(node.textContent,/cannot be used yet/);assert.match(node.textContent,/recover the original activation/);assert.match(node.textContent,/Reward activation failed/);assert.match(node.textContent,/This reward is unavailable/);assert(!node.textContent.includes('UNUSABLE-'));assert(node.textContent.includes('Available reward'));assert(node.textContent.includes('Used reward'));}
+  }finally{x.close();}
+});
 
 test('pack artwork instances retain independent sides, fallback and terminal disposal',()=>{
   const x=setup();

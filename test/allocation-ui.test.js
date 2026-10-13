@@ -23,6 +23,20 @@ function setup({tickets=true,version=1}={}){
   return {window,root,client,calls,product,catalog,async mount(){mounted=mountFramework(root,{client,sections:['shop']});await mounted.ready;return mounted;},setPrincipal(value){principal=value;},setDigest(value){digest=value;},setAllocation(value){allocationState=value;},close(){mounted?.dispose();x.core.close();window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}};
 }
 
+test('deferred activation is disclosed from the reviewed quote before payment and preserved on original retry',async()=>{
+  const x=setup({version:3});try{
+    const original=x.client.quote;let activation={maximum:2};x.client.quote=async input=>({...await original(input),bindingActivation:activation});let fail=true;
+    x.client.purchase=async input=>{x.calls.purchases.push(input);if(fail)throw new Error('Response interrupted');return {packs:[{id:'pack'}],bindingActivation:{state:'pending',count:1}};};
+    await x.mount();click(x.root,'Review purchase');await settle();assert.equal(x.calls.purchases.length,0);assert.match(x.root.textContent,/Up to 2 attached rewards may require activation after purchase/);assert.match(x.root.textContent,/Pack delivery does not confirm reward activation/);assert.match(x.root.textContent,/cannot be used until activation is confirmed/);
+    activation.maximum=99;click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases[0].bindingActivation.maximum,2);assert.match(x.root.textContent,/Up to 2 attached rewards/);assert(find(x.root,'Retry original purchase'));
+    fail=false;click(x.root,'Retry original purchase');await settle();assert.equal(x.calls.quotes.length,1);assert.deepEqual(x.calls.purchases[1],x.calls.purchases[0]);assert.match(x.root.textContent,/1 attached reward was pending activation at delivery/);assert.match(x.root.textContent,/Check current card details for activation status/);
+  }finally{x.close();}
+});
+
+test('quantity changes discard deferred activation disclosure with its reviewed quote',async()=>{
+  const x=setup({version:3});try{const original=x.client.quote;let disclosed=true;x.client.quote=async input=>({...await original(input),...(disclosed?{bindingActivation:{maximum:2}}:{})});await x.mount();click(x.root,'Review purchase');await settle();assert.match(x.root.textContent,/Up to 2 attached rewards/);const quantity=x.root.querySelector('.dc-purchase-row input');quantity.value='2';quantity.dispatchEvent(new x.window.Event('input'));assert(!x.root.textContent.includes('Up to 2 attached rewards'));disclosed=false;click(x.root,'Review purchase');await settle();assert(!x.root.textContent.includes('activation after purchase'));assert.equal(x.calls.purchases.length,0);}finally{x.close();}
+});
+
 for(const version of [1,2,3])test('ticket packs v'+version+' explain changing batch draws and preserve the whole reviewed quote',async()=>{
   const x=setup({version});try{await x.mount();const rates=x.root.querySelector('.dc-rates');assert.match(rates.textContent,/configured tickets/);assert.match(rates.textContent,/without replacement/);assert.match(rates.textContent,/chances change between draws/);assert.match(rates.textContent,/Finite remaining supply can reduce/);assert.match(rates.textContent,/quote checks the current eligible supply/);assert(!rates.textContent.includes('%'));assert(!rates.textContent.includes('duplicate protection'));
     click(x.root,'Review purchase');await settle();assert.equal(x.calls.quotes.length,1);assert.equal(x.calls.purchases.length,0);assert.match(x.root.textContent,/Review 1 pack/);click(x.root,'Buy reviewed packs');await settle();assert.equal(x.calls.purchases.length,1);assert.equal(x.calls.purchases[0].allocationDigest,'a'.repeat(64));assert.equal(x.calls.purchases[0].key,'purchase-1');assert.equal(x.calls.purchases[0].productRevision,x.product.revision);assert.equal(x.calls.purchases[0].catalogVersion,x.catalog.version);

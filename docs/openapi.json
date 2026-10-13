@@ -10990,6 +10990,231 @@
           }
         }
       }
+    },
+    "/operator/binding-factories/status": {
+      "get": {
+        "operationId": "bindingFactoryStatus",
+        "description": "Requires bindings.manage. Read-only factory progress without private inputs or results.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batchId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingFactoryStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operator/binding-factories/recover": {
+      "post": {
+        "operationId": "recoverBindingFactories",
+        "description": "Requires bindings.manage. Look up or cancel precommit provisioning; recover committed activation under its original identity.",
+        "security": [
+          {
+            "hostSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-DC-Principal",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required by the production host; must match the verified session principal."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingFactoryCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingFactoryStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bounded input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Verified account required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, authority or feature rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Catalog, version, review, account or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Byte limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11068,6 +11293,20 @@
           },
           "price": {
             "$ref": "#/components/schemas/Money"
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maximum"
+            ],
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         },
         "additionalProperties": false
@@ -11482,6 +11721,20 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maximum"
+            ],
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         },
         "additionalProperties": false
@@ -11675,6 +11928,10 @@
               null,
               "ALLOCATION_STALE"
             ]
+          },
+          "bindingFactoryBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
           }
         }
       },
@@ -13472,6 +13729,20 @@
           "allocationDigest": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maximum"
+            ],
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         }
       },
@@ -13545,6 +13816,10 @@
                 "type": "null"
               }
             ]
+          },
+          "bindingFactoryBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
           }
         }
       },
@@ -15759,6 +16034,20 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "maximum"
+            ]
+          },
           "productId": {
             "type": "string",
             "minLength": 1,
@@ -16468,6 +16757,24 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "pending"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "state",
+              "count"
+            ]
+          },
           "id": {
             "type": "string",
             "minLength": 1,
@@ -16597,6 +16904,10 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "bindingFactoryBatchId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
           "codeIssuanceBatchId": {
             "type": "string",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -17393,6 +17704,24 @@
           },
           "paid": {
             "$ref": "#/components/schemas/Money"
+          },
+          "bindingActivation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "count"
+            ],
+            "properties": {
+              "state": {
+                "const": "pending"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
           }
         }
       },
@@ -17552,8 +17881,7 @@
           "visibility",
           "transfer",
           "holderId",
-          "state",
-          "data"
+          "state"
         ],
         "properties": {
           "visibility": {
@@ -17576,7 +17904,9 @@
           "state": {
             "enum": [
               "active",
-              "used"
+              "used",
+              "activation-pending",
+              "activation-failed"
             ]
           },
           "data": {
@@ -17587,7 +17917,42 @@
             "format": "date-time"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "active",
+                    "used"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "data"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "data"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "usedAt"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       "InventoryCopy": {
         "allOf": [
@@ -18432,6 +18797,20 @@
                   },
                   "price": {
                     "$ref": "#/components/schemas/Money"
+                  },
+                  "bindingActivation": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "maximum"
+                    ],
+                    "properties": {
+                      "maximum": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000
+                      }
+                    }
                   }
                 },
                 "additionalProperties": false
@@ -21435,6 +21814,111 @@
                 "maximum": 1000
               },
               "cancelled": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            }
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[A-Z][A-Z0-9_]*(?![\\s\\S])"
+              }
+            ]
+          }
+        }
+      },
+      "BindingFactoryCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+          }
+        }
+      },
+      "BindingFactoryStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "batchId",
+          "state",
+          "counts",
+          "errorCode"
+        ],
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}(?![\\s\\S])"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "ready",
+              "attached",
+              "cancel_pending",
+              "cancelled",
+              "quarantined",
+              "activation_pending",
+              "activation_failed",
+              "active"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total",
+              "pending",
+              "ready",
+              "attached",
+              "cancelled",
+              "activationPending",
+              "activationFailed"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "ready": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "attached": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "activationPending": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "activationFailed": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 1000

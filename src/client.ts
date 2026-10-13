@@ -4,7 +4,7 @@ import {WireContractError,validateWireResponse} from './wire-contracts.js';
 import type {Operations,Schemas} from './wire-types.js';
 
 type QueryOperation='adminUsers'|'adminHistory'|'shops'|'listings'|'orders'|'fulfillments'|'actionJobs'|'directory'|'notifications'|'codeHistory'|'codeInventory';
-type DirectOperation='recoverCodeIssuance'|'quote'|'purchase'|'openPack'|'convert'|'tradeUp'|'saveAlbum'|'albums'|'proposeTrade'|'trades'|'acceptTrade'|'cancelTrade'|'consumeBinding'|'catalog'|'me'|'wallet'|'history'|'packs'|'publicAlbums'|'bindings'|'availability'|'readNotifications'|'counterTrade'|'operatorCatalog'|'previewImport'|'commitImport'|'reconcileCurrency'|'revealCode'|'reportCodeUsage'|'reconcileCode'|'codePools'|'configureCodePool'|'importCodes'|'confirmCodeStatus'|'tradingPolicy'|'configureTrading'|'setCardTransferLock'|'commerceSettings'|'configureCommerce'|'createShop'|'setShopEnabled'|'createListing'|'quoteListing'|'buyListing'|'cancelListing'|'enterRaffle'|'raffleStatus'|'drawRaffle'|'openCard'|'retryAction'|'cardPolicies'|'effectiveCardPolicy'|'saveCardPolicy'|'previewCardPolicy'|'activateCardPolicy'|'retireCardPolicy'|'restoreCardPolicy'|'saveCardResource'|'retireCardResource'|'restoreCardResource'|'updateCopyStats'|'adminOverview'|'configureAdmin'|'administerCards'|'registerCommandIntent'|'executeCommandIntent'|'acknowledgeCommandIntent';
+type DirectOperation='recoverBindingFactories'|'recoverCodeIssuance'|'quote'|'purchase'|'openPack'|'convert'|'tradeUp'|'saveAlbum'|'albums'|'proposeTrade'|'trades'|'acceptTrade'|'cancelTrade'|'consumeBinding'|'catalog'|'me'|'wallet'|'history'|'packs'|'publicAlbums'|'bindings'|'availability'|'readNotifications'|'counterTrade'|'operatorCatalog'|'previewImport'|'commitImport'|'reconcileCurrency'|'revealCode'|'reportCodeUsage'|'reconcileCode'|'codePools'|'configureCodePool'|'importCodes'|'confirmCodeStatus'|'tradingPolicy'|'configureTrading'|'setCardTransferLock'|'commerceSettings'|'configureCommerce'|'createShop'|'setShopEnabled'|'createListing'|'quoteListing'|'buyListing'|'cancelListing'|'enterRaffle'|'raffleStatus'|'drawRaffle'|'openCard'|'retryAction'|'cardPolicies'|'effectiveCardPolicy'|'saveCardPolicy'|'previewCardPolicy'|'activateCardPolicy'|'retireCardPolicy'|'restoreCardPolicy'|'saveCardResource'|'retireCardResource'|'restoreCardResource'|'updateCopyStats'|'adminOverview'|'configureAdmin'|'administerCards'|'registerCommandIntent'|'executeCommandIntent'|'acknowledgeCommandIntent';
 type DirectMethods={
   [K in DirectOperation]: Operations[K]['request'] extends undefined
     ? ()=>Promise<Operations[K]['response']>
@@ -16,6 +16,7 @@ export interface QueryOptions {
   [key:string]:string|number|boolean|null|undefined;
 }
 export interface Client extends DirectMethods,QueryMethods {
+  bindingFactoryStatus(options:{batchId:string}):Promise<Operations['bindingFactoryStatus']['response']>;
   codeIssuanceStatus(options:{batchId:string}):Promise<Operations['codeIssuanceStatus']['response']>;
   quoteMintPackStock(input:Operations['quoteMintPackStock']['request']):Promise<Operations['quoteMintPackStock']['response']>;
   stockAllocationStatus(options:{shopId:string;productId:string}):Promise<Operations['stockAllocationStatus']['response']>;
@@ -81,6 +82,7 @@ export function createClient({baseUrl='/api',fetch:request=globalThis.fetch}:{ba
     try{return await wire(id,input,options);}catch(error){if(error instanceof WireApiError)throw new ApiError(error.code,error.message,error.status);if(error instanceof WireContractError&&error.phase==='request')throw new ApiError('INVALID_INPUT',error.message,400);throw error;}
   }
   return {
+    bindingFactoryStatus:options=>call('bindingFactoryStatus',undefined,{query:options}),recoverBindingFactories:input=>call('recoverBindingFactories',input),
     codeIssuanceStatus:options=>call('codeIssuanceStatus',undefined,{query:options}),recoverCodeIssuance:input=>call('recoverCodeIssuance',input),
     capabilities:()=>call('capabilities',undefined),commandIntents:options=>call('commandIntents',undefined,{query:options}),
     registerCommandIntent:input=>call('registerCommandIntent',input),executeCommandIntent:input=>call('executeCommandIntent',input),acknowledgeCommandIntent:input=>call('acknowledgeCommandIntent',input),

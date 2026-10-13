@@ -456,7 +456,7 @@ export class CommerceService {
     check(config(s).enabled&&shop.enabled,'SHOP_DISABLED','Listing creation is disabled',409);assertAdminShop(s,shop);this.#b.workflow(s,'packs',false);
     const product=effectiveProduct(s,find(s.catalog.products,productId));check(product?.enabled!==false&&product?.allocationStrategy,'ALLOCATION_UNSUPPORTED','Declared stock allocation strategy required',409);
     integer(quantity,'stock quantity',1,config(s).maxStockPerListing);check(quantity*(product.slots.reduce((n,slot)=>n+slot.count,0)*12+3)<2800,'ALLOCATION_LIMIT','Stock allocation requires a bounded listing transaction',502);
-    return {shop,product,allocationDigest:contentDigest({shop,product,quantity,catalogVersion:s.catalog.version,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0})};
+    const factoryTerms=this.#b.bindingFactoryTerms?.(product,s.catalog)??[];return {shop,product,allocationDigest:contentDigest({shop,product,quantity,...(factoryTerms.length?{factoryTerms}:{}),catalogVersion:s.catalog.version,adminRevision:adminRevision(s),commerceRevision:s.commerceSettings?.revision??0,cardPolicyRevision:s.cardAuthoring?.revision??0})};
   }
   prepareStockAllocation(s,actor,input,row){
     const reviewed=this.#reviewListing({...input,startsAt:row?.preparation.reviewed.startsAt??input.startsAt??this.#b.now()});reviewed.inputStartsAt=input.startsAt;
@@ -470,7 +470,7 @@ export class CommerceService {
   }
   assertStockListingPolicy(row,proposal,signal){if(proposal)this.#listingProposals.assert(proposal,row.preparation.policy.snapshotDigest,{signal});}
   admitStockListingPolicy(row,proposal,signal){return proposal?this.#listingProposals.admit(proposal,row.preparation.policy.snapshotDigest,{signal}):null;}
-  commitStockAllocation(actor,row,plan,{auxiliary,signal,codeAssignments,generated},tx){return this.#createListing(actor,{...row.preparation.reviewed,key:row.key},null,signal,null,{tx,plan,attemptId:row.id,policyAdmission:auxiliary,codeSnapshot:row.codeSnapshot,codeAssignments,generated});}
+  commitStockAllocation(actor,row,plan,{auxiliary,signal,codeAssignments,generated,factory},tx){return this.#createListing(actor,{...row.preparation.reviewed,key:row.key},null,signal,null,{tx,plan,attemptId:row.id,policyAdmission:auxiliary,codeSnapshot:row.codeSnapshot,codeAssignments,generated,factory});}
   async createListingAsync(actor,input,{signal}={}){
     if(!this.#remoteListingPolicy&&!this.#transfers.configured('canTransfer')){try{return this.createListing(actor,input);}catch(error){if(error.code!=='ALLOCATION_ASYNC_REQUIRED'||input?.items?.kind!=='mint-pack')throw error;const principal=clone(actor),reviewed=this.#reviewListing(clone(input));return this.#b.allocateListingStock(principal,reviewed.key,this.#creationCommandInput(reviewed),{signal});}}
     const principal=clone(actor),reviewed=this.#reviewListing(clone(input)),commandInput=this.#creationCommandInput(reviewed);
@@ -525,7 +525,7 @@ export class CommerceService {
         );
         if(items.kind==='mint-pack')check(!effectiveProduct(s,find(s.catalog.products,items.productId))?.allocationStrategy||allocation,'ALLOCATION_ASYNC_REQUIRED','Use asynchronous stock allocation',503);
         const listing = {
-          id: randomUUID(),
+          id: allocation?.factory?.selection.listingId??randomUUID(),
           shopId,
           sellerId: shop.ownerId,
           title,

@@ -21,6 +21,7 @@ export const PERMISSIONS = Object.freeze([
   "commerce.manage",
   "raffles.draw",
   "codes.manage",
+  "bindings.manage",
   "codes.import",
   "codes.confirm",
   "art.import",

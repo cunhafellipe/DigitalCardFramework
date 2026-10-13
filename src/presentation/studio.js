@@ -27,7 +27,7 @@ export function mountStudio(
     onPublish,
     performance = {},
     presets = materialPresets,
-    library, policyProvider, context = {}, panels = [],
+    library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants,
   } = {},
 ) {
   presets = { ...presets };
@@ -1038,7 +1038,7 @@ export function mountStudio(
     if (!destination) return;
     side = destination;
     selected = id;
-  },rebuild,open,report,schedule,library,policyProvider,context,panels});
+  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants});
   root.append(authoring.root);
   const ready = initialPackage
     ? open(initialPackage)
@@ -1049,6 +1049,7 @@ export function mountStudio(
     capturePosters,
     open,
     refreshPolicy: authoring.refreshPolicy,
+    setEditorContributionEnabled:authoring.setEditorContributionEnabled,
     dispose() {
       disposed = true;
       root.removeAttribute("aria-busy");

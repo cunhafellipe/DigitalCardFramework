@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added host-installed declarative Studio panels for selected-layer position and rotation, with bounded field grants and Python/Go manifest examples.
+
+- Added versioned allocation binding factories for deterministic data, cancellable provisioning and post-purchase activation, with scoped user inputs, encrypted recovery records and a durable Node provider example. Quotes disclose deferred activation; pending rewards remain unusable until confirmed. Operators can inspect and reconcile factory work with the separate `bindings.manage` permission.
+
 - Added generated-code issuance for versioned allocation, with durable per-occurrence identities, encrypted result custody, bounded operator recovery, and a restart-safe Node issuer example.
 
 - Added versioned imported-code allocation with shared pool eligibility, private code selection, and reviewed purchase and stock flows.

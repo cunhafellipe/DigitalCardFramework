@@ -21,7 +21,7 @@ export function render3DInspector(copy,{cardRenderer,metadataRenderer,backRender
     const metadata={...copy.definition.metadata,...copy.variant.metadata,...copy.metadata};for(const [key,value]of Object.entries({...fields,...metadata})){const label=Object.hasOwn(metadata,key)?catalog?.displayFields?.find(f=>f.path==='metadata.'+key)?.label??key:key;list.append(el('dt','',label),el('dd','',typeof value==='object'?JSON.stringify(value):value));}
     if(copy.provenance){const origin=el('details'),body=el('pre','',JSON.stringify(copy.provenance,null,2));body.style.whiteSpace='pre-wrap';origin.append(el('summary','','Card provenance'),body);details.append(origin);}
     if(copy.codes?.length)details.append(el('p','dc-muted',copy.codes.length+' attached code entitlement(s). Use private Code history to reveal or review them.'));
-    for(const [key,b]of Object.entries(copy.bindings??{}))list.append(el('dt','',key+' · '+b.state),el('dd','',JSON.stringify(b.data)));details.append(list);
+    for(const [key,b]of Object.entries(copy.bindings??{}))list.append(el('dt','',key+' · '+b.state),el('dd','',b.state==='activation-pending'?'Reward activation pending. This reward cannot be used yet. Contact the operator to recover the original activation.':b.state==='activation-failed'?'Reward activation failed. This reward is unavailable. Contact the operator for help.':JSON.stringify(b.data)));details.append(list);
   }
   if(onClose)details.prepend(button('Close inspection',onClose,'dc-quiet dc-close'));grid.append(stage,details);node.append(grid);return node;
 }

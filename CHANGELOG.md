@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added portable localization bundles for the collector wallet, pack purchase and opening workflow, with per-instance locales, English fallback, plural and number formatting, and Python/Go Spanish bundle examples.
+
 - Added host-installed declarative Studio panels for selected-layer position and rotation, with bounded field grants and Python/Go manifest examples.
 
 - Added versioned allocation binding factories for deterministic data, cancellable provisioning and post-purchase activation, with scoped user inputs, encrypted recovery records and a durable Node provider example. Quotes disclose deferred activation; pending rewards remain unusable until confirmed. Operators can inspect and reconcile factory work with the separate `bindings.manage` permission.

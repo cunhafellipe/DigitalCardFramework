@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createLocalization,validateLocalizationBundle,localizationProtocol,localizationSchema,localizationKeys,englishMessages} from '../src/localization.js';
+
+const bundle=(messages={},locale='fr')=>({protocol:localizationProtocol,locale,messages});
+const invalid=input=>assert.throws(()=>validateLocalizationBundle(input),{name:'TypeError',message:'Invalid localization bundle'});
+
+test('portable locale data is canonical, detached and deeply frozen',()=>{
+  const input=bundle({'shop.purchased':{one:'{count} paquet acheté.',other:'{count} paquets achetés.'}},'fr-ca'),validated=validateLocalizationBundle(JSON.parse(JSON.stringify(input)));
+  input.messages['shop.purchased'].one='Changed';
+  assert.equal(validated.locale,'fr-CA');assert.equal(validated.messages['shop.purchased'].one,'{count} paquet acheté.');
+  assert(Object.isFrozen(validated)&&Object.isFrozen(validated.messages)&&Object.isFrozen(validated.messages['shop.purchased']));
+  assert(Object.isFrozen(englishMessages)&&Object.isFrozen(localizationKeys));
+  assert.equal(Object.keys(localizationSchema.keys).length,Object.keys(englishMessages).length);
+});
+
+test('requested plurals and English fallback use their own language rules',()=>{
+  const ar=createLocalization({locale:'ar',messages:{'shop.purchased':{zero:'لا حزم ({count})',one:'حزمة واحدة ({count})',two:'حزمتان ({count})',few:'حزم قليلة ({count})',many:'حزم كثيرة ({count})',other:'حزم ({count})'}}});
+  assert.equal(ar.text('shop.purchased',{count:2}),'حزمتان ('+ar.number(2)+')');
+  assert.equal(ar.text('shop.cardsPerPack',{count:2}),ar.number(2)+' cards per pack');
+  const fr=createLocalization({locale:'fr'});assert.equal(fr.text('shop.cardsPerPack',{count:0}),'0 cards per pack');
+  assert.equal(fr.text('shop.cardsPerPack',{count:1}),'1 card per pack');
+  assert.equal(fr.text('shop.cardsPerPack',{count:1.0001}),'1,0001 cards per pack');
+  const en=createLocalization();assert.equal(en.text('shop.cardsPerPack',{count:1.0001}),'1.0001 cards per pack');
+});
+
+test('named interpolation supports reordered fields and safe literal text',()=>{
+  const locale=createLocalization({locale:'de',messages:{'shop.buy':'{currency}: {amount} kaufen < 10 > 1','recovery.action':'{change} wiederherstellen'}});
+  assert.equal(locale.text('shop.buy',{currency:'<img src=x>',amount:1234.56789}),'<img src=x>: 1.234,56789 kaufen < 10 > 1');
+  assert.equal(locale.text('recovery.action',{change:'Original'}),'Original wiederherstellen');
+  assert.throws(()=>locale.text('shop.buy',{amount:1}));assert.throws(()=>locale.text('not-a-key'));
+  assert.throws(()=>locale.text('shop.purchased',{count:'2'}));assert.throws(()=>locale.number(Infinity));
+});
+
+test('financial formatting keeps small fractions and dates use explicit UTC options',()=>{
+  const locale=createLocalization({locale:'de-DE'});
+  assert.equal(locale.number(0.000123456789),'0,000123456789');assert.equal(locale.number(1234567.125),'1.234.567,125');
+  assert.equal(locale.date('2026-10-12T01:02:03-07:00'),new Intl.DateTimeFormat('de-DE',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'UTC'}).format(new Date('2026-10-12T08:02:03Z')));
+  assert.throws(()=>locale.date('not-a-date'));
+  assert.equal(locale.date(new Date('2026-10-12T08:02:03Z')),locale.date('2026-10-12T08:02:03Z'));
+  let coerced=0;assert.throws(()=>locale.date({[Symbol.toPrimitive](){coerced++;return 0;}}));assert.equal(coerced,0);
+});
+
+test('validation rejects unknown keys, malformed templates and invalid plural data',()=>{
+  for(const messages of [{'unknown':'Text'},{'shop.buy':'Buy {amount}'},{'shop.buy':'Buy {amount} {currency} {secret}'},{'shop.buy':'Buy {amount} {currency} {'},{'shop.buy':'\ud800 {amount} {currency}'},{'shop.buy':{other:'{amount} {currency}'}},{'shop.purchased':'{count} packs'},{'shop.purchased':{one:'{count} pack'}},{'shop.purchased':{other:'{count}',invalid:'{count}'}},{'shop.purchased':{other:'Missing count'}}])invalid(bundle(messages));
+  invalid({...bundle(),protocol:'other'});invalid({...bundle(),extra:true});invalid(bundle({},'bad_locale'));
+});
+
+test('validation rejects accessors, custom prototypes and executable values without calling them',()=>{
+  let calls=0;const messages={};Object.defineProperty(messages,'shop.title',{enumerable:true,get(){calls++;return 'Unsafe';}});invalid(bundle(messages));assert.equal(calls,0);
+  const options={};Object.defineProperty(options,'locale',{enumerable:true,get(){calls++;return 'fr';}});assert.throws(()=>createLocalization(options));assert.equal(calls,0);
+  invalid(bundle(Object.assign(Object.create({}),{'shop.title':'Text'})));
+  invalid(bundle({'shop.title':()=> 'Text'}));invalid(bundle({'shop.title':['Text']}));
+  invalid(bundle(JSON.parse('{"__proto__":"unsafe"}')));
+});
+
+test('per-form and total UTF-8 limits apply to portable bundles',()=>{
+  invalid(bundle({'shop.title':'x'.repeat(2049)}));
+  const messages={};for(const [key,metadata]of Object.entries(localizationKeys)){const text='é'.repeat(900)+metadata.placeholders.map(name=>'{'+name+'}').join(' ');messages[key]=metadata.plural?{other:text}:text;}
+  invalid(bundle(messages));
+});
+
+test('independent instances retain their locale and validated message snapshot',()=>{
+  const messages={'packs.open':'Ouvrir le paquet'},fr=createLocalization({locale:'fr',messages}),en=createLocalization();messages['packs.open']='Changed';
+  assert.equal(fr.text('packs.open'),'Ouvrir le paquet');assert.equal(en.text('packs.open'),'Open pack');assert.equal(fr.number(1234.5),'1 234,5');assert.equal(en.number(1234.5),'1,234.5');
+  assert.equal(createLocalization({locale:'ar'}).dir,'rtl');assert.equal(en.dir,'ltr');
+});

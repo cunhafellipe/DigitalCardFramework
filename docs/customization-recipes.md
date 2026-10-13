@@ -6,7 +6,7 @@ The reference UI uses the same exports as adopters. examples/alternate.js demons
 
 mountFramework(root,{theme,css,...}) installs scoped defaults. Supported tokens: --dc-bg, --dc-panel, --dc-text, --dc-muted, --dc-accent, --dc-border, --dc-radius, --dc-card-ratio, --dc-font. css is trusted host CSS, applied after defaults. Host selectors should stay within the supplied root's class. No global body reset or key handler is installed.
 
-Catalog card names, line names, rarity names, product names and currency names supply default display labels. To replace navigation/control labels and markup, replace the relevant view or compose your own client/controller UI. The current default controls use English; a translation registry is future work.
+Catalog card names, line names, rarity names, product names and currency names supply default display labels. To replace navigation/control labels and markup, replace the relevant view or compose your own client/controller UI. The collector wallet, pack purchase and opening workflow accepts portable localization bundles as described below. Other default surfaces currently use English.
 
 Default precedence is default CSS < host theme/CSS < explicit card/variant asset references. Variant back overrides definition back, which overrides the CSS back. A supplied backRenderer replaces asset/default back markup. There is no automatic deep merge of arrays: sections explicitly replaces the default order.
 
@@ -200,3 +200,28 @@ This is the standard host registration; the generated manifest supplies the cont
 The [panel schema](editor-contribution.schema.json) describes the manifest structure; the runtime validator also enforces unique control identifiers and fields, ordered ranges and the encoded-size limit. Each manifest declares `protocol: 'digital-card-editor-contribution@1'`, an `id`, semantic `version`, `title`, and up to eight numeric `controls`. Each control has an `id`, `label`, `field`, `minimum`, `maximum` and positive `step`. Supported fields are `x`, `y` and `rotation`; arbitrary property paths, scripts, styles and asset URLs are not supported. A manifest is limited to 16 KiB, with at most sixteen panels per Studio instance.
 
 Host grants narrow the requested ranges. An explicit grants map enables only its listed fields; omitting the map allows x/y from -1,000,000 to 1,000,000 and rotation from -360 to 360. Existing layer locks and project policy still apply. Labels render as text, and contributions receive no live project object or credentials. Existing JavaScript `panels` callbacks remain a separate trusted host extension mechanism.
+
+## Localize the collector purchase and opening workflow
+
+Generate a Spanish bundle with either `python examples/plugins/python-localization.py > collector-es.json` or `go run examples/plugins/go-localization/main.go > collector-es.json`. Each program emits the same data-only contract. Load that JSON as host configuration and validate it before mounting:
+
+```js
+import { validateLocalizationBundle } from '@digital-card/framework/localization';
+import { mountFramework } from '@digital-card/framework/ui';
+import spanish from './collector-es.json';
+
+const bundle = validateLocalizationBundle(spanish);
+const view = mountFramework(root, {
+  client,
+  locale: bundle.locale,
+  messages: bundle.messages,
+});
+```
+
+The host uses its normal JSON loading or bundling mechanism. Locale and messages belong to that mounted instance; different collectors on the same page can use different locales. `renderPack` and `mountOpener` also accept `locale` and `messages` when used independently. Existing explicit `viewLabels` overrides take precedence over translated navigation labels. Custom framework views receive `localization` in their context; pack/card renderer options and the opener view’s third argument also expose the instance formatter. Use it for contributed controls without changing another instance’s locale.
+
+Covered controls include wallet balances and conversion, pack browsing and allocation explanations, quote review, payment and deferred-activation notices, purchase recovery, pack lists, opening and reveal actions, and related status/accessibility text. Catalog names, artwork descriptions and server-provided error messages remain authored content. Collection, album, trade, marketplace, inspector, administration and Studio interfaces are not covered by this bundle.
+
+A bundle contains `protocol: 'digital-card-localization@1'`, a locale, and a `messages` object. Use the keys and placeholders in the [contract reference](localization.contract.json). Plain messages contain named placeholders such as `{amount}`; plural messages contain an `other` form and optional `zero`, `one`, `two`, `few` and `many` forms. Preserve each key's exact placeholder names. Missing keys use built-in English; English fallback selects English plural forms while displaying numbers in the requested locale. A translated plural key uses that locale's plural rules and falls back to its own `other` form.
+
+Bundles are limited to 32 KiB of encoded JSON, 256 known keys and 2,048 characters per message form. Validation rejects unknown keys, malformed placeholders and executable values. Translated text is inserted as text, never HTML. Numeric values use locale-aware formatting; timestamps use UTC. Translation does not change stored amounts, purchase commands or permissions.

@@ -119,7 +119,8 @@
     "./remote-code-issuer": "./src/remote-code-issuer.js",
     "./binding-factory-contracts": "./src/binding-factory-contracts.js",
     "./remote-binding-factory": "./src/remote-binding-factory.js",
-    "./presentation/editor-contributions": "./src/presentation/editor-contributions.js"
+    "./presentation/editor-contributions": "./src/presentation/editor-contributions.js",
+    "./localization": "./src/localization.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

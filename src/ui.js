@@ -2,6 +2,7 @@ import {createCardRenderer} from './presentation/card-view.js';
 const portableRenderers=new Map();
 import {createRevealController,createCommandRunner} from './client.js';
 import {defaultCSS} from './styles.js';
+import {createLocalization} from './localization.js';
 import {albumAppearance,applyAlbumAppearance,albumArtwork,validateAlbumPageSize} from './album-appearance.js';
 export {albumAppearance,validateAlbumAppearance} from './album-appearance.js';
 import {render3DInspector,renderComparison} from './inspector-ui.js';
@@ -24,13 +25,15 @@ function assetURL(src) {
   if(typeof src!=='string'||!src)return null;
   try {const u=new URL(src,document.baseURI); return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null;} catch {return null;}
 }
-export function renderPack(product,{small=false,lineName=product.lineId,previewCards=[],side='front'}={}) {
-  const node=element('div','dc-pack-art'+(small?' dc-pack-art-small':'')),fallback=element('div'),image=element('img'),toggle=button('Show pack back',()=>setSide(side==='front'?'back':'front')),
+export function renderPack(product,{small=false,lineName=product.lineId,previewCards=[],side='front',locale='en',messages={},localization=createLocalization({locale,messages})}={}) {
+  const t=localization.text;
+  const node=element('div','dc-pack-art'+(small?' dc-pack-art-small':'')),fallback=element('div'),image=element('img'),toggle=button(t('artwork.back'),()=>setSide(side==='front'?'back':'front')),
     artwork=product.artwork??{},abort=new AbortController();
+  node.setAttribute('lang',localization.locale);node.setAttribute('dir',localization.dir);
   let disposed=false;
   Object.assign(fallback.style,{display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',width:'100%',height:'100%',zIndex:'1'});
   node.dataset.line=product.lineId;
-  const subtitle=element('small','','COLLECTIBLE CARDS');Object.assign(subtitle.style,{fontSize:'6px',letterSpacing:'.2em',marginTop:'5px',transform:'rotate(-9deg)',color:'#c3b5d3'});subtitle.hidden=small;
+  const subtitle=element('small','',t('artwork.subtitle'));Object.assign(subtitle.style,{fontSize:'6px',letterSpacing:'.2em',marginTop:'5px',transform:'rotate(-9deg)',color:'#c3b5d3'});subtitle.hidden=small;
   fallback.append(element('span','dc-pack-orbit'),element('span','dc-pack-symbol',product.lineId==='garden'?'✳':'✦'),element('span','dc-pack-word',lineName),subtitle);
   if(previewCards.length){const stack=element('div','dc-pack-preview');stack.append(...previewCards);fallback.append(stack);}
   image.alt=artwork.alt??product.name;image.hidden=true;
@@ -44,7 +47,7 @@ export function renderPack(product,{small=false,lineName=product.lineId,previewC
     side=value==='back'?'back':'front';image.hidden=true;showFallback(true);
     const url=assetURL(artwork[side]);
     if(url){image.src=url;node.dataset.artworkState='loading';}else{image.removeAttribute('src');node.dataset.artworkState='fallback';}
-    toggle.textContent=side==='front'?'Show pack back':'Show pack front';toggle.hidden=small||!artwork.back;
+    toggle.textContent=t(side==='front'?'artwork.back':'artwork.front');toggle.hidden=small||!artwork.back;
   }
   node.append(fallback,image,toggle);setSide(side);
   return {node,setSide,dispose(){if(disposed)return;disposed=true;abort.abort();image.removeAttribute('src');node.replaceChildren();}};
@@ -56,10 +59,11 @@ export function installStyles(root,{theme={},css=''}={}) {
   const style=element('style'); style.textContent=defaultCSS+'\n'+css; root.prepend(style);
   return ()=>{style.remove();root.classList.remove('dc-root');for(const name of Object.keys(theme)) if(themes.includes(name)) root.style.removeProperty(name);};
 }
-export function renderCard(copy,{onSelect,interactive=true,backRenderer,effects=true,presentationMode='poster'}={}) {
-  if(copy.variant?.presentation||copy.definition.presentation){if(!portableRenderers.has(presentationMode))portableRenderers.set(presentationMode,createCardRenderer({mode:presentationMode}));return portableRenderers.get(presentationMode)(copy,{onSelect});}
+export function renderCard(copy,{onSelect,interactive=true,backRenderer,effects=true,presentationMode='poster',localization}={}) {
+  const label=localization?.text(copy.serialNumber?'card.serialLabel':'card.label',{name:copy.definition.name,rarity:copy.rarityId,serial:copy.serialNumber,total:copy.editionTotal});
+  if(copy.variant?.presentation||copy.definition.presentation){if(!portableRenderers.has(presentationMode))portableRenderers.set(presentationMode,createCardRenderer({mode:presentationMode}));const node=portableRenderers.get(presentationMode)(copy,{onSelect});if(label)node.setAttribute('aria-label',label);return node;}
   const node=element('button','dc-card'); node.type='button';
-  node.setAttribute('aria-label',copy.definition.name+', '+copy.rarityId+(copy.serialNumber?' '+copy.serialNumber+' of '+copy.editionTotal:''));
+  node.setAttribute('aria-label',label??copy.definition.name+', '+copy.rarityId+(copy.serialNumber?' '+copy.serialNumber+' of '+copy.editionTotal:''));
   const inner=element('span','dc-card-inner'),front=element('span','dc-front'),back=element('span','dc-back');
   if(copy.definition.appearance?.background) front.style.background=copy.definition.appearance.background;
   node.dataset.rarity=copy.rarityId;
@@ -180,52 +184,54 @@ export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={}}=
   host.dispose=()=>{if(disposed)return;disposed=true;abort.abort();pageAbort?.abort();for(const image of images)image.removeAttribute('src');images.clear();for(const card of cardNodes)card.dispose?.();shadow.replaceChildren();};
   shadow.append(style,wrap);return host;
 }
-export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSelect,packArtwork}={}) {
-  let cleanup;
+export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSelect,packArtwork,locale='en',messages={},localization=createLocalization({locale,messages})}={}) {
+  let cleanup;const t=localization.text,oldLang=root.getAttribute('lang'),oldDir=root.getAttribute('dir');
+  root.setAttribute('lang',localization.locale);root.setAttribute('dir',localization.dir);
   const unsubscribe=controller.subscribe(state=>{
     cleanup?.();root.replaceChildren();
-    if(view) {const rendered=view(state,controller);if(rendered.node){root.append(rendered.node);cleanup=rendered.dispose;}else{root.append(rendered);cleanup=undefined;}return;}
+    if(view) {const rendered=view(state,controller,{localization});if(rendered.node){root.append(rendered.node);cleanup=rendered.dispose;}else{root.append(rendered);cleanup=undefined;}return;}
     const node=element('div','dc-opener'),renderAbort=new AbortController();let revealImage;
     cleanup=()=>{renderAbort.abort();revealImage?.removeAttribute('src');};
     const artwork=state.receipt?packArtwork?.(state.receipt.id):undefined,url=assetURL(artwork?.reveal);
-    if(url){const image=revealImage=element('img','dc-reveal-artwork');image.src=url;image.alt=artwork.alt??'Pack reveal artwork';image.style.maxWidth='100%';image.style.maxHeight='240px';image.style.objectFit='contain';image.addEventListener('error',()=>image.remove(),{once:true,signal:renderAbort.signal});node.append(image);}
-    node.append(element('h3','',state.phase==='complete'?'Your cards are revealed':'Reveal your cards'));
-    if(state.phase==='idle')node.append(element('p','dc-muted','Choose a sealed pack above. After opening, its cards belong to your collection.'));
-    if(state.phase==='loading')node.append(element('p','','Loading committed cards…'));
+    if(url){const image=revealImage=element('img','dc-reveal-artwork');image.src=url;image.alt=artwork.alt??t('artwork.reveal');image.style.maxWidth='100%';image.style.maxHeight='240px';image.style.objectFit='contain';image.addEventListener('error',()=>image.remove(),{once:true,signal:renderAbort.signal});node.append(image);}
+    node.append(element('h3','',t(state.phase==='complete'?'opener.complete':'opener.title')));
+    if(state.phase==='idle')node.append(element('p','dc-muted',t('opener.idle')));
+    if(state.phase==='loading')node.append(element('p','',t('opener.loading')));
     if(state.error)node.append(element('p','dc-error',state.error.message));
     if(state.receipt) {
       const row=element('div','dc-row');
-      node.append(element('p','dc-muted',state.revealed+' of '+state.receipt.cards.length+' revealed · Cards are already saved to your collection.'));
-      const next=button('Reveal next',()=>controller.reveal()),all=button('Reveal all',()=>controller.skip());
+      node.append(element('p','dc-muted',t('opener.progress',{revealed:state.revealed,total:state.receipt.cards.length})));
+      const next=button(t('opener.next'),()=>controller.reveal()),all=button(t('opener.all'),()=>controller.skip());
       next.disabled=all.disabled=state.revealed===state.receipt.cards.length;
-      row.append(next,all,button('Replay reveal',()=>controller.replay()));node.append(row);
+      row.append(next,all,button(t('opener.replay'),()=>controller.replay()));node.append(row);
       const cards=element('div','dc-grid');
       for(const copy of state.receipt.cards.slice(0,state.revealed)){
-        const result=element('div','dc-result-card');result.append(cardRenderer(copy,{onSelect}),element('small','dc-result-label',copy.isNew?'New to your collection':'Duplicate at opening'));cards.append(result);
+        const result=element('div','dc-result-card');result.append(cardRenderer(copy,{onSelect,localization}),element('small','dc-result-label',t(copy.isNew?'opener.new':'opener.duplicate')));cards.append(result);
       }
-      for(let i=state.revealed;i<state.receipt.cards.length;i++) {const back=element('div','dc-sealed-card');back.append(element('span','','◇'),element('small','','Card '+(i+1)));cards.append(back);}
+      for(let i=state.revealed;i<state.receipt.cards.length;i++) {const back=element('div','dc-sealed-card');back.append(element('span','','◇'),element('small','',t('opener.card',{number:i+1})));cards.append(back);}
       node.append(cards);
     }
     root.append(node);
   });
-  return ()=>{unsubscribe();cleanup?.();root.replaceChildren();};
+  return ()=>{unsubscribe();cleanup?.();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);};
 }
 export function mountFramework(root,{client,theme={},css='',cardRenderer=renderCard,packRenderer=renderPack,albumRenderer=renderAlbum,inspectorRenderer=render3DInspector,comparisonRenderer=renderComparison,codeRevealRenderer,listingRenderer,views:customViews={},viewLabels={},
   backRenderer,metadataRenderer,openerView,layouts={},participants=[],navigation='sections',
-  sections=['wallet','shop','packs','collection','marketplace','rewards','codes','albums','trades']}={}) {
+  sections=['wallet','shop','packs','collection','marketplace','rewards','codes','albums','trades'],locale='en',messages={}}={}) {
+  const localization=createLocalization({locale,messages}),t=localization.text,num=localization.number,date=localization.date,rate=new Intl.NumberFormat(localization.locale,{minimumFractionDigits:1,maximumFractionDigits:1}).format,oldLang=root.getAttribute('lang'),oldDir=root.getAttribute('dir');
+  root.setAttribute('lang',localization.locale);root.setAttribute('dir',localization.dir);
   const removeStyles=installStyles(root,{theme,css});
   const dashboard=element('div','dc-dashboard'),nav=element('nav','dc-nav'),content=element('div','dc-content');
   const status=element('div','dc-status'),inspector=element('dialog','dc-inspector-dialog');
-  status.setAttribute('role','status');nav.setAttribute('aria-label','Framework features');inspector.setAttribute('aria-label','Card details');
+  status.setAttribute('role','status');nav.setAttribute('aria-label',t('nav.features'));inspector.setAttribute('aria-label','Card details');
   root.append(dashboard,nav,status,content,inspector);
   let disposed=false,model=null,openerDispose=null,viewDisposers=[],refreshGeneration=0,mutate=null,commandPrincipal=null,busy=false;
   let active=sections.includes('shop')?'shop':sections[0],viewLeave=null;
   let effectiveSections=sections;
-  const renderer=(copy,options={})=>cardRenderer(copy,{backRenderer,...options});
+  const renderer=(copy,options={})=>cardRenderer(copy,{backRenderer,localization,...options});
   const currencyName=id=>model.catalog.currencies.find(c=>c.id===id)?.name??id;
   const lineName=id=>model.catalog.lines.find(l=>l.id===id)?.name??id;
-  const userName=id=>participants.find(u=>u.id===id)?.name??(id===model.me.userId?'You':id);
-  const num=n=>Number(n).toLocaleString();
+  const userName=id=>participants.find(u=>u.id===id)?.name??(id===model.me.userId?t('account.you'):id);
   const closeInspector=()=>inspector.close();
   function inspect(copy) {
     if(disposed)return;
@@ -236,9 +242,9 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   function inspectTogether(copies){if(disposed||!copies.length)return;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector}));if(!inspector.open)inspector.showModal();}
   inspector.addEventListener('click',event=>{if(event.target===inspector)inspector.close();});
   const controller=createRevealController({open:input=>mutate('openPack',{packId:input.packId}),key:client.requestKey});
-  async function action(fn,{refreshAfter=true,message='Changes saved.'}={}) {
+  async function action(fn,{refreshAfter=true,message=t('status.saved')}={}) {
     if(busy || disposed)return;
-    busy=true;status.className='dc-status is-working';status.textContent='Working…';
+    busy=true;status.className='dc-status is-working';status.textContent=t('status.working');
     root.setAttribute('aria-busy','true');const controls=[...root.querySelectorAll('.dc-content button')].map(b=>[b,b.disabled]);controls.forEach(([b])=>b.disabled=true);
     try {
       const value=await fn();
@@ -266,76 +272,76 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     if(refreshAfterAdmin)refresh().catch(error=>{if(!disposed){status.className='dc-status dc-error';status.textContent=error.message;}});
   }
   function wallet() {
-    const node=section('Your wallet','Each account has its own balances. Pack purchases and conversions update these balances immediately.');
+    const node=section(t('wallet.title'),t('wallet.description'));
     const cards=element('div','dc-wallet-grid');
-    for(const c of model.catalog.currencies){const box=element('article','dc-balance');box.append(element('span','dc-muted',c.name),element('strong','',num(model.wallet[c.id]??0)),element('small','dc-muted',(c.tradable?'Tradable':'Not tradable')+' · Value: '+(c.value.numerator/c.value.denominator)+' base units'));cards.append(box);}node.append(cards);
+    for(const c of model.catalog.currencies){const box=element('article','dc-balance');box.append(element('span','dc-muted',c.name),element('strong','',num(model.wallet[c.id]??0)),element('small','dc-muted',t('wallet.value',{tradability:t(c.tradable?'wallet.tradable':'wallet.notTradable'),amount:c.value.numerator/c.value.denominator})));cards.append(box);}node.append(cards);
     if(model.catalog.features.conversion) {
-      const form=element('div','dc-form-panel');form.append(element('h3','','Convert currencies'));
-      const row=element('div','dc-form-row'),amount=field(row,'Amount to spend','number','100');amount.min='1';amount.step='1';
+      const form=element('div','dc-form-panel');form.append(element('h3','',t('wallet.convert')));
+      const row=element('div','dc-form-row'),amount=field(row,t('wallet.amount'),'number','100');amount.min='1';amount.step='1';
       const eligible=model.catalog.currencies.filter(c=>c.convertible!==false);
-      const from=selectField(row,'From',eligible),to=selectField(row,'To',eligible);if(to.options.length>1)to.selectedIndex=1;
+      const from=selectField(row,t('wallet.from'),eligible),to=selectField(row,t('wallet.to'),eligible);if(to.options.length>1)to.selectedIndex=1;
       const preview=element('p','dc-conversion-preview');
-      function update(){const a=eligible.find(c=>c.id===from.value),b=eligible.find(c=>c.id===to.value);if(a&&b)preview.textContent=num(Number(amount.value))+' '+a.name+' → '+num(Number(amount.value)*a.value.numerator*b.value.denominator/(a.value.denominator*b.value.numerator))+' '+b.name;}
+      function update(){const a=eligible.find(c=>c.id===from.value),b=eligible.find(c=>c.id===to.value),spent=Number(amount.value),received=a&&b?spent*a.value.numerator*b.value.denominator/(a.value.denominator*b.value.numerator):NaN;preview.textContent=a&&b&&Number.isFinite(spent)&&Number.isFinite(received)?num(spent)+' '+a.name+' → '+num(received)+' '+b.name:'';}
       [amount,from,to].forEach(x=>x.addEventListener('input',update));update();
-      form.append(row,preview,button('Convert currencies',()=>action(()=>mutate('convert',{from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version}),{message:r=>'Converted '+r.amount+' '+currencyName(r.from)+' into '+r.received+' '+currencyName(r.to)+'.'})),element('p','dc-muted','Choose an amount that converts to a whole unit. Fractional results are rejected.'));node.append(form);
+      form.append(row,preview,button(t('wallet.convert'),()=>action(()=>mutate('convert',{from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version}),{message:r=>t('wallet.converted',{amount:r.amount,from:currencyName(r.from),received:r.received,to:currencyName(r.to)})})),element('p','dc-muted',t('wallet.wholeUnits')));node.append(form);
     }return node;
   }
   function packArt(product,small=false) {
     const previewCards=[],pool=product.slots?.flatMap(s=>s.pool)??[];for(const entry of [...pool.slice(0,2),pool[0]].filter(Boolean)){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),definition=model.catalog.cards.find(c=>c.id===variant?.cardId);if(!definition)continue;const card=renderer({id:'preview',definition,variant,rarityId:variant.rarityId,serialNumber:null,bindings:{}},{interactive:false});card.tabIndex=-1;previewCards.push(card);}
-    let rendered;try{rendered=packRenderer(product,{small,lineName:lineName(product.lineId),previewCards});}catch{rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards});}
-    if(!rendered?.node&&!rendered?.nodeType)rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards});
+    let rendered;try{rendered=packRenderer(product,{small,lineName:lineName(product.lineId),previewCards,localization});}catch{rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});}
+    if(!rendered?.node&&!rendered?.nodeType)rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});
     if(rendered?.node){if(rendered.dispose)viewDisposers.push(()=>rendered.dispose());return rendered.node;}return rendered;
   }
   function shop() {
     let shopDisposed=false;const principal=commandPrincipal,commands=mutate;
     viewDisposers.push(()=>{shopDisposed=true;});
-    const fence=()=>{if(disposed||shopDisposed||commandPrincipal!==principal||typeof client.principal==='function'&&client.principal()!==principal)throw new Error('The purchase view or signed-in account changed. Review the purchase again.');};
-    const node=section('Find your next discovery','Choose a pack, check its contents and price, then open it in My packs.');
+    const fence=()=>{if(disposed||shopDisposed||commandPrincipal!==principal||typeof client.principal==='function'&&client.principal()!==principal)throw new Error(t('shop.changedView'));};
+    const node=section(t('shop.title'),t('shop.description'));
     const guide=element('div','dc-steps');
-    for(const [n,title,description]of [['01','Buy a pack','Spend your account’s currency'],['02','Reveal your cards','Open the pack in My packs'],['03','Make it yours','Inspect cards and build an album']]){const step=element('div');step.append(element('span','dc-step-number',n),element('strong','',title),element('small','dc-muted',description));guide.append(step);}node.append(guide);
+    for(const [n,title,description]of [['01','shop.stepBuy','shop.stepBuyDescription'],['02','shop.stepReveal','shop.stepRevealDescription'],['03','shop.stepCollect','shop.stepCollectDescription']]){const step=element('div');step.append(element('span','dc-step-number',n),element('strong','',t(title)),element('small','dc-muted',t(description)));guide.append(step);}node.append(guide);
     const grid=element('div','dc-shop-grid');
     for(const product of model.catalog.products.filter(p=>p.enabled!==false)) {
       const box=element('article','dc-product');box.append(packArt(product));
       const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0),strategy=product.allocationStrategy,
         deckVersion=strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3))?strategy.version:0,ticketDeck=deckVersion>0;
-    info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',count+' card'+(count===1?'':'s')+' per pack'+((!ticketDeck||deckVersion>=2)&&product.duplicatePolicy.scope!=='none'?' · Duplicate protection':'')));
-    if(product.pity){const progress=model.pity[product.id]??0,rarity=model.catalog.rarities.find(r=>r.id===product.pity.rarityId)?.name??product.pity.rarityId;info.append(element('p','dc-pity-note',deckVersion>=2?'Personal pity targets '+rarity+' or better by pack '+product.pity.after+' since your last qualifying ordinary card · '+progress+'/'+product.pity.after+' packs. A qualifying ordinary card resets pity; special inserts do not. When due, pity applies to the first draw in the first ordinary-card slot. Sealed packs count.':rarity+' or better by purchase '+product.pity.after+' since your last qualifying pack · '+progress+'/'+product.pity.after+' misses. Sealed packs count.'));}
+    info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',t('shop.cardsPerPack',{count})+((!ticketDeck||deckVersion>=2)&&product.duplicatePolicy.scope!=='none'?t('shop.duplicateProtection'):'')));
+    if(product.pity){const progress=model.pity[product.id]??0,rarity=model.catalog.rarities.find(r=>r.id===product.pity.rarityId)?.name??product.pity.rarityId;info.append(element('p','dc-pity-note',t(deckVersion>=2?'shop.pityPersonal':'shop.pityLegacy',{rarity,after:product.pity.after,progress})));}
     if(deckVersion>=2&&product.duplicatePolicy.scope!=='none'){
-      const protection=product.duplicatePolicy.scope==='inventory'?'Ordinary card draws avoid card identities you already own and those in earlier packs of this purchase, including inserts in those earlier packs. They also avoid repeating ordinary card identities within the current pack.':'Ordinary card draws avoid repeating card identities within each pack; this check resets for the next pack.';
-      const fallback=product.duplicatePolicy.fallback==='allow'?'If no unseen eligible card remains for a protected draw, the fallback allows a repeat.':'If no unseen eligible card can fill a protected draw, the purchase fails.';
-      info.append(element('p','dc-muted',protection+' Special inserts bypass duplicate filtering. '+fallback));
+      const protection=t(product.duplicatePolicy.scope==='inventory'?'shop.duplicatesInventory':'shop.duplicatesPack');
+      const fallback=t(product.duplicatePolicy.fallback==='allow'?'shop.fallbackAllow':'shop.fallbackReject');
+      info.append(element('p','dc-muted',protection+' '+t('shop.inserts')+' '+fallback));
     }
-    if(product.availableFrom||product.availableUntil)info.append(element('small','dc-muted',(product.availableFrom?'From '+new Date(product.availableFrom).toLocaleString():'')+(product.availableUntil?' · Until '+new Date(product.availableUntil).toLocaleString():'')));
-      const details=element('details','dc-rates');details.append(element('summary','',ticketDeck?'See cards & ticket counts':'See cards & drop rates'));
+    if(product.availableFrom||product.availableUntil)info.append(element('small','dc-muted',(product.availableFrom?t('shop.availableFrom',{date:date(product.availableFrom)}):'')+(product.availableUntil?t('shop.availableUntil',{date:date(product.availableUntil)}):'')));
+      const details=element('details','dc-rates');details.append(element('summary','',t(ticketDeck?'shop.ticketsSummary':'shop.ratesSummary')));
       for(const slot of product.slots) {
-        const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',slot.count+' draw'+(slot.count===1?'':'s')+' per pack from this pool'+(ticketDeck?' · '+num(total)+' configured tickets':':')));
-        for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?' · '+remaining+' remaining':'')),element('strong','',ticketDeck?num(entry.weight)+' configured ticket'+(entry.weight===1?'':'s'):(entry.weight/total*100).toFixed(1)+'%'));details.append(row);}
+        const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',t('shop.draws',{count:slot.count})+(ticketDeck?t('shop.poolTickets',{count:total}):':')));
+        for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?t('shop.remaining',{count:remaining}):'')),element('strong','',ticketDeck?t('shop.tickets',{count:entry.weight}):rate(entry.weight/total*100)+'%'));details.append(row);}
       }
-      details.append(element('p','dc-muted',ticketDeck?'All packs in one purchase draw tickets from each pool without replacement. A drawn ticket cannot be drawn again in that batch, so chances change between draws. Configured ticket counts are not fixed independent drop rates. Finite remaining supply can reduce the tickets available. '+(deckVersion>=2?'Duplicate eligibility and personal pity can further change which tickets are eligible. ':'')+(deckVersion===3?'Imported-code supply also limits eligible tickets. Shared code pools may change before purchase. ':'')+'Your quote checks the current eligible supply.':'Base rates. Remaining editions and duplicate protection affect eligible cards.'));info.append(details);
-      const purchase=element('div','dc-purchase-row'),quantity=field(purchase,'Packs','number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
+      details.append(element('p','dc-muted',ticketDeck?[t('shop.deckExplanation'),...(deckVersion>=2?[t('shop.conditionalTickets')]:[]),...(deckVersion===3?[t('shop.codeSupply')]:[]),t('shop.quoteSupply')].join(' '):t('shop.baseRates')));info.append(details);
+      const purchase=element('div','dc-purchase-row'),quantity=field(purchase,t('shop.quantity'),'number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
       let pendingPurchase=commands.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id,reviewedQuote=null,quoteGeneration=0,allocationState=null,allocationBlocked=false;
       const allocationNote=element('p','dc-muted');allocationNote.setAttribute('role','status');
       const activationNote=element('p','dc-binding-activation-note');activationNote.setAttribute('role','status');info.append(activationNote);
-      function showActivation(quote){activationNote.textContent=quote?.bindingActivation?'Up to '+quote.bindingActivation.maximum+' attached reward'+(quote.bindingActivation.maximum===1?'':'s')+' may require activation after purchase. Pack delivery does not confirm reward activation. These rewards cannot be used until activation is confirmed. If activation remains pending, contact the operator to recover the original activation.':'';}
+      function showActivation(quote){activationNote.textContent=quote?.bindingActivation?t('shop.activation',{count:quote.bindingActivation.maximum}):'';}
       if(recover){quantity.value=String(pendingPurchase.quantity);quantity.disabled=true;}
       const buy=button('',async()=>{
         await action(async()=>{
           fence();const current=++quoteGeneration,requestedQuantity=Number(quantity.value);
           try{
             const quote=recover?pendingPurchase:reviewedQuote??await client.quote({productId:product.id,quantity:requestedQuantity});fence();
-            if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error('The pack quantity changed. Review the purchase again.');
-            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent='Review '+quote.quantity+' pack'+(quote.quantity===1?'':'s')+' for '+num(quote.price.amount)+' '+currencyName(quote.price.currencyId)+'. '+(deckVersion===3?'Availability depends on current imported-code supply. ':'')+'Buying uses this reviewed allocation quote.';return {review:true,activation:!!reviewedQuote.bindingActivation};}
-            if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error('The pack price changed. Review the updated price before buying.');}
+            if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error(t('shop.changedQuantity'));
+            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent=[t('shop.review',{count:quote.quantity,amount:quote.price.amount,currency:currencyName(quote.price.currencyId)}),...(deckVersion===3?[t('shop.reviewCodeSupply')]:[]),t('shop.reviewAllocation')].join(' ');return {review:true,activation:!!reviewedQuote.bindingActivation};}
+            if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error(t('shop.changedPrice'));}
             const original=commands.pending('purchase');const receipt=await (!recover&&original?._confirmed?commands.beginNew('purchase',quote):recover?commands.recover('purchase',quote):commands('purchase',quote));fence();active='packs';if(ticketDeck)await refresh();return receipt;
-          }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent='The allocation attempt needs review. Check its status before acknowledging it and requesting a fresh quote.';}}throw error;}
-        },{refreshAfter:!ticketDeck,message:r=>r.review?'Purchase quote ready. Review the pack quantity and price'+(r.activation?' and reward activation notice':'')+' before buying.':'Purchased '+r.packs.length+' pack'+(r.packs.length===1?'':'s')+'. Choose Open pack to reveal your cards.'+(r.bindingActivation?' '+r.bindingActivation.count+' attached reward'+(r.bindingActivation.count===1?' was':'s were')+' pending activation at delivery. Check current card details for activation status.':'')});
+          }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent=t('allocation.needsReview');}}throw error;}
+        },{refreshAfter:!ticketDeck,message:r=>r.review?t(r.activation?'shop.reviewActivationReady':'shop.reviewReady'):t('shop.purchased',{count:r.packs.length})+(r.bindingActivation?' '+t('shop.activationDelivered',{count:r.bindingActivation.count}):'')});
         if(!disposed&&!shopDisposed)update();
       });
       function update(){
         pendingPurchase=commands.pending('purchase');recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id;
         quantity.disabled=!!recover;
         const total=recover?pendingPurchase.price.amount:reviewedQuote?.price.amount??product.price.amount*Number(quantity.value),currency=recover?pendingPurchase.price.currencyId:reviewedQuote?.price.currencyId??product.price.currencyId,available=model.availability?.products.find(p=>p.id===product.id)?.available!==false;
-        buy.textContent=recover?'Retry original purchase · '+num(total)+' '+currencyName(currency):available?(ticketDeck||reviewedQuote?(reviewedQuote?'Buy reviewed packs · ':'Review purchase · '):'Buy · ')+num(total)+' '+currencyName(currency):'Currently unavailable';
+        buy.textContent=available||recover?t(recover?'shop.retry':ticketDeck||reviewedQuote?(reviewedQuote?'shop.buyReviewed':'shop.reviewButton'):'shop.buy',{amount:Number.isFinite(total)?total:'—',currency:currencyName(currency)}):t('shop.unavailable');
         showActivation(recover?pendingPurchase:reviewedQuote);
         buy.disabled=!recover&&(!available||allocationBlocked||!!pendingPurchase&&!pendingPurchase._confirmed||!Number.isInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>product.maxQuantity||total>(model.wallet[currency]??0));
       }
@@ -344,26 +350,26 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
         info.append(allocationNote);
         if(typeof client.allocationStatus==='function'&&typeof client.acknowledgeAllocation==='function'){
           const recovery=element('div','dc-allocation-recovery'),attemptNote=element('p','dc-muted');attemptNote.setAttribute('role','status');
-          const inspectAttempt=button('Check allocation attempt',async()=>{
+          const inspectAttempt=button(t('allocation.check'),async()=>{
             await action(async()=>{fence();const result=await client.allocationStatus({productId:product.id});fence();
-              if(result.productId!==product.id||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error('Invalid allocation status response');
+              if(result.productId!==product.id||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error(t('allocation.invalidStatus'));
               allocationState=result;allocationBlocked=['prepared','stale'].includes(result.state);if(allocationBlocked){reviewedQuote=null;quoteGeneration++;}if(result.state==='acknowledged')await confirmOriginalFailure();showAttempt();return result;
-            },{refreshAfter:false,message:'Allocation status checked.'});if(!disposed&&!shopDisposed)update();
+            },{refreshAfter:false,message:t('allocation.checked')});if(!disposed&&!shopDisposed)update();
           });
-          const acknowledge=button('Acknowledge allocation attempt',async()=>{
-            await action(async()=>{fence();if(!allocationState||!['prepared','stale'].includes(allocationState.state))throw new Error('Check the allocation attempt before acknowledging it');
-              const attemptId=allocationState.attemptId,result=await client.acknowledgeAllocation({attemptId});fence();if(result.attemptId!==attemptId||result.state!=='acknowledged')throw new Error('Invalid allocation acknowledgement response');
+          const acknowledge=button(t('allocation.acknowledge'),async()=>{
+            await action(async()=>{fence();if(!allocationState||!['prepared','stale'].includes(allocationState.state))throw new Error(t('allocation.checkFirst'));
+              const attemptId=allocationState.attemptId,result=await client.acknowledgeAllocation({attemptId});fence();if(result.attemptId!==attemptId||result.state!=='acknowledged')throw new Error(t('allocation.invalidAcknowledgement'));
               allocationState={...allocationState,state:'acknowledged',errorCode:null};allocationBlocked=false;reviewedQuote=null;quoteGeneration++;
               await confirmOriginalFailure();
               const original=commands.pending('purchase');showAttempt();return {...result,unresolved:!!original&&!original._confirmed};
-            },{refreshAfter:false,message:result=>result.unresolved?'Allocation attempt acknowledged. Resolve the original purchase before requesting a fresh quote.':'Allocation attempt acknowledged. Review a fresh quote before buying.'});if(!disposed&&!shopDisposed)update();
+            },{refreshAfter:false,message:result=>t(result.unresolved?'allocation.acknowledgedUnresolved':'allocation.acknowledged')});if(!disposed&&!shopDisposed)update();
           });
           async function confirmOriginalFailure(){const pending=commands.pending('purchase');if(pending&&pending.productId===product.id&&!pending._confirmed&&typeof commands.confirmFailed==='function'){await commands.confirmFailed('purchase',pending);fence();}}
           function showAttempt(){
             const state=allocationState?.state;acknowledge.hidden=!['prepared','stale'].includes(state);
-            if(state==='completed')attemptNote.textContent='This allocation completed. Recover the original purchase result or check My packs.';
-            else if(state==='prepared'||state==='stale')attemptNote.textContent=(state==='stale'?'The allocation is stale.':'An allocation attempt is pending.')+' Acknowledge this inactive attempt to abandon it. This does not buy packs.';
-            else{const pending=commands.pending('purchase');attemptNote.textContent=pending&&!pending._confirmed?'Retry the original purchase to resolve its saved result before requesting a new quote.':'No active allocation attempt. Select Review purchase to request a fresh quote.';}
+            if(state==='completed')attemptNote.textContent=t('allocation.completed');
+            else if(state==='prepared'||state==='stale')attemptNote.textContent=t(state==='stale'?'allocation.stale':'allocation.pending')+' '+t('allocation.abandon');
+            else{const pending=commands.pending('purchase');attemptNote.textContent=t(pending&&!pending._confirmed?'allocation.retryOriginal':'allocation.freshReview');}
           }
           acknowledge.hidden=true;recovery.append(inspectAttempt,attemptNote,acknowledge);info.append(recovery);
         }
@@ -372,37 +378,37 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     }node.append(grid);return node;
   }
   function packs() {
-    const node=section('Your packs','Sealed packs are ready to open. Opened packs can be replayed without spending currency or receiving extra cards.');
+    const node=section(t('packs.title'),t('packs.description'));
     const sealed=model.packs.filter(p=>!p.openedAt),opened=model.packs.filter(p=>p.openedAt);
     const list=element('div','dc-pack-list');
     for(const pack of [...sealed,...opened.slice().reverse()]) {
       const box=element('article','dc-owned-pack');box.append(packArt(pack.product,true));
-      const info=element('div');info.append(element('span','dc-badge'+(pack.openedAt?'':' is-sealed'),pack.openedAt?'Opened':'Sealed'),element('h3','',pack.product.name),element('small','dc-muted',new Date(pack.createdAt).toLocaleString()));
-      box.append(info,button(pack.openedAt?'Replay pack':'Open pack',()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw new Error(state.error.message);},{message:pack.openedAt?'Replaying saved cards. No additional charge.':'Pack opened. Reveal the cards below.'})));list.append(box);
+      const info=element('div');info.append(element('span','dc-badge'+(pack.openedAt?'':' is-sealed'),t(pack.openedAt?'packs.opened':'packs.sealed')),element('h3','',pack.product.name),element('small','dc-muted',date(pack.createdAt)));
+      box.append(info,button(t(pack.openedAt?'packs.replay':'packs.open'),()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw new Error(state.error.message);},{message:t(pack.openedAt?'packs.replaying':'packs.openSuccess')})));list.append(box);
     }
-    if(!model.packs.length)empty(node,'No packs yet','Buy your first pack to start collecting.','Browse packs','shop');
-    node.append(list);const opener=element('div');node.append(opener);openerDispose=mountOpener(opener,{controller,cardRenderer:renderer,view:openerView,onSelect:inspect,packArtwork:id=>model.packs.find(pack=>pack.id===id)?.product.artwork});return node;
+    if(!model.packs.length)empty(node,t('packs.empty'),t('packs.emptyDescription'),t('packs.browse'),'shop');
+    node.append(list);const opener=element('div');node.append(opener);openerDispose=mountOpener(opener,{controller,cardRenderer:renderer,view:openerView,onSelect:inspect,localization,packArtwork:id=>model.packs.find(pack=>pack.id===id)?.product.artwork});return node;
   }
   const viewState={};
-  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState});
+  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
-  const labels={wallet:'Wallet',shop:'Discover',packs:'My packs',collection:'Collection',tradingControls:'Trading controls',admin:'Administration',marketplace:'Marketplace',rewards:'Account rewards',codes:'Code history',albums:'Albums',trades:'Trade lounge',...viewLabels};
+  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:'Collection',tradingControls:'Trading controls',admin:'Administration',marketplace:'Marketplace',rewards:'Account rewards',codes:'Code history',albums:'Albums',trades:'Trade lounge',...viewLabels};
   function renderView() {
     if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();nav.replaceChildren();dashboard.replaceChildren();
     root.classList.toggle('dc-with-nav',navigation==='tabs');
     if(navigation==='tabs'){
-      const heading=element('div','dc-dashboard-heading');heading.append(element('span','dc-eyebrow','YOUR ACCOUNT'),element('strong','',model.me.displayName??userName(model.me.userId)));dashboard.append(heading);
+      const heading=element('div','dc-dashboard-heading');heading.append(element('span','dc-eyebrow',t('account.heading')),element('strong','',model.me.displayName??userName(model.me.userId)));dashboard.append(heading);
       if(effectiveSections.includes('wallet')){const balances=element('div','dc-wallet-strip');for(const c of model.catalog.currencies){const balance=element('div');balance.append(element('strong','',num(model.wallet[c.id]??0)),element('span','dc-muted',c.name));balances.append(balance);}dashboard.append(balances);}
-      const stats=element('div','dc-account-stats');stats.append(element('span','',model.inventory.length+' cards'));if(effectiveSections.includes('packs'))stats.append(element('span','',model.packs.filter(p=>!p.openedAt).length+' sealed packs'));dashboard.append(stats);
-      for(const name of effectiveSections){if(typeof name!=='string'||!views[name])continue;const item=button(labels[name]??name,()=>navigate(name));item.className='dc-nav-item';item.dataset.view=name;item.setAttribute('aria-current',active===name?'page':'false');if(name==='packs'){const count=model.packs.filter(p=>!p.openedAt).length;if(count)item.append(element('span','dc-nav-count',count));}nav.append(item);}
+      const stats=element('div','dc-account-stats');stats.append(element('span','',t('account.cards',{count:model.inventory.length})));if(effectiveSections.includes('packs'))stats.append(element('span','',t('account.sealedPacks',{count:model.packs.filter(p=>!p.openedAt).length})));dashboard.append(stats);
+      for(const name of effectiveSections){if(typeof name!=='string'||!views[name])continue;const item=button(labels[name]??name,()=>navigate(name));item.className='dc-nav-item';item.dataset.view=name;item.setAttribute('aria-current',active===name?'page':'false');if(name==='packs'){const count=model.packs.filter(p=>!p.openedAt).length;if(count)item.append(element('span','dc-nav-count',num(count)));}nav.append(item);}
     }
     if(model.recoverable?.length){
-      const recovery=element('section','dc-panel');recovery.setAttribute('aria-label','Unconfirmed changes');recovery.append(element('h2','','Unconfirmed changes'),element('p','','Recover these previously reviewed changes before starting another. Recovery uses the original request.'));
+      const recovery=element('section','dc-panel');recovery.setAttribute('aria-label',t('recovery.title'));recovery.append(element('h2','',t('recovery.title')),element('p','',t('recovery.description')));
       const names={purchase:'pack purchase',openPack:'pack opening',buyListing:'marketplace purchase',configureAdmin:'settings change',administerCards:'card administration',convert:'currency conversion',tradeUp:'trade-up',saveAlbum:'album change',proposeTrade:'trade offer',acceptTrade:'trade acceptance',cancelTrade:'trade cancellation',counterTrade:'counteroffer',preferences:'preferences',readNotifications:'notification update',commitImport:'catalog import',reportCodeUsage:'code usage report',createShop:'shop creation',createListing:'listing creation',cancelListing:'listing cancellation',enterRaffle:'raffle entry',openCard:'card opening',consumeBinding:'attached action'};
-      for(const intent of model.recoverable){const label=names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',String(intent.input.quantity??1)+' × '+(model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId)));row.append(button('Recover '+label,()=>action(()=>mutate.resume(intent),{message:'Original result recovered.'})));recovery.append(row);}content.append(recovery);
+      for(const intent of model.recoverable){const label=['purchase','openPack','convert'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
     }
-    for(const name of (navigation==='tabs'?[active]:effectiveSections)){const view=typeof name==='function'?()=>name(model,{client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer}):views[name];if(view){const result=view();content.append(result.node??result);if(result.dispose)viewDisposers.push(result.dispose);if(result.requestLeave)viewLeave=result.requestLeave;}}
+    for(const name of (navigation==='tabs'?[active]:effectiveSections)){const view=typeof name==='function'?()=>name(model,{client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,localization}):views[name];if(view){const result=view();content.append(result.node??result);if(result.dispose)viewDisposers.push(result.dispose);if(result.requestLeave)viewLeave=result.requestLeave;}}
   }
   async function refresh() {
     if(disposed)return;
@@ -424,5 +430,5 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     model={catalog,me,capabilities,wallet:walletData,packs:packData,inventory,albums:albumData,trades:tradeData,availability,pity,recoverable};renderView();
   }
   const ready=refresh().catch(error=>{if(disposed)return;status.className='dc-status dc-error';status.textContent=error.message;throw error;});
-  return {ready,refresh,inspect,inspectTogether,dispose(){disposed=true;mutate?.dispose();openerDispose?.();viewDisposers.forEach(fn=>fn());controller.dispose();inspector.close();removeStyles();root.replaceChildren();}};
+  return {ready,refresh,inspect,inspectTogether,dispose(){disposed=true;mutate?.dispose();openerDispose?.();viewDisposers.forEach(fn=>fn());controller.dispose();inspector.close();removeStyles();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);}};
 }

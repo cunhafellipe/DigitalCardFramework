@@ -1,0 +1,566 @@
+{
+  "protocol": "digital-card-localization@1",
+  "maximumBytes": 32768,
+  "maximumMessages": 256,
+  "maximumTextLength": 2048,
+  "pluralCategories": [
+    "zero",
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+  ],
+  "keys": {
+    "nav.wallet": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.shop": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.packs": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.features": {
+      "placeholders": [],
+      "plural": false
+    },
+    "account.heading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "account.you": {
+      "placeholders": [],
+      "plural": false
+    },
+    "account.cards": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "account.sealedPacks": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "status.working": {
+      "placeholders": [],
+      "plural": false
+    },
+    "status.saved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.tradable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.notTradable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.value": {
+      "placeholders": [
+        "amount",
+        "tradability"
+      ],
+      "plural": false
+    },
+    "wallet.convert": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.amount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.from": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.to": {
+      "placeholders": [],
+      "plural": false
+    },
+    "wallet.converted": {
+      "placeholders": [
+        "amount",
+        "from",
+        "received",
+        "to"
+      ],
+      "plural": false
+    },
+    "wallet.wholeUnits": {
+      "placeholders": [],
+      "plural": false
+    },
+    "artwork.back": {
+      "placeholders": [],
+      "plural": false
+    },
+    "artwork.front": {
+      "placeholders": [],
+      "plural": false
+    },
+    "artwork.subtitle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "artwork.reveal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepBuy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepBuyDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepReveal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepRevealDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepCollect": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.stepCollectDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.cardsPerPack": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.duplicateProtection": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.pityPersonal": {
+      "placeholders": [
+        "after",
+        "progress",
+        "rarity"
+      ],
+      "plural": false
+    },
+    "shop.pityLegacy": {
+      "placeholders": [
+        "after",
+        "progress",
+        "rarity"
+      ],
+      "plural": false
+    },
+    "shop.duplicatesInventory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.duplicatesPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.inserts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.fallbackAllow": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.fallbackReject": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.availableFrom": {
+      "placeholders": [
+        "date"
+      ],
+      "plural": false
+    },
+    "shop.availableUntil": {
+      "placeholders": [
+        "date"
+      ],
+      "plural": false
+    },
+    "shop.ticketsSummary": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.ratesSummary": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.draws": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.poolTickets": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": false
+    },
+    "shop.remaining": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": false
+    },
+    "shop.tickets": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.deckExplanation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.conditionalTickets": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.codeSupply": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.quoteSupply": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.baseRates": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.quantity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.activation": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.review": {
+      "placeholders": [
+        "amount",
+        "count",
+        "currency"
+      ],
+      "plural": true
+    },
+    "shop.reviewCodeSupply": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.reviewAllocation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.reviewReady": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.reviewActivationReady": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.purchased": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.activationDelivered": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "shop.retry": {
+      "placeholders": [
+        "amount",
+        "currency"
+      ],
+      "plural": false
+    },
+    "shop.buyReviewed": {
+      "placeholders": [
+        "amount",
+        "currency"
+      ],
+      "plural": false
+    },
+    "shop.reviewButton": {
+      "placeholders": [
+        "amount",
+        "currency"
+      ],
+      "plural": false
+    },
+    "shop.buy": {
+      "placeholders": [
+        "amount",
+        "currency"
+      ],
+      "plural": false
+    },
+    "shop.unavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.changedView": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.changedQuantity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.changedPrice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.needsReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.check": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.acknowledge": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.invalidStatus": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.checkFirst": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.invalidAcknowledgement": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.checked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.acknowledgedUnresolved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.acknowledged": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.completed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.stale": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.pending": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.abandon": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.retryOriginal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "allocation.freshReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.opened": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.sealed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.replay": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.open": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.replaying": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.openSuccess": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.empty": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.emptyDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "packs.browse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.complete": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.idle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.loading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.progress": {
+      "placeholders": [
+        "revealed",
+        "total"
+      ],
+      "plural": false
+    },
+    "opener.next": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.all": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.replay": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.new": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.duplicate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "opener.card": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "card.label": {
+      "placeholders": [
+        "name",
+        "rarity"
+      ],
+      "plural": false
+    },
+    "card.serialLabel": {
+      "placeholders": [
+        "name",
+        "rarity",
+        "serial",
+        "total"
+      ],
+      "plural": false
+    },
+    "recovery.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.purchase": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.openPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.convert": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.action": {
+      "placeholders": [
+        "change"
+      ],
+      "plural": false
+    },
+    "recovery.product": {
+      "placeholders": [
+        "count",
+        "product"
+      ],
+      "plural": false
+    },
+    "recovery.success": {
+      "placeholders": [],
+      "plural": false
+    }
+  }
+}

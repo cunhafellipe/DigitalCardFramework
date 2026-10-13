@@ -6,6 +6,7 @@
 - Extended collector localization to collection filters, favorites, wishlists, trade-up controls, card inspection and comparison, including standalone renderer options.
 - Added localization for album, trade and marketplace workflows, with translated review and recovery controls.
 - Added version 4 allocation for finite supply shared across slots, using bounded feasibility checks before weighted ticket selection.
+- Fixed production startup with an empty optional `HOST_MODULE` setting and added production-host OIDC conformance against a Go issuer.
 
 - Added host-installed declarative Studio panels for selected-layer position and rotation, with bounded field grants and Python/Go manifest examples.
 

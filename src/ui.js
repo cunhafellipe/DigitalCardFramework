@@ -106,9 +106,10 @@ export function renderCard(copy,{onSelect,interactive=true,backRenderer,effects=
 }
 export function renderInspector(copy,options={}) {return render3DInspector(copy,{cardRenderer:renderCard,...options});}
 /** Compact legacy inspector remains available to hosts that prefer the earlier tilt interaction. */
-export function renderTiltInspector(copy,{cardRenderer=renderCard,metadataRenderer,backRenderer,onClose,labels={}}={}) {
-  const node=element('section','dc-inspector');node.setAttribute('aria-label','Card inspection');
-  const grid=element('div','dc-inspector-grid'),card=cardRenderer(copy,{backRenderer}),details=element('div');
+export function renderTiltInspector(copy,{cardRenderer=renderCard,metadataRenderer,backRenderer,onClose,labels={},locale='en',messages={},localization=createLocalization({locale,messages})}={}) {
+  const t=localization.text;
+  const node=element('section','dc-inspector');node.setAttribute('aria-label',t('inspector.label'));node.setAttribute('lang',localization.locale);node.setAttribute('dir',localization.dir);
+  const grid=element('div','dc-inspector-grid'),card=cardRenderer(copy,{backRenderer,localization}),details=element('div');
   let flipped=false;
   const flip=()=>{flipped=!flipped;card.style.setProperty('--dc-flip',flipped?'180deg':'0deg');card.dataset.flipped=String(flipped);};
   card.addEventListener('keydown',event=>{
@@ -116,18 +117,19 @@ export function renderTiltInspector(copy,{cardRenderer=renderCard,metadataRender
     if(event.key==='ArrowUp'||event.key==='ArrowDown') {event.preventDefault();card.style.setProperty('--dc-y',event.key==='ArrowUp'?'-0.8':'0.8');}
     if(event.key==='Escape') onClose?.();
   });
-  details.append(element('h2','',copy.definition.name),element('p','dc-muted','Move across the card to inspect its depth. Arrow keys also tilt the card.'));
-  const controls=element('div','dc-row');controls.append(button('Flip card',flip));if(onClose)controls.append(button('Close',onClose));details.append(controls);
-  if(metadataRenderer) details.append(metadataRenderer(copy));
+  details.append(element('h2','',copy.definition.name),element('p','dc-muted',t('inspector.tiltHint')));
+  const controls=element('div','dc-row');controls.append(button(t('inspector.flipCard'),flip));if(onClose)controls.append(button(t('inspector.closeLegacy'),onClose));details.append(controls);
+  if(metadataRenderer) details.append(metadataRenderer(copy,{localization}));
   else {
     const list=element('dl');
-    const fields={Line:labels.line??copy.lineId,Rarity:labels.rarity??copy.rarityId,Finish:copy.variant.finish??'standard',
-      Edition:copy.serialNumber?copy.serialNumber+' of '+copy.editionTotal:'Open edition',
-      'Opened by':copy.openedByName??copy.openedBy??'Not opened','Opened at':copy.openedAt?new Date(copy.openedAt).toLocaleString():'Not opened','Copy ID':copy.id};
-    for(const [name,value]of Object.entries(fields))list.append(element('dt','',name),element('dd','',value));
+    const finish=copy.variant.finish??'standard',fieldLabels={Line:'line',Rarity:'rarity',Finish:'finish',Edition:'edition','Opened by':'openedBy','Opened at':'openedAt','Copy ID':'copyId'},fields={Line:labels.line??copy.lineId,Rarity:labels.rarity??copy.rarityId,Finish:['standard','gloss','holo','foil'].includes(finish)?t('finish.'+finish):finish,
+      Edition:copy.serialNumber?t('inspector.serial',{serial:copy.serialNumber,total:copy.editionTotal}):t('inspector.openEdition'),
+      'Opened by':copy.openedByName??copy.openedBy??t('inspector.notOpened'),'Opened at':copy.openedAt?localization.date(copy.openedAt):t('inspector.notOpened'),'Copy ID':copy.id};
+    for(const [name,value]of Object.entries(fields))list.append(element('dt','',t('inspector.'+fieldLabels[name])),element('dd','',value));
     for(const [name,value]of Object.entries({...copy.definition.metadata,...copy.variant.metadata,...copy.metadata}))
-      list.append(element('dt','',name),element('dd','',typeof value==='object'?JSON.stringify(value):value));
-    for(const [name,b]of Object.entries(copy.bindings))list.append(element('dt','',name+' · '+b.state),element('dd','',b.state==='activation-pending'?'Reward activation pending. This reward cannot be used yet. Contact the operator to recover the original activation.':b.state==='activation-failed'?'Reward activation failed. This reward is unavailable. Contact the operator for help.':JSON.stringify(b.data)));
+      list.append(element('dt','',name),element('dd','',typeof value==='number'&&Number.isFinite(value)?localization.number(value):typeof value==='object'?JSON.stringify(value):value));
+    const bindingStates={active:'bindingActive',used:'bindingUsed','activation-pending':'bindingPending','activation-failed':'bindingFailed'};
+    for(const [name,b]of Object.entries(copy.bindings))list.append(element('dt','',name+' · '+(Object.hasOwn(bindingStates,b.state)?t('inspector.'+bindingStates[b.state]):b.state)),element('dd','',b.state==='activation-pending'?t('inspector.activationPending'):b.state==='activation-failed'?t('inspector.activationFailed'):JSON.stringify(b.data)));
     details.append(list);
   }
   grid.append(card,details);node.append(grid);return node;
@@ -223,7 +225,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const removeStyles=installStyles(root,{theme,css});
   const dashboard=element('div','dc-dashboard'),nav=element('nav','dc-nav'),content=element('div','dc-content');
   const status=element('div','dc-status'),inspector=element('dialog','dc-inspector-dialog');
-  status.setAttribute('role','status');nav.setAttribute('aria-label',t('nav.features'));inspector.setAttribute('aria-label','Card details');
+  status.setAttribute('role','status');nav.setAttribute('aria-label',t('nav.features'));inspector.setAttribute('aria-label',t('inspector.dialog'));
   root.append(dashboard,nav,status,content,inspector);
   let disposed=false,model=null,openerDispose=null,viewDisposers=[],refreshGeneration=0,mutate=null,commandPrincipal=null,busy=false;
   let active=sections.includes('shop')?'shop':sections[0],viewLeave=null;
@@ -235,11 +237,11 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const closeInspector=()=>inspector.close();
   function inspect(copy) {
     if(disposed)return;
-    inspector.replaceChildren(inspectorRenderer(copy,{cardRenderer:renderer,metadataRenderer,backRenderer,onClose:closeInspector,catalog:model.catalog,
+    inspector.replaceChildren(inspectorRenderer(copy,{cardRenderer:renderer,metadataRenderer,backRenderer,onClose:closeInspector,catalog:model.catalog,localization,
       labels:{line:lineName(copy.lineId),rarity:model.catalog.rarities.find(r=>r.id===copy.rarityId)?.name}}));
     if(!inspector.open)inspector.showModal();
   }
-  function inspectTogether(copies){if(disposed||!copies.length)return;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector}));if(!inspector.open)inspector.showModal();}
+  function inspectTogether(copies){if(disposed||!copies.length)return;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector,localization}));if(!inspector.open)inspector.showModal();}
   inspector.addEventListener('click',event=>{if(event.target===inspector)inspector.close();});
   const controller=createRevealController({open:input=>mutate('openPack',{packId:input.packId}),key:client.requestKey});
   async function action(fn,{refreshAfter=true,message=t('status.saved')}={}) {
@@ -393,7 +395,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
-  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:'Collection',tradingControls:'Trading controls',admin:'Administration',marketplace:'Marketplace',rewards:'Account rewards',codes:'Code history',albums:'Albums',trades:'Trade lounge',...viewLabels};
+  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:'Trading controls',admin:'Administration',marketplace:'Marketplace',rewards:'Account rewards',codes:'Code history',albums:'Albums',trades:'Trade lounge',...viewLabels};
   function renderView() {
     if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();nav.replaceChildren();dashboard.replaceChildren();
     root.classList.toggle('dc-with-nav',navigation==='tabs');
@@ -406,7 +408,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     if(model.recoverable?.length){
       const recovery=element('section','dc-panel');recovery.setAttribute('aria-label',t('recovery.title'));recovery.append(element('h2','',t('recovery.title')),element('p','',t('recovery.description')));
       const names={purchase:'pack purchase',openPack:'pack opening',buyListing:'marketplace purchase',configureAdmin:'settings change',administerCards:'card administration',convert:'currency conversion',tradeUp:'trade-up',saveAlbum:'album change',proposeTrade:'trade offer',acceptTrade:'trade acceptance',cancelTrade:'trade cancellation',counterTrade:'counteroffer',preferences:'preferences',readNotifications:'notification update',commitImport:'catalog import',reportCodeUsage:'code usage report',createShop:'shop creation',createListing:'listing creation',cancelListing:'listing cancellation',enterRaffle:'raffle entry',openCard:'card opening',consumeBinding:'attached action'};
-      for(const intent of model.recoverable){const label=['purchase','openPack','convert'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
+      for(const intent of model.recoverable){const label=['purchase','openPack','convert','preferences','tradeUp'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
     }
     for(const name of (navigation==='tabs'?[active]:effectiveSections)){const view=typeof name==='function'?()=>name(model,{client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,localization}):views[name];if(view){const result=view();content.append(result.node??result);if(result.dispose)viewDisposers.push(result.dispose);if(result.requestLeave)viewLeave=result.requestLeave;}}
   }

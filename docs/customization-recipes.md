@@ -6,7 +6,7 @@ The reference UI uses the same exports as adopters. examples/alternate.js demons
 
 mountFramework(root,{theme,css,...}) installs scoped defaults. Supported tokens: --dc-bg, --dc-panel, --dc-text, --dc-muted, --dc-accent, --dc-border, --dc-radius, --dc-card-ratio, --dc-font. css is trusted host CSS, applied after defaults. Host selectors should stay within the supplied root's class. No global body reset or key handler is installed.
 
-Catalog card names, line names, rarity names, product names and currency names supply default display labels. To replace navigation/control labels and markup, replace the relevant view or compose your own client/controller UI. The collector wallet, pack purchase and opening workflow accepts portable localization bundles as described below. Other default surfaces currently use English.
+Catalog card names, line names, rarity names, product names and currency names supply default display labels. To replace navigation/control labels and markup, replace the relevant view or compose your own client/controller UI. The collector wallet, pack purchase, opening, collection and inspector workflows accept portable localization bundles as described below. Other default surfaces currently use English.
 
 Default precedence is default CSS < host theme/CSS < explicit card/variant asset references. Variant back overrides definition back, which overrides the CSS back. A supplied backRenderer replaces asset/default back markup. There is no automatic deep merge of arrays: sections explicitly replaces the default order.
 
@@ -201,7 +201,7 @@ The [panel schema](editor-contribution.schema.json) describes the manifest struc
 
 Host grants narrow the requested ranges. An explicit grants map enables only its listed fields; omitting the map allows x/y from -1,000,000 to 1,000,000 and rotation from -360 to 360. Existing layer locks and project policy still apply. Labels render as text, and contributions receive no live project object or credentials. Existing JavaScript `panels` callbacks remain a separate trusted host extension mechanism.
 
-## Localize the collector purchase and opening workflow
+## Localize collector workflows
 
 Generate a Spanish bundle with either `python examples/plugins/python-localization.py > collector-es.json` or `go run examples/plugins/go-localization/main.go > collector-es.json`. Each program emits the same data-only contract. Load that JSON as host configuration and validate it before mounting:
 
@@ -220,7 +220,9 @@ const view = mountFramework(root, {
 
 The host uses its normal JSON loading or bundling mechanism. Locale and messages belong to that mounted instance; different collectors on the same page can use different locales. `renderPack` and `mountOpener` also accept `locale` and `messages` when used independently. Existing explicit `viewLabels` overrides take precedence over translated navigation labels. Custom framework views receive `localization` in their context; pack/card renderer options and the opener view’s third argument also expose the instance formatter. Use it for contributed controls without changing another instance’s locale.
 
-Covered controls include wallet balances and conversion, pack browsing and allocation explanations, quote review, payment and deferred-activation notices, purchase recovery, pack lists, opening and reveal actions, and related status/accessibility text. Catalog names, artwork descriptions and server-provided error messages remain authored content. Collection, album, trade, marketplace, inspector, administration and Studio interfaces are not covered by this bundle.
+Covered controls include wallet balances and conversion, pack browsing and allocation explanations, quote review, payment and deferred-activation notices, purchase recovery, pack lists, opening and reveal actions, collection filters and selection, favorites and wishlists, trade-up controls, card inspection and comparison, and related status/accessibility text. Catalog names, artwork descriptions, custom metadata and server-provided error messages remain authored content. Album, trade, marketplace, administration and Studio interfaces are not covered by this bundle.
+
+Standalone `renderCollection` from `@digital-card/framework/collection-ui` and `render3DInspector` and `renderComparison` from `@digital-card/framework/inspector-ui` accept `locale` and `messages`, or an existing `localization` formatter. The `renderInspector` and `renderTiltInspector` helpers from `@digital-card/framework/ui` accept the same options. Inspector metadata renderers receive that formatter in their second argument, `{localization}`. Card renderer options also carry it so contributed controls can use the same locale.
 
 A bundle contains `protocol: 'digital-card-localization@1'`, a locale, and a `messages` object. Use the keys and placeholders in the [contract reference](localization.contract.json). Plain messages contain named placeholders such as `{amount}`; plural messages contain an `other` form and optional `zero`, `one`, `two`, `few` and `many` forms. Preserve each key's exact placeholder names. Missing keys use built-in English; English fallback selects English plural forms while displaying numbers in the requested locale. A translated plural key uses that locale's plural rules and falls back to its own `other` form.
 

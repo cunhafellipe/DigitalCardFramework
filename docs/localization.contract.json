@@ -561,6 +561,444 @@
     "recovery.success": {
       "placeholders": [],
       "plural": false
+    },
+    "nav.collection": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.preferences": {
+      "placeholders": [],
+      "plural": false
+    },
+    "recovery.tradeUp": {
+      "placeholders": [],
+      "plural": false
+    },
+    "finish.standard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "finish.gloss": {
+      "placeholders": [],
+      "plural": false
+    },
+    "finish.holo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "finish.foil": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.search": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.searchPlaceholder": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.line": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.allLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.rarity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.allRarities": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.finish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.allFinishes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.sort": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.newest": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.nameOrder": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.rarityOrder": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.show": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.allCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.favorites": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.duplicates": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.available": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.browse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.owned": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.catalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.includeInserts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.hideInserts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.showInserts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.discoveries": {
+      "placeholders": [
+        "count",
+        "total"
+      ],
+      "plural": false
+    },
+    "collection.totalCopies": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "collection.compare": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.clear": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.recipe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.chooseRecipe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.tradeUp": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.tradeUpSuccess": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.more": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.selected": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": false
+    },
+    "collection.matchingDefinitions": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "collection.matchingCopies": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "collection.discovered": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.notCollected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.reserved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.copyCount": {
+      "placeholders": [
+        "count",
+        "id"
+      ],
+      "plural": true
+    },
+    "collection.selectCopy": {
+      "placeholders": [
+        "id",
+        "name"
+      ],
+      "plural": false
+    },
+    "collection.compareLabel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.selectionLimit": {
+      "placeholders": [
+        "maximum"
+      ],
+      "plural": false
+    },
+    "collection.favoritesUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.favorite": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "collection.unfavorite": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "collection.onWishlist": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.addWishlist": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.wishlistUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.emptyDefinitions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "collection.emptyCopies": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.label": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.dialog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.stage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.flip": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.reset": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.rotateLeft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.rotateRight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.zoomOut": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.zoomIn": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.object": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.line": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.rarity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.finish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.edition": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.serial": {
+      "placeholders": [
+        "serial",
+        "total"
+      ],
+      "plural": false
+    },
+    "inspector.openEdition": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.openedBy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.openedAt": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.catalogPreview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.notOpened": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.copyId": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.provenance": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.codes": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "inspector.activationPending": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.activationFailed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.bindingActive": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.bindingUsed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.bindingPending": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.bindingFailed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.close": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.shared": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "inspector.missingPiece": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.empty": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.piecesMissing": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "inspector.completeScene": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.compareHint": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.sideBySide": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.assemble": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "inspector.tiltHint": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.flipCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "inspector.closeLegacy": {
+      "placeholders": [],
+      "plural": false
     }
   }
 }

@@ -38,7 +38,7 @@ try{
     const {mountFramework}=await import('/src/ui.js');
     function clientFixture(principal){
       const product=catalog.products[0],variant=catalog.variants.find(variant=>variant.id===product.slots[0].pool[0].variantId),definition=catalog.cards.find(card=>card.id===variant.cardId);
-      const cards=[true,false].map((isNew,index)=>({id:principal+'-copy-'+index,definition,variant,rarityId:variant.rarityId,serialNumber:index+1,editionTotal:100,bindings:{},isNew}));
+      const cards=[true,false].map((isNew,index)=>({id:principal+'-copy-'+index,cardId:definition.id,variantId:variant.id,lineId:definition.lineId,definition,variant,rarityId:variant.rarityId,serialNumber:index+1,editionTotal:100,createdAt:'2026-10-12T01:02:03Z',bindings:{},isNew}));
       const calls={quotes:[],purchases:[],opens:[]},packs=[],wallet={credits:10000,gems:10000};
       const client={principal:()=>principal,requestKey:()=>crypto.randomUUID(),catalog:async()=>structuredClone(catalog),me:async()=>({userId:principal,displayName:'Collector'}),wallet:async()=>structuredClone(wallet),inventory:async()=>cards,albums:async()=>[],trades:async()=>[],packs:async()=>structuredClone(packs),availability:async()=>({variants:[],products:[]}),pity:async()=>({}),
         quote:async input=>{calls.quotes.push(structuredClone(input));return {productId:product.id,quantity:input.quantity,productRevision:product.revision,catalogVersion:catalog.version,adminRevision:0,price:{currencyId:product.price.currencyId,amount:product.price.amount*input.quantity},allocationDigest:'a'.repeat(64)};},
@@ -47,13 +47,13 @@ try{
       };return {client,calls,wallet};
     }
     window.localizationFixtures=['spanish','english','literal'].map(clientFixture);
-    window.localizationMounts=window.localizationFixtures.map((fixture,index)=>mountFramework(document.querySelector('#'+['spanish','english','literal'][index]),{client:fixture.client,sections:['wallet','shop','packs'],navigation:'tabs',...(index===1?{}:{locale:bundle.locale,messages:index===2?{...bundle.messages,'shop.title':markup}:bundle.messages})}));
+    window.localizationMounts=window.localizationFixtures.map((fixture,index)=>mountFramework(document.querySelector('#'+['spanish','english','literal'][index]),{client:fixture.client,sections:['wallet','shop','packs','collection'],navigation:'tabs',...(index===1?{}:{locale:bundle.locale,messages:index===2?{...bundle.messages,'shop.title':markup}:bundle.messages}),...(index===2?{metadataRenderer(copy,{localization}){const node=document.createElement('p');node.dataset.customMetadata='true';node.textContent=localization.text('inspector.serial',{serial:copy.serialNumber,total:copy.editionTotal});window.customMetadataLocale=localization.locale;window.customMetadataCopy=copy.id;return node;}}:{})}));
     await Promise.all(window.localizationMounts.map(mount=>mount.ready));
   },{catalog,bundle,markup});
   const spanish=page.locator('#spanish'),english=page.locator('#english'),literal=page.locator('#literal');
   assert.equal(await spanish.getAttribute('lang'),'es');assert.equal(await spanish.getAttribute('dir'),'ltr');assert.equal(await english.getAttribute('lang'),'en');assert.equal(await english.getAttribute('dir'),'ltr');
   assert.equal(await literal.locator('.dc-section h2').textContent(),markup);assert.equal(await literal.locator('.dc-section h2 img').count(),0);assert.equal(await page.evaluate(()=>window.localizationExecuted),undefined);
-  assert.equal(await english.locator('nav button').count(),3,await english.textContent());
+  assert.equal(await english.locator('nav button').count(),4,await english.textContent());
   assert.equal(await english.locator('[data-view="wallet"]').textContent(),'Wallet');
   await english.locator('[data-view="wallet"]').click();assert(await english.getByRole('heading',{name:'Your wallet',exact:true}).isVisible());
   assert.equal(await spanish.locator('[data-view="wallet"]').textContent(),t('nav.wallet'));
@@ -74,9 +74,17 @@ try{
   await spanish.getByRole('button',{name:t('opener.all'),exact:true}).click();assert(await spanish.getByRole('heading',{name:t('opener.complete'),exact:true}).isVisible());assert(await spanish.getByText(t('opener.duplicate'),{exact:true}).isVisible());assert.equal(await spanish.locator('.dc-result-card').count(),2);
   await spanish.getByRole('button',{name:t('opener.replay'),exact:true}).click();assert.equal(await spanish.locator('.dc-result-card').count(),0);assert(await spanish.getByText(t('opener.card',{number:1}),{exact:true}).isVisible());
   assert.deepEqual(await page.evaluate(()=>window.localizationFixtures.map(({calls})=>({purchases:calls.purchases.length,opens:calls.opens.length}))),[{purchases:1,opens:1},{purchases:0,opens:0},{purchases:0,opens:0}]);
+  assert.equal(await spanish.locator('[data-view="collection"]').textContent(),t('nav.collection'));await spanish.locator('[data-view="collection"]').click();
+  assert(await spanish.getByRole('heading',{name:t('collection.title'),exact:true}).isVisible());assert(await spanish.getByLabel(t('collection.search'),{exact:true}).isVisible());assert(await spanish.getByText(t('collection.matchingCopies',{count:2}),{exact:true}).isVisible());
+  await spanish.locator('.dc-collection-tile .dc-card').first().click();
+  const spanishDialog=spanish.getByRole('dialog',{name:t('inspector.dialog'),exact:true});assert(await spanishDialog.isVisible());assert.equal(await spanishDialog.locator('section').getAttribute('lang'),'es');assert(await spanishDialog.getByText(t('inspector.serial',{serial:1,total:100}),{exact:true}).isVisible());
+  await spanishDialog.getByRole('button',{name:t('inspector.rotateRight'),exact:true}).click();assert.equal(await spanishDialog.locator('.dc-3d-stage').getAttribute('data-yaw'),'45');await spanishDialog.getByRole('button',{name:t('inspector.close'),exact:true}).click();
+  await english.locator('[data-view="collection"]').click();assert(await english.getByRole('heading',{name:'Your collection',exact:true}).isVisible());await english.locator('.dc-collection-tile .dc-card').first().click();const englishDialog=english.getByRole('dialog',{name:'Card details',exact:true});assert(await englishDialog.getByRole('button',{name:'Close inspection',exact:true}).isVisible());assert.equal(await englishDialog.locator('section').getAttribute('lang'),'en');await englishDialog.getByRole('button',{name:'Close inspection',exact:true}).click();
+  await literal.locator('[data-view="collection"]').click();await literal.locator('.dc-collection-tile .dc-card').first().click();assert.equal(await literal.locator('[data-custom-metadata]').textContent(),t('inspector.serial',{serial:1,total:100}));assert.deepEqual(await page.evaluate(()=>[window.customMetadataLocale,window.customMetadataCopy]),['es','literal-copy-0']);await literal.getByRole('button',{name:t('inspector.close'),exact:true}).click();
+  await english.locator('[data-view="wallet"]').click();
   await page.evaluate(()=>window.localizationMounts[0].dispose());assert.equal(await spanish.getAttribute('lang'),'de');assert.equal(await spanish.getAttribute('dir'),'rtl');assert.equal(await spanish.locator('*').count(),0);assert(await english.getByRole('heading',{name:'Your wallet',exact:true}).isVisible());
   await page.evaluate(()=>window.localizationMounts.slice(1).forEach(mount=>mount.dispose()));
   assert.equal(await english.getAttribute('lang'),null);assert.equal(await english.getAttribute('dir'),null);assert.equal(await literal.getAttribute('lang'),null);assert.equal(await literal.getAttribute('dir'),null);assert.equal(await page.locator('html').getAttribute('lang'),'en');assert.deepEqual(errors,[]);
-  await writeFile(join(output,'results.json'),JSON.stringify({engine,boundary:'Real browser UI and command persistence with deterministic supported client fixture',checks:['actual Python Spanish bundle','independent English mount','review before purchase and exact digest','packs opening reveal and replay','literal markup text','root language and direction cleanup'],pageErrors:errors},null,2));
+  await writeFile(join(output,'results.json'),JSON.stringify({engine,boundary:'Real browser UI and command persistence with deterministic supported client fixture',checks:['actual Python Spanish bundle','independent English mount','review before purchase and exact digest','packs opening reveal and replay','Spanish collection and inspector controls','independent English inspector','custom metadata localization callback','literal markup text','root language and direction cleanup'],pageErrors:errors},null,2));
   console.log('Collector localization browser workflow passed ('+engine+')');
 }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

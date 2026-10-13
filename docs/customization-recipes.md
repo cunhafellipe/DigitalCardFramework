@@ -126,7 +126,22 @@ Loads ignore obsolete recipients and late completion after disposal. A disposed 
 
 A production `HOST_MODULE` exports any of bindings, policies, limits, sessionOptions, rateLimits, rateLimiter, identityProvider or handleStatic. `sessionOptions.maxSessions` controls the bounded active session/challenge capacity. `identityProvider.begin()` returns `{url,data}` for the login challenge; `finish(callbackUrl,data)` returns a verified `{issuer,subject,displayName}`. This module is trusted server code. The default OIDC provider and public imports remain separate. `test/host.test.js` supplies an executable fixture module and exercises the real host.
 
-Portable presentation packaging has its own public contract/status. It can be integrated through the card/inspector replacement boundaries after its independent conformance gates pass.
+Portable card artwork uses the `.dcard` package contract described below.
+
+## Generate editable card artwork with Python or Go
+
+These standard-library examples write a `.dcard` archive directly, without a JavaScript authoring adapter:
+
+```sh
+python examples/plugins/python-card-art.py celestial-python.dcard
+go run examples/plugins/go-card-art/main.go celestial-go.dcard
+```
+
+Both examples describe the same layered front and back, a masked foil material, and bounded tilt motion. They include posters, asset hashes and a package integrity descriptor. Each generator is deterministic; archives from different generators need not have identical bytes.
+
+In Creator studio, select the card and optional variant you want to update and open the visual card editor. Use **Open card** to load the archive, edit a layer, then select **Capture posters**. Select **Publish**, review the proposed change, and confirm with **Publish reviewed card**. Publication requires the host's normal authoring permission. Opening or editing the package alone does not update the catalog. Newly issued cards use the published presentation; existing copies retain their pinned presentation.
+
+Use this route for portable artwork built from supported scene, material and motion primitives. It does not install custom executable renderers, editor tools or live-effect adapters. A developer can also load the archive through `importPackage` from `@digital-card/framework/presentation`.
 
 ## Album appearance
 

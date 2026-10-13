@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added Python and Go examples that generate editable layered `.dcard` artwork with front and back faces, masked foil and bounded tilt motion.
+
 - Added portable localization bundles for the collector wallet, pack purchase and opening workflow, with per-instance locales, English fallback, plural and number formatting, and Python/Go Spanish bundle examples.
 - Extended collector localization to collection filters, favorites, wishlists, trade-up controls, card inspection and comparison, including standalone renderer options.
 - Added localization for album, trade and marketplace workflows, with translated review and recovery controls.

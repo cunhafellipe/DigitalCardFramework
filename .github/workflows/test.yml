@@ -67,6 +67,9 @@ jobs:
       - run: node --test test/portable-card-art-examples.mjs
         env:
           PYTHON: python3
+      - run: node --test test/portable-program-examples.mjs
+        env:
+          PYTHON: python3
       - run: |
           go build -o "$RUNNER_TEMP/go-oidc-provider" test/fixtures/go-oidc-provider/main.go
           node test/oidc-host.test.mjs "$RUNNER_TEMP/go-oidc-provider"
@@ -103,6 +106,11 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
       - run: xvfb-run --auto-servernum node test/localization-browser.mjs test-results/localization
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: xvfb-run --auto-servernum node test/program-card-browser.mjs test-results/program-card
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

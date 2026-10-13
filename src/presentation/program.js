@@ -21,11 +21,13 @@ export function mountProgram(
     onIntent = () => {},
     maxMessagesPerSecond = 30,
     handshakeTimeout = 5000,
+    onReady = () => {},
+    onError = () => {},
   },
 ) {
   const entry = registry.get(programId);
   ensure(
-    entry?.approved && entry.url && entry.version,
+    entry?.approved === true && entry.url && entry.version,
     "PROGRAM",
     "Program not approved",
   );
@@ -36,27 +38,28 @@ export function mountProgram(
     "PROGRAM_ORIGIN",
     "Program must use a separate HTTP origin",
   );
-  let frame,
-    port,
-    timer,
+  ensure(Number.isInteger(maxMessagesPerSecond) && maxMessagesPerSecond >= 1 && maxMessagesPerSecond <= 1000 && Number.isInteger(handshakeTimeout) && handshakeTimeout >= 1 && handshakeTimeout <= 60000, "PROGRAM", "Invalid program limits");
+  let session,
     disposed = false,
     hostVisible = true,
-    lastInputs = inputs,
-    windowStart = performance.now(),
-    count = 0;
-  const send = (message) => port?.postMessage(message);
+    lastInputs = filterInputs(inputs);
+  const current = state => session === state && !disposed && hostVisible && !document.hidden;
+  const send = message => { if (session?.ready && current(session)) session.port.postMessage(message); };
   const clean = () => {
-    clearTimeout(timer);
-    port?.close();
-    port = null;
-    frame?.remove();
-    frame = null;
+    const state=session;session=null;
+    if(!state)return;
+    clearTimeout(state.timer);
+    state.port.onmessage=null;state.port.close();
+    if(!state.transferred)state.transfer.close();
+    state.frame.onload=state.frame.onerror=null;state.frame.remove();
   };
+  const fail=(state,code)=>{if(!current(state))return;clean();onError({code});};
   function start() {
-    if (disposed || frame || !hostVisible || document.hidden) return;
+    if (disposed || session || !hostVisible || document.hidden) return;
     const nonce = crypto.randomUUID(),
       channel = new MessageChannel();
-    frame = document.createElement("iframe");
+    const frame = document.createElement("iframe"),state={frame,port:channel.port1,transfer:channel.port2,nonce,ready:false,transferred:false,windowStart:performance.now(),count:0};
+    session=state;
     frame.title = entry.title ?? "Interactive card";
     frame.sandbox = "allow-scripts";
     frame.referrerPolicy = "no-referrer";
@@ -64,10 +67,8 @@ export function mountProgram(
       "camera 'none'; microphone 'none'; geolocation 'none'; autoplay 'none'; payment 'none'";
     frame.src = url.href;
     Object.assign(frame.style, { border: "0", width: "100%", height: "100%" });
-    root.append(frame);
-    port = channel.port1;
-    let ready = false;
-    port.onmessage = (event) => {
+    state.port.onmessage = (event) => {
+      if(!current(state))return;
       try {
         const message = event.data;
         ensure(
@@ -76,12 +77,12 @@ export function mountProgram(
           "Message too large",
         );
         const now = performance.now();
-        if (now - windowStart > 1000) {
-          windowStart = now;
-          count = 0;
+        if (now - state.windowStart > 1000) {
+          state.windowStart = now;
+          state.count = 0;
         }
         ensure(
-          ++count <= maxMessagesPerSecond,
+          ++state.count <= maxMessagesPerSecond,
           "PROGRAM_RATE",
           "Program message rate exceeded",
         );
@@ -91,17 +92,18 @@ export function mountProgram(
           "Invalid handshake",
         );
         if (message.type === "ready") {
-          ensure(!ready, "PROGRAM_MESSAGE", "Duplicate handshake");
-          ready = true;
-          clearTimeout(timer);
+          ensure(!state.ready, "PROGRAM_MESSAGE", "Duplicate handshake");
+          state.ready = true;
+          clearTimeout(state.timer);
           send({
             version: 1,
             type: "inputs",
-            inputs: filterInputs(lastInputs),
+            inputs: lastInputs,
           });
+          onReady();
         } else {
           ensure(
-            ready &&
+            state.ready &&
               message.type === "intent" &&
               entry.intents?.includes(message.intent),
             "PROGRAM_INTENT",
@@ -109,17 +111,21 @@ export function mountProgram(
           );
           onIntent({ intent: message.intent });
         }
-      } catch {
-        clean();
+      } catch (error) {
+        fail(state,["PROGRAM_MESSAGE","PROGRAM_RATE","PROGRAM_INTENT"].includes(error.code)?error.code:"PROGRAM_MESSAGE");
       }
     };
-    frame.onload = () =>
-      frame?.contentWindow.postMessage(
+    frame.onload = () => {
+      if(!current(state)||state.transferred)return;
+      try{frame.contentWindow.postMessage(
         { type: "dc.program.init", version: 1, nonce },
         "*",
-        [channel.port2],
-      );
-    timer = setTimeout(clean, handshakeTimeout);
+        [state.transfer],
+      );state.transferred=true;}catch{fail(state,"PROGRAM_LOAD");}
+    };
+    frame.onerror=()=>fail(state,"PROGRAM_LOAD");
+    state.timer=setTimeout(()=>fail(state,"PROGRAM_TIMEOUT"),handshakeTimeout);
+    root.append(frame);
   }
   const visibility = () => {
     if (document.hidden) clean();
@@ -129,10 +135,12 @@ export function mountProgram(
   start();
   return {
     setInputs(value) {
-      lastInputs = value;
-      send({ version: 1, type: "inputs", inputs: filterInputs(value) });
+      if(disposed)return;
+      lastInputs = filterInputs(value);
+      send({ version: 1, type: "inputs", inputs: lastInputs });
     },
     setVisibility(value) {
+      if(disposed)return;
       hostVisible = value === "visible";
       hostVisible ? start() : clean();
     },

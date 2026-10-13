@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const presentationModules=['index','card-view','integration','player','resolution','webgl','resolver','package','data','motion','validate','media','advanced-media','extensions','project','authoring','performance','album-motion','studio','studio-tools','editor-contributions','authoring-tools','stats-csv','text','font-engine','layered-import','layered-package','layered-poster','layered-worker-bundle','png-encode'];
+const presentationModules=['index','card-view','integration','player','resolution','webgl','resolver','package','data','motion','validate','media','advanced-media','extensions','project','authoring','performance','album-motion','studio','studio-tools','editor-contributions','program','program-bootstrap','program-card-view','authoring-tools','stats-csv','text','font-engine','layered-import','layered-package','layered-poster','layered-worker-bundle','png-encode'];
 const modules=['localization','album-appearance','admin-ui','admin-client','admin-styles','marketplace-ui','card-types','code-ui','ui','client','styles','atelier-styles','trade-client','trading-ui','collection-ui','studio-ui','inspector-ui','player-ui','ui-kit','card-policy','card-policy-ui','visual-studio-ui'];
 modules.push('wire-client','wire-contracts','wire-validators','contracts','card-policy-schema','admin-schema','external-purchase-contracts','read-model-contracts');
 export async function serveReference(req,res,{production=false,assetOrigins=[]}={}){

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a host-approved browser-program card renderer with bounded frame allocation, native fallback and Python/Go custom HTML/CSS examples.
+
 - Added Python and Go examples that generate editable layered `.dcard` artwork with front and back faces, masked foil and bounded tilt motion.
 
 - Added portable localization bundles for the collector wallet, pack purchase and opening workflow, with per-instance locales, English fallback, plural and number formatting, and Python/Go Spanish bundle examples.

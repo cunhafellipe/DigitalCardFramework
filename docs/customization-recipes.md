@@ -143,6 +143,48 @@ In Creator studio, select the card and optional variant you want to update and o
 
 Use this route for portable artwork built from supported scene, material and motion primitives. It does not install custom executable renderers, editor tools or live-effect adapters. A developer can also load the archive through `importPackage` from `@digital-card/framework/presentation`.
 
+## Install a reviewed browser card renderer
+
+Use `createProgramCardRenderer` to replace a card's visual structure with a host-approved browser program. The Python and Go examples generate custom HTML/CSS and use the framework's bootstrap; the browser does not execute native Python or Go.
+
+```sh
+python examples/plugins/python-program-card.py program-output
+go run examples/plugins/go-program-card/main.go program-output
+```
+
+Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
+
+Register the reviewed URL in trusted host configuration and supply the standard renderer adapter:
+
+```js
+import { mountFramework } from '@digital-card/framework/ui';
+import { createProgramCardRenderer } from '@digital-card/framework/presentation/program-card-view';
+
+const renderer = createProgramCardRenderer({
+  registry: new Map([['celestial', {
+    approved: true,
+    version: '1',
+    url: 'https://programs.example/index.html',
+    title: 'Celestial card',
+    intents: ['select'],
+  }]]),
+  cards: { dawn: 'celestial' },
+  maxActivePrograms: 4,
+});
+const view = mountFramework(root, { client, cardRenderer: renderer });
+// Disable programs while retaining ordinary card display:
+renderer.setEnabled(false);
+// When removing this host view:
+view.dispose();
+renderer.dispose();
+```
+
+`variants` supplies optional variant-ID overrides for the `cards` map. Only the host chooses and approves programs. The frame receives bounded tilt, reveal and flip inputs; it receives no copy record, private bindings or credentials. The bootstrap exposes those inputs as `--dc-tilt-x`, `--dc-tilt-y`, `--dc-reveal-progress`, `--dc-flip-progress` and `data-dc-side`. A native `button[data-dc-intent="select"]` requests the host's existing selection action when the registry grants `select`.
+
+Programs load within the active-frame limit, which defaults to four and accepts 1–32 per renderer. Each selection map accepts up to 256 entries. Program IDs are 2–100 lowercase letters, digits, dots or hyphens, beginning with a letter. Handshake timeout defaults to 5,000 ms (1–60,000); incoming messages default to 30 per second (1–1,000). `onDiagnostic` receives a fixed error code and the host-selected program ID.
+
+Disabled, unavailable or failed programs use the native renderer. Custom web-compatible logic may use the existing `connectProgram` bridge directly; this generated-asset example does not establish a WebAssembly runtime or replace pack, album or editor-tool contracts.
+
 ## Album appearance
 
 The default album renderer accepts `layout.appearance` with solid `background`, text `color`, `borderColor`, `padding`, `radius` and `borderWidth`. Colors accept hexadecimal RGB/RGBA, comma-separated integer `rgb()`/`rgba()`, or transparent/black/white/red/green/blue/gray/grey/yellow/orange/purple/pink/brown/navy/teal. RGB channels range from 0 to 255 and alpha from 0 to 1. Padding and radius range from 0 to 100 pixels; border width ranges from 0 to 12 pixels. Omitted properties use the reference styles. Appearance applies to the album grid, without changing ownership or placements.

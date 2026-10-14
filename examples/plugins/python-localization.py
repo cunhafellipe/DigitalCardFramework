@@ -9,6 +9,13 @@ import sys
 
 def main():
     messages = {
+    "trades.editRejected": "El último cambio no se guardó. Comprueba los valores y vuelve a intentarlo.",
+    "trades.error": "No se pudo completar esta acción. Revisa los detalles en el anfitrión.",
+    "trades.previous": "Página anterior",
+    "trades.closeReview": "Cerrar revisión del intercambio",
+    "trades.reviewAction": "Revisar intercambio en el anfitrión",
+    "trades.inspect": "Inspeccionar carta",
+    "trades.details": "Detalles de la oferta",
     "nav.wallet": "Cartera",
     "nav.shop": "Descubrir",
     "nav.packs": "Mis sobres",

@@ -45,7 +45,9 @@ function inventory(value) {
     if (value.owner !== null) {
         if (!record(value.owner) || typeof value.owner.id !== 'string' || value.owner.name !== undefined && typeof value.owner.name !== 'string')
             throw new Error('Invalid trade inventory owner');
-        owner = { id: value.owner.id, ...(typeof value.owner.name === 'string' ? { name: value.owner.name } : {}) };
+        if (value.owner.private !== undefined && typeof value.owner.private !== 'boolean')
+            throw new Error('Invalid trade inventory owner');
+        owner = { id: value.owner.id, ...(typeof value.owner.name === 'string' ? { name: value.owner.name } : {}), ...(typeof value.owner.private === 'boolean' ? { private: value.owner.private } : {}) };
     }
     if (value.next !== undefined && value.next !== null && typeof value.next !== 'string')
         throw new Error('Invalid trade inventory cursor');

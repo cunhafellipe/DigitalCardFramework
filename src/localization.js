@@ -1,6 +1,9 @@
 export const localizationProtocol='digital-card-localization@1';
 const freeze=value=>{for(const child of Object.values(value))if(child&&typeof child==='object')freeze(child);return Object.freeze(value);};
 export const englishMessages=freeze({
+  'trades.editRejected':'The latest edit was not saved. Check the displayed values and try again.',
+  'trades.error':'Unable to complete this trade action. Review the details in the host.',
+  'trades.previous':'Previous page','trades.closeReview':'Close trade review','trades.reviewAction':'Review trade in host','trades.inspect':'Inspect card','trades.details':'Offer details',
   'editorPanel.fallback':'The ordinary layer editor remains available.',
   'editorPanel.failure':'The editor panel is unavailable. Use the ordinary layer editor.',
   'editorPanel.review':'Review proposed layer changes',

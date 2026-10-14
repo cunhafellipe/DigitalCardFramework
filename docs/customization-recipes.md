@@ -600,3 +600,47 @@ The program can request search, paging, product selection, quantity changes and 
 The [shop display schema](shop-display.schema.json) defines the versioned projection. Snapshots expose opaque product handles and approved display data. They do not expose catalog identifiers, wallet balances, quote tokens, command keys, receipts or credentials. Rate disclosures distinguish independent base rates from finite-ticket draws and retain the applicable conditional, code-supply and feasibility explanations. A preview grant permits bounded raster artwork.
 
 The host rejects stale or busy actions and invalidates review when its account, model or program session changes. Disabling the view with `shop.setEnabled(false)` restores the native shop. Program failure retains native fallback, and application recovery controls remain available for pending purchases. Dispose both the application and adapter when removing them.
+
+## Replace the complete trading view with a portable program
+
+A portable trading view presents partner search, permitted inventories, offer trays, currencies, messages and existing offers. The parent retains the trade draft, policy review and authenticated commands. Generate either example interface:
+
+```sh
+python examples/plugins/python-trading-view.py trading-output
+go run examples/plugins/go-trading-view/main.go trading-output
+```
+
+Each generator writes `index.html` and `trading.css`. Serve the generated files from a reviewed, credential-free program origin. The generated HTML loads `/program-trading-bootstrap.js`; serve the public bootstrap at that path and its relative module dependencies alongside it. Apply the separate-origin headers described above.
+
+Register the view with an explicit display grant:
+
+```js
+import {createProgramTradingView} from '@digital-card/framework/presentation/program-trading-view';
+import {tradingIntents} from '@digital-card/framework/presentation/trading-display';
+import {mountFramework} from '@digital-card/framework/ui';
+
+const fields = ['participantName', 'cardName', 'line', 'rarity', 'eligibility',
+  'currency', 'message', 'offerStatus', 'dates', 'preview'];
+const trades = createProgramTradingView({
+  registry: new Map([['trading.example', {
+    approved: true,
+    version: '1.0.0',
+    url: 'https://programs.example/trading/index.html',
+    intents: [...tradingIntents],
+    tradingDisplay: {profile: 'dc.trading-display@1', fields},
+  }]]),
+  programId: 'trading.example',
+  displayFields: fields,
+});
+const app = mountFramework(root, {client, views: {trades}});
+// When removing the application:
+app.dispose();
+trades.dispose();
+```
+
+The [trading display schema](trading-display.schema.json) defines the projection. Inventory, directory and currency windows contain at most 48 entries; offer windows contain at most 24. Each tray retains up to 100 selected cards, including cards outside the visible inventory window. A snapshot admits at most 48 raster previews within the shared byte and pixel budgets.
+Display grants control participant names, card names, line, rarity, eligibility explanations, currencies, messages, offer status, dates and raster previews. The program receives opaque handles and bounded windows. It does not receive account/copy/trade identifiers, inventory versions, offer digests, command keys, credentials or private card bindings. A private partner inventory can still support currency-only offers when the host permits currency trading.
+
+The program edits a parent-owned draft and requests native review. Only native confirmation can authorize sending an offer or counteroffer, accepting, declining or cancelling. Counteroffers preserve the original offer digest and swap the existing offer sides. Changes to the draft invalidate prior review; policy review must remain valid when the command is built. Existing application recovery controls retain the original command after an uncertain response.
+
+Disabling trading prevents new composition, acceptance and counteroffers while retaining outstanding offers and permitted cancellation/decline. Disabling the portable adapter restores native controls. Account, model and program-session changes invalidate stale actions and confirmations; disposing the adapter releases its sessions and rendering resources.

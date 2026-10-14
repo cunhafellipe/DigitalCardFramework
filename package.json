@@ -42,6 +42,10 @@
       "default": "./src/trade-client.js"
     },
     "./trading-ui": "./src/trading-ui.js",
+    "./trading-session": "./src/trading-session.js",
+    "./presentation/trading-display": {"types":"./src/presentation/trading-display.d.ts","default":"./src/presentation/trading-display.js"},
+    "./presentation/program-trading-view": {"types":"./src/presentation/program-trading-view.d.ts","default":"./src/presentation/program-trading-view.js"},
+    "./presentation/program-trading-bootstrap": {"types":"./src/presentation/program-trading-bootstrap.d.ts","default":"./src/presentation/program-trading-bootstrap.js"},
     "./collection-ui": "./src/collection-ui.js",
     "./shop-ui": "./src/shop-ui.js",
     "./presentation/shop-display": {"types":"./src/presentation/shop-display.d.ts","default":"./src/presentation/shop-display.js"},

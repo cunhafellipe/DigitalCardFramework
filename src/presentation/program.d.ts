@@ -1,3 +1,4 @@
+import type {TradingDisplayGrant,TradingDisplaySnapshot,TradingIntentEvent} from './trading-display.js';
 import type {ShopDisplayGrant,ShopDisplaySnapshot,ShopIntentEvent} from './shop-display.js';
 import type {AlbumDisplayGrant, AlbumDisplaySnapshot} from './album-display.js';
 import type {OpenerDisplayGrant, OpenerDisplaySnapshot, OpenerIntent, OpenerIntentEvent} from './opener-display.js';
@@ -18,6 +19,7 @@ export interface ProgramRegistryEntry {
   editorDisplay?: EditorDisplayGrant;
   collectionDisplay?:CollectionDisplayGrant;
   shopDisplay?:ShopDisplayGrant;
+  tradingDisplay?:TradingDisplayGrant;
 }
 export type ProgramRegistry = ReadonlyMap<string, ProgramRegistryEntry>;
 export interface ProgramMountOptions {
@@ -38,11 +40,14 @@ export interface ProgramMountOptions {
   onSessionEnd?():void;
   collectionDisplay?:CollectionDisplaySnapshot;
   onCollectionIntent?(event:CollectionIntentEvent):void;
+  tradingDisplay?:TradingDisplaySnapshot;
+  onTradingIntent?(event:TradingIntentEvent):void;
   shopDisplay?:ShopDisplaySnapshot;
   onShopIntent?(event:ShopIntentEvent):void;
 }
 export interface MountedProgram {
   setCollectionDisplay(snapshot:CollectionDisplaySnapshot):void;
+  setTradingDisplay(snapshot:TradingDisplaySnapshot):void;
   setShopDisplay(snapshot:ShopDisplaySnapshot):void;
   setInputs(inputs: ProgramInputs): void;
   setAlbumDisplay(snapshot: AlbumDisplaySnapshot): void;
@@ -53,8 +58,9 @@ export interface MountedProgram {
 }
 export declare function programHeaders(assetOrigin: string): Record<string, string>;
 export declare function mountProgram(root: HTMLElement, options: ProgramMountOptions): MountedProgram;
-export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void;onShopDisplay?(snapshot:ShopDisplaySnapshot):void}): Promise<{
+export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void;onShopDisplay?(snapshot:ShopDisplaySnapshot):void;onTradingDisplay?(snapshot:TradingDisplaySnapshot):void}): Promise<{
   collectionIntent(event:CollectionIntentEvent):void;
+  tradingIntent(event:TradingIntentEvent):void;
   shopIntent(event:ShopIntentEvent):void;
   editorProposal(snapshotId:string,revision:number,patch:EditorProposal['patch']):void;
   intent(name: string): void;

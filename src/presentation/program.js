@@ -1,3 +1,4 @@
+import {tradingDisplayProfile,validateTradingDisplay,validateTradingIntent,tradingIntents} from './trading-display.js';
 import { ensure, canonical, clamp } from "./data.js";
 import {albumDisplayProfile,validateAlbumDisplay} from './album-display.js';
 import {openerDisplayProfile,validateOpenerDisplay} from './opener-display.js';
@@ -37,6 +38,8 @@ export function mountProgram(
     onSessionEnd = () => {},
     collectionDisplay,
     onCollectionIntent = () => {},
+    tradingDisplay,
+    onTradingIntent = () => {},
     shopDisplay,
     onShopIntent = () => {},
   },
@@ -69,6 +72,9 @@ export function mountProgram(
   let lastCollection;
   const prepareCollection=value=>{const snapshot=validateCollectionDisplay(value);ensure(entry.collectionDisplay?.profile===collectionDisplayProfile&&Array.isArray(entry.collectionDisplay.fields)&&snapshot.fields.every(field=>entry.collectionDisplay.fields.includes(field)),'PROGRAM_CONTENT','Collection display is not granted');return snapshot;};
   if(collectionDisplay!==undefined)lastCollection=prepareCollection(collectionDisplay);
+  let lastTrading;
+  const prepareTrading=value=>{const snapshot=validateTradingDisplay(value);ensure(entry.tradingDisplay?.profile===tradingDisplayProfile&&Array.isArray(entry.tradingDisplay.fields)&&snapshot.fields.every(field=>entry.tradingDisplay.fields.includes(field)),'PROGRAM_CONTENT','Trading display is not granted');return snapshot;};
+  if(tradingDisplay!==undefined)lastTrading=prepareTrading(tradingDisplay);
   let lastShop;
   const prepareShop=value=>{const snapshot=validateShopDisplay(value);ensure(entry.shopDisplay?.profile===shopDisplayProfile&&Array.isArray(entry.shopDisplay.fields)&&snapshot.fields.every(field=>entry.shopDisplay.fields.includes(field)),'PROGRAM_CONTENT','Shop display is not granted');return snapshot;};
   if(shopDisplay!==undefined)lastShop=prepareShop(shopDisplay);
@@ -134,6 +140,7 @@ export function mountProgram(
           if(lastOpener)send({version:1,type:'content',content:lastOpener});
           if(lastEditor)send({version:1,type:'content',content:lastEditor});
           if(lastCollection)send({version:1,type:'content',content:lastCollection});
+          if(lastTrading)send({version:1,type:'content',content:lastTrading});
           if(lastShop)send({version:1,type:'content',content:lastShop});
           onReady();
         } else {
@@ -144,7 +151,13 @@ export function mountProgram(
             "PROGRAM_INTENT",
             "Intent not allowed",
           );
-          if(shopIntents.includes(message.intent)){
+          if(tradingIntents.includes(message.intent)){
+            ensure(lastTrading,'PROGRAM_CONTENT','Trading display is required');
+            const {version,type,nonce,...event}=message;
+            const intent=validateTradingIntent(event,lastTrading);
+            if(intent.snapshotId!==lastTrading.snapshotId)return;
+            onTradingIntent(intent);
+          }else if(shopIntents.includes(message.intent)){
             ensure(lastShop,'PROGRAM_CONTENT','Shop display is required');
             const {version,type,nonce,...event}=message;
             const intent=validateShopIntent(event,lastShop);
@@ -193,6 +206,7 @@ export function mountProgram(
   document.addEventListener("visibilitychange", visibility);
   start();
   return {
+    setTradingDisplay(value){if(disposed)return;lastTrading=prepareTrading(value);send({version:1,type:'content',content:lastTrading});},
     setShopDisplay(value){if(disposed)return;lastShop=prepareShop(value);send({version:1,type:'content',content:lastShop});},
     setCollectionDisplay(value){if(disposed)return;lastCollection=prepareCollection(value);send({version:1,type:'content',content:lastCollection});},
     setEditorDisplay(value){if(disposed)return;lastEditor=prepareEditor(value);send({version:1,type:'content',content:lastEditor});},
@@ -227,7 +241,7 @@ function filterInputs(input) {
 }
 
 /** Called by the reviewed program entrypoint; source + transferred port authenticate the parent. */
-export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{},onEditorDisplay=()=>{},onCollectionDisplay=()=>{},onShopDisplay=()=>{} } = {}) {
+export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{},onEditorDisplay=()=>{},onCollectionDisplay=()=>{},onShopDisplay=()=>{},onTradingDisplay=()=>{} } = {}) {
   return new Promise((resolve) => {
     const listener = (event) => {
       if (
@@ -247,10 +261,11 @@ export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpe
         if(disposed)return;
         if (e.data?.version === 1 && e.data.type === "inputs")
           onInputs(filterInputs(e.data.inputs ?? {}));
-        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===shopDisplayProfile)onShopDisplay(validateShopDisplay(e.data.content));else if(e.data.content?.profile===collectionDisplayProfile)onCollectionDisplay(validateCollectionDisplay(e.data.content));else if(e.data.content?.profile===editorDisplayProfile)onEditorDisplay(validateEditorDisplay(e.data.content));else if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
+        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===tradingDisplayProfile)onTradingDisplay(validateTradingDisplay(e.data.content));else if(e.data.content?.profile===shopDisplayProfile)onShopDisplay(validateShopDisplay(e.data.content));else if(e.data.content?.profile===collectionDisplayProfile)onCollectionDisplay(validateCollectionDisplay(e.data.content));else if(e.data.content?.profile===editorDisplayProfile)onEditorDisplay(validateEditorDisplay(e.data.content));else if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
       };
       port.postMessage({ version: 1, type: "ready", nonce });
       resolve({
+        tradingIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateTradingIntent(event)});},
         shopIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateShopIntent(event)});},
         collectionIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateCollectionIntent(event)});},
         editorProposal(snapshotId,revision,patch){if(!disposed)port.postMessage({version:1,type:'intent',nonce,intent:'editor-propose',snapshotId,revision,patch});},

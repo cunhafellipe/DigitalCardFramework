@@ -12,6 +12,34 @@
     "other"
   ],
   "keys": {
+    "trades.editRejected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.error": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.previous": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.closeReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.reviewAction": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.inspect": {
+      "placeholders": [],
+      "plural": false
+    },
+    "trades.details": {
+      "placeholders": [],
+      "plural": false
+    },
     "editorPanel.fallback": {
       "placeholders": [],
       "plural": false

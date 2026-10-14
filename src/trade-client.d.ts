@@ -15,6 +15,7 @@ export interface TradeDraftCopy {
 export interface TradeOwner {
     id: string;
     name?: string;
+    private?: boolean;
 }
 export interface TradeInventory {
     items: TradeDraftCopy[];

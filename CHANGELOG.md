@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Describe checked binding, card inspection, account history, public album, code inventory, action job, availability and trading responses while retaining private-data exclusions.
+- Add TypeScript declarations for card behavior, permission helpers, PNG encoding and album motion.
+
 - Restore original raffle entry and draw receipts on same-key retries without changing raffle state.
 - Define checked shop, commerce settings and raffle response contracts, including viewer-specific status and nullable claim details.
 

@@ -12,6 +12,10 @@ import { ensure, sha256 } from "./data.js";
 const workerPath = fileURLToPath(new URL("./import-worker.js", import.meta.url));
 const helperPath = fileURLToPath(new URL("./import-job.ps1", import.meta.url));
 const scrubEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "SYSTEMROOT", "WINDIR"].includes(key.toUpperCase())));
+const launcherEnvironment = (scratch) => {
+  const keys = ["PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "APPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "PROGRAMDATA", "PSMODULEPATH", "DOTNET_ROOT"];
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => keys.includes(key.toUpperCase()))), TEMP: scratch, TMP: scratch };
+};
 const failure = (message) => Object.assign(new Error(message), { code: "IMPORT_ISOLATION" });
 const helperCommand = (values) => {
   const quote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
@@ -37,7 +41,7 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
     assemblyPath = path.join(assemblyDirectory, "launcher.dll");
     try {
       await new Promise((resolve, reject) => {
-        const compiler = spawn(powershellPath, helperCommand(["--compile", assemblyPath]), { env: { ...scrubEnvironment(), TEMP: assemblyDirectory, TMP: assemblyDirectory }, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+        const compiler = spawn(powershellPath, helperCommand(["--compile", assemblyPath]), { env: launcherEnvironment(assemblyDirectory), windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
         let expired = false, diagnostic = "", cleanup;
         const timer = setTimeout(() => {
           expired = true;
@@ -106,7 +110,7 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
           child = spawn("/bin/sh", ["-c", 'printf "%s" "$$" > "$1/cgroup.procs" || exit 125; exec "$2" --max-old-space-size="$4" "$3" --stdio', "import-gate", group, process.execPath, workerPath, String(maxHeapMb)], { env: scrubEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
         } else {
           ensure(await readFile(assemblyPath).then((bytes) => sha256(bytes)) === assemblyDigest, "IMPORT_ISOLATION", "Import launcher assembly changed");
-          child = spawn(powershellPath, helperCommand([process.execPath, workerPath, memoryBytes, aggregateMemoryBytes, scopeName, maxHeapMb, assemblyPath]), { env: scrubEnvironment(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+          child = spawn(powershellPath, helperCommand([process.execPath, workerPath, memoryBytes, aggregateMemoryBytes, scopeName, maxHeapMb, assemblyPath]), { env: launcherEnvironment(assemblyDirectory), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
         }
         return await new Promise((resolve, reject) => {
           let output = "", metrics = "", size = 0, outcomeError;
@@ -197,7 +201,8 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
   // A worker must complete a control-only probe before the store accepts uploads.
   try {
     ensure(Date.now() < startupDeadline, "IMPORT_ISOLATION", "Import isolation startup deadline exceeded");
-    await run("probe", null, { timeoutMs: Math.max(1, startupDeadline - Date.now()) });
+    const probe = await run("probe", null, { timeoutMs: Math.max(1, startupDeadline - Date.now()) });
+    if (backend === "windows-job") ensure(Array.isArray(probe.environmentKeys) && probe.environmentKeys.every((key) => ["PATH", "SYSTEMROOT", "WINDIR"].includes(key.toUpperCase())), "IMPORT_ISOLATION", "Import worker environment was not scrubbed");
   }
   catch (error) { await executor.close(); throw Object.assign(failure("Import isolation startup probe failed: " + error.message), { diagnostics: error.diagnostics }); }
   return executor;

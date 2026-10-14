@@ -4,7 +4,7 @@ import { buildReport, publishPackage } from "./compiler.js";
 async function execute(data) {
   let result;
   try {
-    if (data.operation === "probe") return { ok: true };
+    if (data.operation === "probe") return { ok: true, environmentKeys: Object.keys(process.env).sort() };
     const limits = { ...DEFAULT_LIMITS, ...data.limits };
     if ((await stat(data.path)).size > limits.compressed)
       throw Object.assign(new Error("Upload too large"), { code: "LIMIT" });

@@ -77,4 +77,10 @@ if ($args[0] -eq '--compile') {
 }
 Add-Type -Path $args[6]
 [Console]::Error.WriteLine('DC_IMPORT_STAGE:assembly-loaded')
+# Runtime configuration belongs to the launcher, not the data worker.
+foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process).Keys) {
+  if (@('PATH', 'SYSTEMROOT', 'WINDIR') -notcontains ([string]$key).ToUpperInvariant()) {
+    [Environment]::SetEnvironmentVariable([string]$key, $null, [EnvironmentVariableTarget]::Process)
+  }
+}
 exit [ImportJob]::Run($args[0], $args[1], [UInt64]$args[2], [UInt64]$args[3], $args[4], $args[5])

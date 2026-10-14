@@ -12,3 +12,16 @@ void group;void legacy;void unbounded;void falseFlag;void text;
 // @ts-expect-error Group clipping requires isolation.
 const unisolatedMask:GroupLayer={id:'invalid',type:'group',children:[],mask:{asset:'mask'}};
 void unisolatedMask;
+
+import {createAlbumMotion} from '@digital-card/framework/presentation/album-motion';
+const motion=createAlbumMotion({members:[{id:'first',motion:{syncGroup:'pair'}},{id:'second',motion:{syncGroup:'pair'}}],defaults:{maxRotation:[8,12]},onChange(id,state){const name:string=id,rotation:number=state.rotation.x;void [name,rotation];}});
+motion.setInputs('first',{tilt:{x:.5},host:{'host.progress':1}});
+motion.setAll({tilt:{x:0,y:0}});
+const rotation:number|undefined=motion.snapshot().first?.rotation.y;
+// @ts-expect-error motion inputs require numeric tilt values
+motion.setInputs('first',{tilt:{x:'left'}});
+// @ts-expect-error maximum rotation has exactly two axes
+createAlbumMotion({members:[],defaults:{maxRotation:[8]}});
+// @ts-expect-error every member needs a stable ID
+createAlbumMotion({members:[{motion:{enabled:true}}]});
+motion.dispose();void rotation;

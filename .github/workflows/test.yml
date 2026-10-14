@@ -82,6 +82,9 @@ jobs:
       - run: node --test test/live-editor-panel-examples.mjs
         env:
           PYTHON: python3
+      - run: node --test test/access-provider-examples.mjs
+        env:
+          PYTHON: python3
       - run: |
           go build -o "$RUNNER_TEMP/go-oidc-provider" test/fixtures/go-oidc-provider/main.go
           node test/oidc-host.test.mjs "$RUNNER_TEMP/go-oidc-provider"

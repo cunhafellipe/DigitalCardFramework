@@ -34,7 +34,7 @@ Run `node --env-file=.env host/server.js` behind your HTTPS reverse proxy. Nativ
 
 ## Identity and HTTP boundary
 
-OIDC is the supported language-independent sign-in route. Configure `OIDC_ISSUER`, `OIDC_CLIENT_ID` and the client secret for a registered application with the exact `SITE_ORIGIN/auth/callback` redirect URI. A provider written in Go, Python or another language connects through OIDC discovery and authorization-code endpoints; it does not need a JavaScript `identityProvider` adapter. Provider role claims do not grant framework permissions. Operator access remains under the host's local access configuration.
+OIDC is the supported language-independent sign-in route. Configure `OIDC_ISSUER`, `OIDC_CLIENT_ID` and the client secret for a registered application with the exact `SITE_ORIGIN/auth/callback` redirect URI. A provider written in Go, Python or another language connects through OIDC discovery and authorization-code endpoints; it does not need a JavaScript `identityProvider` adapter. Provider role claims do not grant framework permissions. Operator access remains under the host's access configuration, including explicit grants for an optional remote access provider.
 
 The default maintained OIDC client verifies authorization-code flow with PKCE, state, nonce and issuer. Stable issuer/subject pairs identify collectors. Sessions use opaque random tokens, hashed lookup keys and encrypted payloads in SQLite. Production cookies are `__Host-`, Secure, HttpOnly and SameSite=Lax. Logout revokes the durable session. Login challenges expire and are consumed once. Ordinary session lookups use read-only queries; expired rows are rejected immediately and cleaned during later session allocation. Consuming a login challenge still uses an atomic write transaction. At most 20,000 active sessions/challenges are retained by default; allocation cleans expired rows and enforces capacity atomically. Trusted `sessionOptions.maxSessions` can adjust the cap through `HOST_MODULE`.
 
@@ -123,7 +123,7 @@ Trusted `workerOptions` may set `maxPendingRequests` (default 128), `maxPendingB
 
 The host module is loaded separately in the HTTP process and framework worker. Framework binding, policy and action callbacks execute in the worker; identity, currency/code provider gateways and static handlers execute on the HTTP side. Module-local state is not shared between them. The worker accepts named framework exports or a `createFrameworkOptions(options)` factory; a factory supplies the framework configuration in place of named exports. Its limits merge with the production defaults. Startup validates bindings and code-vault availability against the actual worker configuration. Keep import-time initialization safe in both contexts. Static handlers receive an optional third argument `{framework}` containing the asynchronous service.
 
-An ESM `HOST_MODULE` may export `bindings`, `policies`, `limits`, `sessionOptions`, `rateLimits`, `rateLimiter`, `identityProvider`, `resolveAccess`, `currencyProviders`, `presentationOptions` and `handleStatic`. These are trusted code, not imported card data. Public contracts and examples are in [customization recipes](customization-recipes.md#version-02-extension-contracts). Replace identity, storage or presentation independently. External wallets, payment processing, game reward redemption and webhook delivery require host adapters with their own transaction and recovery protocols.
+An ESM `HOST_MODULE` may export `bindings`, `policies`, `limits`, `sessionOptions`, `rateLimits`, `rateLimiter`, `identityProvider`, `resolveAccess`, `remoteAccess`, `currencyProviders`, `presentationOptions` and `handleStatic`. These are trusted code, not imported card data. Public contracts and examples are in [customization recipes](customization-recipes.md#version-02-extension-contracts). Replace identity, storage or presentation independently. External wallets, payment processing, game reward redemption and webhook delivery require host adapters with their own transaction and recovery protocols.
 
 The executable production entrypoint, real OIDC verification fixtures, encrypted sessions, origin/principal controls, quotas, import CLI, migration and backup/restore are tested. The Linux container build passed CI. A live issuer, DNS/TLS, production secrets and site deployment require operational configuration; no live production deployment is claimed by this release.
 
@@ -342,3 +342,41 @@ The solver admits batches within deterministic work and memory limits before pro
 If an external debit has already been recorded, an infeasible layout or runtime `ALLOCATION_SOLVER_LIMIT` enters the durable `refund_required` lifecycle. Reconcile and refund at the original payment source, then confirm compensation through the external purchase API. Compensation releases the active attempt while retaining its unused entropy; it does not automatically retry fulfillment or draw a new outcome.
 
 The maximum is 2,000 potential draws per batch. Supply-only matching must also fit a 50-million-edge-visit bound. Ambiguous interacting rules allow at most 64 potential draws, with a conservative admission estimate capped at 20,000 states, 200,000 transitions and a 16 MiB serialized memo-key budget. This budget is not a total process-memory limit. These are ceilings, not guaranteed batch sizes: for example, 20 two-choice draws with duplicate rules can exceed the search bound. Forced-choice batches use a separate iterative path, while existing code-attachment and storage limits still apply. Check the intended product and quantity during configuration; a mathematically feasible product can remain outside this supported domain.
+
+
+## Delegate access decisions to a service
+
+Keep OIDC for sign-in and use an optional access provider when your permissions are managed by a service in another language. Export `remoteAccess` from your trusted `HOST_MODULE`:
+
+```js
+export const remoteAccess = {
+  providerId: 'example.access',
+  url: 'https://access.example.test/access-provider',
+  token: process.env.ACCESS_PROVIDER_TOKEN,
+  allowRoles: ['player'],
+  allowPermissions: ['art.import', 'art.review'],
+};
+```
+
+Store the service credential in your deployment's secret configuration. The endpoint receives only the authenticated session's issuer, subject and framework user ID, plus request identity and lifetime fields. It does not receive browser cookies, session secrets or OIDC credentials. Do not configure both `remoteAccess` and `resolveAccess`; the host rejects that ambiguity.
+
+The host checks the provider on each authenticated request. A decision must echo the exact request identity and remain within the configured role and permission limits. Unknown permissions, excessive grants, malformed responses, service failures and disabled providers deny access. There is no stale access cache or fallback to administrator-subject configuration when a remote decision fails. Granting the `admin` role requires an explicit ceiling containing every framework permission because that role confers all permissions.
+
+The [access-provider schema](access-provider.schema.json) defines the versioned request and response. Successful HTTP 200 responses use `allowed` with `role` and `permissions`, or `denied`/`disabled` without those fields. Services authenticate the bearer credential and enforce the request deadline. Errors for valid request identities carry the correlated request fields and a supported error code; malformed requests can be rejected without echoing their fields. Errors must not disclose diagnostic secrets.
+
+The independent Python and Go examples read an operator-owned JSON identity map and default-deny missing identities. Their file is reread for each request so permission changes take effect without restarting the example service. See the example source for its record format and required `ACCESS_PROVIDER_TOKEN` configuration:
+
+```sh
+python examples/plugins/python-access-provider.py access-records.json 8091
+go run examples/plugins/go-access-provider/main.go access-records.json 8091
+```
+
+For example, `access-records.json` can contain:
+
+```json
+{"identities":[{"issuer":"https://issuer.example","subject":"collector","userId":"collector","status":"allowed","role":"player","permissions":["art.import"]}]}
+```
+
+Use the issuer, subject and framework user ID from your actual authenticated account. A `denied` or `disabled` record contains those three identity fields and its `status`, with no role or permission fields.
+
+The example loopback HTTP listener is for local integration. Production endpoints require HTTPS; explicit `allowLoopbackHttp: true` is available only for loopback testing. Existing hosts without a remote provider retain their default access configuration.

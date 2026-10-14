@@ -46,9 +46,27 @@ export function createAuthHost({framework,sessions,provider,origin,adminSubjects
   if(secure&&new URL(origin).protocol!=='https:')throw new Error('Authentication requires an HTTPS origin');
   const sessionName=secure?'__Host-dc_session':'dc_session',flowName=secure?'__Host-dc_flow':'dc_flow';
   const admins=new Set(adminSubjects),setCookie=(name,value,maxAge)=>`${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure?'; Secure':''}`;
-  const identity=session=>{if(!session)return null;const access=resolveAccess?resolveAccess({issuer:session.issuer,subject:session.subject,userId:session.userId}):{role:admins.has(session.subject)?'admin':'player'};if(!access||access.disabled||access.then)return null;return {userId:session.userId,role:access.role==='admin'?'admin':'player',permissions:Array.isArray(access.permissions)?access.permissions.filter(p=>typeof p==='string'):[]};};
+  const identity=(session,signal)=>{
+    if(!session||signal.aborted)return null;
+    try{
+      const verified=Object.freeze({issuer:session.issuer,subject:session.subject,userId:session.userId});
+      const principal=access=>!access||access.disabled||signal.aborted?null:{userId:verified.userId,role:access.role==='admin'?'admin':'player',permissions:Array.isArray(access.permissions)?access.permissions.filter(p=>typeof p==='string'):[]};
+      const access=resolveAccess?resolveAccess(verified,{signal}):{role:admins.has(session.subject)?'admin':'player'};
+      return access&&typeof access.then==='function'?Promise.resolve(access).then(principal).catch(()=>null):principal(access);
+    }catch{return null;}
+  };
   return {
-    resolveIdentity(request){const session=sessions.get(cookie(request,sessionName),'session');return session&&typeof session.then==='function'?Promise.resolve(session).then(identity):identity(session);},
+    resolveIdentity(request){
+      const controller=new AbortController(),abort=()=>controller.abort();
+      request.once?.('aborted',abort);request.socket?.once?.('close',abort);if(request.aborted)abort();
+      const cleanup=()=>{request.removeListener?.('aborted',abort);request.socket?.removeListener?.('close',abort);};
+      try{
+        const session=sessions.get(cookie(request,sessionName),'session');
+        const result=session&&typeof session.then==='function'?Promise.resolve(session).then(value=>identity(value,controller.signal)):identity(session,controller.signal);
+        if(result&&typeof result.then==='function')return Promise.resolve(result).finally(cleanup);
+        cleanup();return result;
+      }catch(error){cleanup();throw error;}
+    },
     async handle(req,res){const url=new URL(req.url,origin);if(!url.pathname.startsWith('/auth/'))return false;
       res.setHeader('Cache-Control','no-store');
       try{

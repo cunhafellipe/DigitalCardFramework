@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added authenticated remote access decisions with explicit role/permission ceilings, fail-closed revocation and independent Python/Go providers.
+
 - Added reviewed live Studio panels with scoped content/style proposals, native review and Undo/Redo, and Python/Go browser-asset examples.
 
 - Added per-instance Studio localization across editing tools, artwork publishing and card-policy controls.

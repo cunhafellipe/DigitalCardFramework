@@ -119,7 +119,7 @@ test('authentication awaits each asynchronous session mutation before cookies or
   }
 });
 
-test('asynchronous session identity lookup reevaluates authority and preserves denial of async access',async()=>{
+test('asynchronous session identity lookup reevaluates authority and awaits async access',async()=>{
   const verified={userId:'collector',issuer:'https://issuer.test',subject:'operator'};
   const sessions={async get(){return verified;}};let disabled=false,lookups=0;
   const host=createAuthHost({sessions,origin:'https://cards.test',resolveAccess(identity){lookups++;assert.deepEqual(identity,verified);return {role:'admin',permissions:['art.import',1],disabled};}});
@@ -127,7 +127,9 @@ test('asynchronous session identity lookup reevaluates authority and preserves d
   assert.deepEqual(await host.resolveIdentity(request),{userId:'collector',role:'admin',permissions:['art.import']});
   disabled=true;assert.equal(await host.resolveIdentity(request),null);assert.equal(lookups,2);
   for(const adapter of [sessions,{get(){return verified;}}]){
-    const denied=createAuthHost({sessions:adapter,origin:'https://cards.test',resolveAccess:async()=>({role:'admin'})});
+    const asynchronous=createAuthHost({sessions:adapter,origin:'https://cards.test',resolveAccess:async()=>({role:'admin'})});
+    assert.deepEqual(await asynchronous.resolveIdentity(request),{userId:'collector',role:'admin',permissions:[]});
+    const denied=createAuthHost({sessions:adapter,origin:'https://cards.test',resolveAccess:async()=>{throw new Error('Access unavailable');}});
     assert.equal(await denied.resolveIdentity(request),null);
   }
   sessions.get=async()=>null;assert.equal(await host.resolveIdentity(request),null);assert.equal(lookups,2);

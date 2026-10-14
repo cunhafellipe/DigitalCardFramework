@@ -1,6 +1,12 @@
 export const localizationProtocol='digital-card-localization@1';
 const freeze=value=>{for(const child of Object.values(value))if(child&&typeof child==='object')freeze(child);return Object.freeze(value);};
 export const englishMessages=freeze({
+  'editorPanel.fallback':'The ordinary layer editor remains available.',
+  'editorPanel.failure':'The editor panel is unavailable. Use the ordinary layer editor.',
+  'editorPanel.review':'Review proposed layer changes',
+  'editorPanel.apply':'Apply layer changes',
+  'editorPanel.cancel':'Cancel layer changes',
+  'editorPanel.rejected':'The layer changes could not be applied. Review a fresh proposal.',
   'nav.wallet':'Wallet','nav.shop':'Discover','nav.packs':'My packs','nav.features':'Framework features',
   'account.heading':'YOUR ACCOUNT','account.you':'You','account.cards':{one:'{count} card',other:'{count} cards'},'account.sealedPacks':{one:'{count} sealed pack',other:'{count} sealed packs'},
   'status.working':'Working…','status.saved':'Changes saved.',

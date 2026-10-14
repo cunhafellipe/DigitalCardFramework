@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/editor-selection/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "snapshotId",
+    "revision",
+    "side",
+    "nodeType",
+    "locked",
+    "fields",
+    "values"
+  ],
+  "properties": {
+    "profile": {
+      "const": "dc.editor-selection@1"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[0-9a-f-]{36}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "side": {
+      "enum": [
+        "front",
+        "back"
+      ]
+    },
+    "nodeType": {
+      "enum": [
+        "image",
+        "video",
+        "audio",
+        "group",
+        "text",
+        "adapter"
+      ]
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 15,
+      "items": {
+        "enum": [
+          "x",
+          "y",
+          "rotation",
+          "width",
+          "height",
+          "opacity",
+          "brightness",
+          "saturation",
+          "typography.size",
+          "typography.lineHeight",
+          "typography.letterSpacing",
+          "typography.align",
+          "blend",
+          "text",
+          "color"
+        ]
+      }
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "y": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 20000
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 20000
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "brightness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "saturation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "typography.size": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "typography.lineHeight": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 5
+        },
+        "typography.letterSpacing": {
+          "type": "number",
+          "minimum": -100,
+          "maximum": 100
+        },
+        "typography.align": {
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "start",
+            "end"
+          ]
+        },
+        "blend": {
+          "enum": [
+            "normal",
+            "screen",
+            "add",
+            "multiply"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    }
+  }
+}

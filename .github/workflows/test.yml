@@ -79,6 +79,9 @@ jobs:
       - run: node --test test/portable-program-examples.mjs
         env:
           PYTHON: python3
+      - run: node --test test/live-editor-panel-examples.mjs
+        env:
+          PYTHON: python3
       - run: |
           go build -o "$RUNNER_TEMP/go-oidc-provider" test/fixtures/go-oidc-provider/main.go
           node test/oidc-host.test.mjs "$RUNNER_TEMP/go-oidc-provider"
@@ -112,6 +115,10 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
       - run: xvfb-run --auto-servernum node test/editor-contributions-browser.mjs test-results/editor-contributions
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/program-editor-browser.mjs test-results/program-editor
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

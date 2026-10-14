@@ -408,6 +408,50 @@ In book mode, a placement's string `data.pageId` must name an existing page. Omi
 
 Default books support independent page controls, keyboard navigation and image failure captions. `renderAlbum` returns a DOM node with `dispose()` and, in book mode, `setPage(index)`. Custom `albumRenderer` implementations may return a DOM node or `{node,dispose}`; the album editor disposes both draft and public previews when replaced or unmounted. Trusted `layouts` replacements retain responsibility for implementing book features they need.
 
+## Install a live Studio panel
+
+A reviewed browser panel can propose selected-layer content and style changes while the artist stays in Studio. Generate the example assets with either language:
+
+```sh
+python examples/plugins/python-live-editor-panel.py panel-assets
+go run examples/plugins/go-live-editor-panel/main.go panel-assets
+```
+
+Serve the generated assets and the framework browser modules from a dedicated HTTP origin, separate from Studio. Apply the headers returned by `programHeaders(assetOrigin)` to the program responses. Review the assets before marking a registry entry approved.
+
+```js
+import {mountStudio} from '@digital-card/framework/presentation/studio';
+import {createProgramEditorPanels} from '@digital-card/framework/presentation/program-editor-panel';
+
+const fields = ['text', 'color', 'typography.size', 'typography.lineHeight',
+  'typography.letterSpacing', 'typography.align', 'opacity'];
+const registry = new Map([['type-workshop', {
+  approved: true,
+  url: 'https://panels.example.test/index.html',
+  version: '1.0.0',
+  title: 'Type workshop',
+  intents: ['editor-propose'],
+  editorDisplay: {profile: 'dc.editor-selection@1', fields},
+}]]);
+const editorProgramPanels = createProgramEditorPanels({
+  registry,
+  panels: [{id: 'type-workshop', programId: 'type-workshop', fields}],
+});
+const studio = mountStudio(root, {initialPackage, editorProgramPanels});
+```
+
+Select a text layer, adjust its content or appearance, and submit the proposal. Review the proposed values in Studio's own controls before choosing **Apply layer changes**. Apply uses native project validation and creates an undoable edit. Save and reopen through the ordinary Studio workflow. The frame cannot apply or publish changes itself.
+
+The [selection schema](editor-display.schema.json) and [proposal schema](editor-proposal.schema.json) describe the messages. Runtime validation also enforces the selection identity, grants and a 32 KiB encoded bound. Grants control both the selected-layer fields disclosed to a panel and the fields it may propose. Layer identifiers, private metadata, material configuration and asset contents are not part of this projection. Locked selections cannot be edited. A proposal becomes stale when the project revision, selection or panel session changes. Disabling a panel invalidates its pending work; unavailable programs leave the ordinary layer editor usable.
+
+```js
+editorProgramPanels.setEnabled('type-workshop', false);
+// When the host no longer needs the panel controller:
+editorProgramPanels.dispose();
+```
+
+The example uses the standard browser bootstrap with `data-editor-field` controls and a `data-editor-propose` button. Custom web-compatible panel code can use the versioned program bridge directly. Python and Go generate the browser assets; this route does not run server-language functions inside the browser. Rich panel layout and client logic remain subject to the reviewed program's origin and content policy.
+
 ## Install a declarative Studio panel
 
 A host can install a data-only panel that edits the selected layer's horizontal position, vertical position and rotation. Panel authors can generate the same JSON from Python or Go; they do not need to write a JavaScript panel callback.

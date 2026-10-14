@@ -55,6 +55,7 @@ export function mountAuthoringTools({
   editorContributions = [],
   editorContributionGrants,
   editorTransforms,
+  editorProgramPanels,
 }) {
   const t=(key,values)=>localization.text(key,values),number=value=>localization.number(value);
   let portablePanels,portablePanelError=null;
@@ -1246,6 +1247,7 @@ export function mountAuthoringTools({
       return find(project.scenes.get(project.manifest.faces[side].scene).nodes);
     };
     mountedPanels.push(portablePanels.mount({root,getSelection:selectedLayer,edit,run,report}));
+    if(editorProgramPanels)mountedPanels.push(editorProgramPanels.mount({root,getSelection:selectedLayer,edit,run,report,localization}));
     for (const panel of panels) {
       const contribution = panel({
         project: p,
@@ -1271,6 +1273,7 @@ export function mountAuthoringTools({
     render,
     refreshPolicy,
     setEditorContributionEnabled:portablePanels.setEnabled,
+    setEditorProgramPanelEnabled:(id,value)=>editorProgramPanels?.setEnabled(id,value),
     async validate() {
       await Promise.all(pending);
       return effective;

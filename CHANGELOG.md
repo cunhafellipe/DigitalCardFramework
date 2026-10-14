@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added reviewed live Studio panels with scoped content/style proposals, native review and Undo/Redo, and Python/Go browser-asset examples.
+
 - Added per-instance Studio localization across editing tools, artwork publishing and card-policy controls.
 
 - Added per-instance administration localization for overview, pricing, people, website settings, activity and review/save workflows.

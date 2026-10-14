@@ -20,7 +20,7 @@ const originalOpen=x.core.openPack.bind(x.core);x.core.openPack=(actor,input)=>{
 const programServer=createServer(async(request,response)=>{
   try{for(const [key,value]of Object.entries(programHeaders(hostOrigin)))response.setHeader(key,value);response.setHeader('access-control-allow-origin','*');const path=new URL(request.url,'http://localhost').pathname;
     if(path==='/'||path==='/index.html'){response.setHeader('content-type','text/html');response.end(await readFile(resolve(temp,'index.html')));return;}if(path==='/card.css'){response.setHeader('content-type','text/css');response.end(await readFile(resolve(temp,'card.css')));return;}
-    if(['/program-opener-bootstrap.js','/program.js','/opener-display.js','/album-display.js','/data.js','/media.js'].includes(path)){response.setHeader('content-type','text/javascript');response.end(await readFile(new URL('../src/presentation'+path,import.meta.url)));return;}response.writeHead(404);response.end();
+    if(['/program-opener-bootstrap.js','/program.js','/editor-display.js','/opener-display.js','/album-display.js','/data.js','/media.js'].includes(path)){response.setHeader('content-type','text/javascript');response.end(await readFile(new URL('../src/presentation'+path,import.meta.url)));return;}response.writeHead(404);response.end();
   }catch{response.writeHead(500);response.end();}
 });
 const hostServer=createServer(async(request,response)=>{

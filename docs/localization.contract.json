@@ -12,6 +12,30 @@
     "other"
   ],
   "keys": {
+    "editorPanel.fallback": {
+      "placeholders": [],
+      "plural": false
+    },
+    "editorPanel.failure": {
+      "placeholders": [],
+      "plural": false
+    },
+    "editorPanel.review": {
+      "placeholders": [],
+      "plural": false
+    },
+    "editorPanel.apply": {
+      "placeholders": [],
+      "plural": false
+    },
+    "editorPanel.cancel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "editorPanel.rejected": {
+      "placeholders": [],
+      "plural": false
+    },
     "nav.wallet": {
       "placeholders": [],
       "plural": false

@@ -1,6 +1,7 @@
 import { ensure, canonical, clamp } from "./data.js";
 import {albumDisplayProfile,validateAlbumDisplay} from './album-display.js';
 import {openerDisplayProfile,validateOpenerDisplay} from './opener-display.js';
+import {editorDisplayProfile,validateEditorDisplay,validateEditorProposal} from './editor-display.js';
 /** Serve reviewed programs from this origin with these HTTP response headers. */
 export function programHeaders(assetOrigin) {
   const origin = new URL(assetOrigin).origin;
@@ -29,6 +30,9 @@ export function mountProgram(
     onAlbumSelect = () => {},
     openerDisplay,
     onOpenerIntent = () => {},
+    editorDisplay,
+    onEditorProposal = () => {},
+    onSessionEnd = () => {},
   },
 ) {
   const entry = registry.get(programId);
@@ -53,6 +57,9 @@ export function mountProgram(
   if(albumDisplay!==undefined)lastAlbum=prepareAlbum(albumDisplay);
   const prepareOpener=value=>{const snapshot=validateOpenerDisplay(value);ensure(entry.openerDisplay?.profile===openerDisplayProfile&&Array.isArray(entry.openerDisplay.fields)&&snapshot.fields.every(field=>entry.openerDisplay.fields.includes(field)),'PROGRAM_CONTENT','Opener display is not granted');return snapshot;};
   if(openerDisplay!==undefined)lastOpener=prepareOpener(openerDisplay);
+  let lastEditor;
+  const prepareEditor=value=>{const snapshot=validateEditorDisplay(value);ensure(entry.editorDisplay?.profile===editorDisplayProfile&&Array.isArray(entry.editorDisplay.fields)&&snapshot.fields.every(field=>entry.editorDisplay.fields.includes(field)),'PROGRAM_CONTENT','Editor display is not granted');return snapshot;};
+  if(editorDisplay!==undefined)lastEditor=prepareEditor(editorDisplay);
   const current = state => session === state && !disposed && hostVisible && !document.hidden;
   const send = message => { if (session?.ready && current(session)) session.port.postMessage(message); };
   const clean = () => {
@@ -62,6 +69,7 @@ export function mountProgram(
     state.port.onmessage=null;state.port.close();
     if(!state.transferred)state.transfer.close();
     state.frame.onload=state.frame.onerror=null;state.frame.remove();
+    onSessionEnd();
   };
   const fail=(state,code)=>{if(!current(state))return;clean();onError({code});};
   function start() {
@@ -82,7 +90,7 @@ export function mountProgram(
       try {
         const message = event.data;
         ensure(
-          canonical(message).length <= 4096,
+          canonical(message).length <= (message?.intent==='editor-propose'?32768:4096),
           "PROGRAM_MESSAGE",
           "Message too large",
         );
@@ -112,6 +120,7 @@ export function mountProgram(
           });
           if(lastAlbum)send({version:1,type:'content',content:lastAlbum});
           if(lastOpener)send({version:1,type:'content',content:lastOpener});
+          if(lastEditor)send({version:1,type:'content',content:lastEditor});
           onReady();
         } else {
           ensure(
@@ -121,7 +130,11 @@ export function mountProgram(
             "PROGRAM_INTENT",
             "Intent not allowed",
           );
-          if(message.intent==='select-item'){
+          if(message.intent==='editor-propose'){
+            ensure(lastEditor&&Object.keys(message).sort().join(',')==='intent,nonce,patch,revision,snapshotId,type,version','PROGRAM_CONTENT','Invalid editor proposal');
+            if(message.snapshotId!==lastEditor.snapshotId||message.revision!==lastEditor.revision)return;
+            onEditorProposal(validateEditorProposal({snapshotId:message.snapshotId,revision:message.revision,patch:message.patch},lastEditor));
+          }else if(message.intent==='select-item'){
             ensure(lastAlbum&&Object.keys(message).sort().join(',')==='handle,intent,nonce,snapshotId,type,version'&&message.snapshotId===lastAlbum.snapshotId&&lastAlbum.items.some(item=>item.handle===message.handle),'PROGRAM_CONTENT','Invalid album selection');
             onAlbumSelect({snapshotId:message.snapshotId,handle:message.handle});
           }else if(['opener-reveal','opener-skip','opener-replay','opener-inspect'].includes(message.intent)){
@@ -154,6 +167,7 @@ export function mountProgram(
   document.addEventListener("visibilitychange", visibility);
   start();
   return {
+    setEditorDisplay(value){if(disposed)return;lastEditor=prepareEditor(value);send({version:1,type:'content',content:lastEditor});},
     setAlbumDisplay(value){if(disposed)return;lastAlbum=prepareAlbum(value);send({version:1,type:'content',content:lastAlbum});},
     setOpenerDisplay(value){if(disposed)return;lastOpener=prepareOpener(value);send({version:1,type:'content',content:lastOpener});},
     setInputs(value) {
@@ -185,7 +199,7 @@ function filterInputs(input) {
 }
 
 /** Called by the reviewed program entrypoint; source + transferred port authenticate the parent. */
-export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{} } = {}) {
+export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{},onEditorDisplay=()=>{} } = {}) {
   return new Promise((resolve) => {
     const listener = (event) => {
       if (
@@ -205,10 +219,11 @@ export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpe
         if(disposed)return;
         if (e.data?.version === 1 && e.data.type === "inputs")
           onInputs(filterInputs(e.data.inputs ?? {}));
-        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
+        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===editorDisplayProfile)onEditorDisplay(validateEditorDisplay(e.data.content));else if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
       };
       port.postMessage({ version: 1, type: "ready", nonce });
       resolve({
+        editorProposal(snapshotId,revision,patch){if(!disposed)port.postMessage({version:1,type:'intent',nonce,intent:'editor-propose',snapshotId,revision,patch});},
         intent(name) {
           if(disposed)return;
           port.postMessage({ version: 1, type: "intent", nonce, intent: name });

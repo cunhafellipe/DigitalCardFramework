@@ -29,7 +29,7 @@ export function mountStudio(
     onPublish,
     performance = {},
     presets = materialPresets,
-    library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants, editorTransforms,
+    library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants, editorTransforms, editorProgramPanels,
   } = {},
 ) {
   const t=(key,values)=>localization.text(key,values),number=value=>localization.number(value);
@@ -1048,11 +1048,11 @@ export function mountStudio(
     if (!destination) return;
     side = destination;
     selected = id;
-  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants,editorTransforms,localization});
+  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants,editorTransforms,editorProgramPanels,localization});
   root.append(authoring.root);
-  const ready = initialPackage
+  const ready = Promise.all([authoring.ready, initialPackage
     ? open(initialPackage)
-    : Promise.resolve(report(t('studioCore.openADcardFileToBegin')));
+    : Promise.resolve(report(t('studioCore.openADcardFileToBegin')))]).then(()=>undefined);
   return {
     ready,
     getProject: () => project,
@@ -1060,6 +1060,7 @@ export function mountStudio(
     open,
     refreshPolicy: authoring.refreshPolicy,
     setEditorContributionEnabled:authoring.setEditorContributionEnabled,
+    setEditorProgramPanelEnabled:authoring.setEditorProgramPanelEnabled,
     dispose() {
       disposed = true;
       root.removeAttribute("aria-busy");

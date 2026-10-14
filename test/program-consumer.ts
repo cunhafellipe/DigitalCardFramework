@@ -48,6 +48,18 @@ void connectProgram({onAlbumDisplay: content => console.log(content.items.length
 createProgramAlbumRenderer({registry, programId: 'celestial', displayFields: ['bindings']});
 
 import {createProgramOpenerView} from '@digital-card/framework/presentation/program-opener-view';
+import {createProgramEditorPanels} from '@digital-card/framework/presentation/program-editor-panel';
+import {validateEditorDisplay,validateEditorProposal} from '@digital-card/framework/presentation/editor-display';
+
+const editorPanels = createProgramEditorPanels({registry, panels: [{id:'typography',programId:'typography',fields:['text','typography.size','color']}]});
+editorPanels.setEnabled('typography', false);
+editorPanels.dispose();
+const editorSnapshot = validateEditorDisplay(JSON.parse('{}'));
+program.setEditorDisplay(editorSnapshot);
+const editorProposal = validateEditorProposal(JSON.parse('{}'), editorSnapshot);
+void connectProgram({onEditorDisplay: snapshot => console.log(snapshot.values.text)}).then(bridge => bridge.editorProposal(editorProposal.snapshotId, editorProposal.revision, editorProposal.patch));
+// @ts-expect-error Private metadata is not a permitted editor field.
+createProgramEditorPanels({registry, panels:[{id:'invalid',programId:'invalid',fields:['metadata']}]});
 import type {RevealState, RevealController} from '@digital-card/framework/client';
 declare const revealState: RevealState;
 declare const revealController: RevealController;

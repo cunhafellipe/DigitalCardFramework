@@ -38,3 +38,16 @@ if(known.type==='code.revoked'){
 // @ts-expect-error Usage reports require a boolean flag.
 const malformedUsage:FrameworkEvent<'code.usage-reported'>={id:'event',sequence:1,type:'code.usage-reported',at:'time',data:{codeId:'code',copyId:'copy',actorId:'user',used:'yes'}};
 void [used,malformedUsage];
+
+const purchaseEvent=validateFrameworkEvent(incoming,'packs.purchased');
+if('preparationId' in purchaseEvent.data){
+  const preparation:string=purchaseEvent.data.preparationId,purchase:string=purchaseEvent.data.purchaseId;
+  void [preparation,purchase];
+}
+// @ts-expect-error Ordinary purchases do not contain external preparation IDs.
+const externalPreparation:string=purchaseEvent.data.preparationId;
+const grantEvent=validateFrameworkEvent(incoming,'currency.granted');
+const recipient:string=grantEvent.data.userId;
+// @ts-expect-error Command events expose the user, not the command's currency amount.
+void grantEvent.data.amount;
+void [externalPreparation,recipient];

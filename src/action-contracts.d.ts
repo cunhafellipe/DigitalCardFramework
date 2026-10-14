@@ -10,6 +10,16 @@ export declare function validateActionDelivery(value:unknown):ActionDelivery;
 export declare function validateActionAcknowledgment(value:unknown):ActionAcknowledgment;
 
 export interface KnownEventData {
+  'card.revealed':{userId:string};
+  'preferences.updated':{userId:string};
+  'notifications.read':{userId:string};
+  'currency.granted':{userId:string};
+  'pack.opened':{userId:string};
+  'binding.used':{userId:string};
+  'currency.converted':{userId:string};
+  'cards.tradedUp':{userId:string};
+  'album.saved':{userId:string};
+  'packs.purchased':{userId:string}|{userId:string;preparationId:string;purchaseId:string};
   'code.pool-configured':{poolId:string;actorId:string|null};
   'code.batch-imported':{batchId:string;poolId:string;count:number;actorId:string|null;metadata:Record<string,ActionJson>};
   'code.keys-rotated':{count:number;actorId:string|null};

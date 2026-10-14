@@ -1,3 +1,4 @@
+import {validateFrameworkEvent} from '../src/action-contracts.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -73,6 +74,11 @@ test('preparation is private and allocation creates no spendable intermediate cr
   assert.equal(x.core.externalPurchaseStatus(x.alice,{preparationId:row.preparationId}).snapshot,undefined);
   assert.equal(x.core.pendingExternalPurchases(provider,{providerId}).items.length,1);
   const done=x.commit(row);assert.equal(done.state,'fulfilled');assert.equal(done.purchase.packs.length,1);
+  const purchaseEvent=x.core.events(admin,{limit:1000}).find(event=>event.type==='packs.purchased'&&event.data.preparationId===row.preparationId);
+  assert(purchaseEvent);assert.equal(validateFrameworkEvent(purchaseEvent,'packs.purchased'),purchaseEvent);
+  assert.equal(purchaseEvent.data.purchaseId,done.purchase.id);
+  for(const key of ['preparationId','purchaseId']){const invalid=structuredClone(purchaseEvent);delete invalid.data[key];assert.throws(()=>validateFrameworkEvent(invalid));}
+
   assert.deepEqual(x.core.wallet(x.alice),wallet);assert.deepEqual(x.commit(row),done);
   assert.equal(x.store.read(s=>s.externalPurchases[row.preparationId].snapshot),undefined);
   assert.equal(x.core.pendingExternalPurchases(provider,{providerId}).items.length,0);

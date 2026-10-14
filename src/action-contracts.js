@@ -15,6 +15,16 @@ const nullableEventString={anyOf:[eventString,{type:'null'}]};
 const codeIdentity={codeId:eventString,copyId:eventString,actorId:eventString};
 const codeConfirmation={codeId:eventString,copyId:nullableEventString,actorId:nullableEventString,providerId:eventString,eventId:eventString,occurredAt:eventString};
 const coreEventData={
+  'card.revealed':eventData({userId:eventString}),
+  'preferences.updated':eventData({userId:eventString}),
+  'notifications.read':eventData({userId:eventString}),
+  'currency.granted':eventData({userId:eventString}),
+  'pack.opened':eventData({userId:eventString}),
+  'binding.used':eventData({userId:eventString}),
+  'currency.converted':eventData({userId:eventString}),
+  'cards.tradedUp':eventData({userId:eventString}),
+  'album.saved':eventData({userId:eventString}),
+  'packs.purchased':{oneOf:[eventData({userId:eventString}),eventData({userId:eventString,preparationId:eventString,purchaseId:eventString})]},
   'code.pool-configured':eventData({poolId:eventString,actorId:nullableEventString}),
   'code.batch-imported':eventData({batchId:eventString,poolId:eventString,count:eventInteger,actorId:nullableEventString,metadata:eventObject}),
   'code.keys-rotated':eventData({count:eventInteger,actorId:nullableEventString}),

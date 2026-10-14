@@ -84,3 +84,23 @@ test('code event contracts validate emitted lifecycle and unallocated provider c
     assert(!JSON.stringify(events).includes('SECRET-REWARD'));
   }finally{x.core.close();}
 });
+
+
+test('core command event contracts validate actual commands and reject malformed receipts',()=>{
+  const x=coreFixture();
+  try{
+    const copy=x.open('unique')[0],inputs=x.open('common',x.alice,3);
+    x.core.openCard(x.alice,{key:'event-reveal',copyId:copy.id});
+    x.core.consumeBinding(x.alice,{key:'event-binding',copyId:copy.id,namespace:'demo.code'});
+    x.core.setPreferences(x.alice,{key:'event-preferences',inventoryVisibility:'public'});
+    x.core.readNotifications(x.alice,{key:'event-notifications',ids:[]});
+    x.core.convert(x.alice,{key:'event-convert',from:'credits',to:'gems',amount:100,catalogVersion:1});
+    x.core.tradeUp(x.alice,{key:'event-tradeup',recipeId:'sky.upgrade',copyIds:inputs.map(row=>row.id)});
+    x.core.saveAlbum(x.alice,{key:'event-album',name:'Event album',placements:[{copyId:copy.id}]});
+    const types=['card.revealed','preferences.updated','notifications.read','currency.granted','pack.opened','binding.used','currency.converted','cards.tradedUp','album.saved','packs.purchased'];
+    const events=x.core.events(admin,{limit:1000}),schema=JSON.parse(readFileSync(new URL('../docs/action-delivery.schema.json',import.meta.url),'utf8')),compiler=new Ajv2020({strict:true,allowUnionTypes:true});compiler.addSchema(schema);const published=compiler.compile({$ref:schema.$id+'#/$defs/event'});
+    for(const type of types){const event=events.find(row=>row.type===type);assert(event,type);assert.equal(validateFrameworkEvent(event,type),event);assert.equal(published(event),true);
+      for(const data of [{},{userId:null},{userId:1},{...event.data,privateState:{}}]){assert.throws(()=>validateFrameworkEvent({...event,data}));assert.equal(published({...event,data}),false);}
+    }
+  }finally{x.core.close();}
+});

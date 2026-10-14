@@ -22,7 +22,7 @@ export interface ImportExecutor {
   close(): Promise<void>;
 }
 export interface ImportResourceMeasurement { backend: "windows-job" | "linux-cgroup"; peakJobMemoryBytes: number; memoryLimitBytes: number; processMemoryLimitBytes?: number }
-export interface ImportStageDiagnostic { stage: "bootstrap" | "compiled" | "created" | "assigned" | "resumed" | "worker-started" | "request-end" | "result-writing" | "response-received" | "exited" | "terminated"; elapsedMs: number }
+export interface ImportStageDiagnostic { stage: "bootstrap" | "compiled" | "assembly-loaded" | "created" | "assigned" | "resumed" | "worker-started" | "request-end" | "result-writing" | "response-received" | "exited" | "terminated"; elapsedMs: number }
 export interface ImportValidationResult { ok: true; digest: string; report: Record<string, unknown>; capabilities: { required: string[]; optional: string[] }; resources?: ImportResourceMeasurement; diagnostics?: ImportStageDiagnostic[] }
 export interface ImportPublicationResult { ok: true; digest: string; folder: string; report: Record<string, unknown>; resources?: ImportResourceMeasurement; diagnostics?: ImportStageDiagnostic[] }
 export function createImportExecutor(options: ImportIsolationOptions): Promise<ImportExecutor>;

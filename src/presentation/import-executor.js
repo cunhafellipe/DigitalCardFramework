@@ -1,29 +1,67 @@
 /** Required OS resource envelopes for data-only import and publication jobs. */
-import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile, rmdir, access, rm } from "node:fs/promises";
+import { spawn, execFile } from "node:child_process";
+import { mkdir, readFile, writeFile, rmdir, access, rm, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { StringDecoder } from "node:string_decoder";
 import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ensure } from "./data.js";
+import { ensure, sha256 } from "./data.js";
 
 const workerPath = fileURLToPath(new URL("./import-worker.js", import.meta.url));
 const helperPath = fileURLToPath(new URL("./import-job.ps1", import.meta.url));
 const scrubEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => ["PATH", "SYSTEMROOT", "WINDIR"].includes(key.toUpperCase())));
 const failure = (message) => Object.assign(new Error(message), { code: "IMPORT_ISOLATION" });
+const helperCommand = (values) => {
+  const quote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
+  const command = "$importArguments=@(" + values.map(quote).join(",") + "); & ([scriptblock]::Create([IO.File]::ReadAllText(" + quote(helperPath) + "))) @importArguments";
+  return ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")];
+};
 
 export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 ** 2, aggregateMemoryBytes = 1024 * 1024 ** 2, temporaryBytes = 2 * 1024 ** 3, aggregateTemporaryBytes = 4 * 1024 ** 3, cgroupRoot, powershellPath } = {}) {
   for (const value of [memoryBytes, aggregateMemoryBytes, temporaryBytes, aggregateTemporaryBytes]) ensure(Number.isSafeInteger(value) && value >= 64 * 1024 ** 2, "IMPORT_ISOLATION", "Invalid import resource budget");
   ensure(aggregateMemoryBytes >= memoryBytes, "IMPORT_ISOLATION", "Aggregate import budget is smaller than one job");
   ensure(aggregateTemporaryBytes >= temporaryBytes, "IMPORT_ISOLATION", "Aggregate temporary budget is smaller than one job");
-  let scope;
+  let scope, assemblyDirectory, assemblyPath, assemblyDigest;
+  const startupDeadline = Date.now() + 30000;
   const scopeName = "digital-card-import-" + randomUUID();
   if (backend === "windows-job") {
     ensure(process.platform === "win32", "IMPORT_ISOLATION", "Windows Job Objects require Windows");
     powershellPath ??= path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     ensure(path.isAbsolute(powershellPath), "IMPORT_ISOLATION", "PowerShell executable must be absolute");
     await access(powershellPath, constants.X_OK);
+    const taskkillPath = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+    await access(taskkillPath, constants.X_OK);
+    assemblyDirectory = await mkdtemp(path.join(tmpdir(), "dc-import-helper-"));
+    assemblyPath = path.join(assemblyDirectory, "launcher.dll");
+    try {
+      await new Promise((resolve, reject) => {
+        const compiler = spawn(powershellPath, helperCommand(["--compile", assemblyPath]), { env: { ...scrubEnvironment(), TEMP: assemblyDirectory, TMP: assemblyDirectory }, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+        let expired = false, diagnostic = "", cleanup;
+        const timer = setTimeout(() => {
+          expired = true;
+          cleanup = new Promise((done, failed) => {
+            // Kill the owned compiler tree before its parent disappears.
+            execFile(taskkillPath, ["/PID", String(compiler.pid), "/T", "/F"], { env: scrubEnvironment(), windowsHide: true, timeout: 5000, maxBuffer: 64 * 1024 }, (error) => {
+              if (error) { if (compiler.exitCode === null) compiler.kill("SIGKILL"); failed(failure("Import compiler process-tree cleanup failed")); }
+              else done();
+            });
+          });
+          void cleanup.catch(reject);
+        }, Math.max(1, startupDeadline - Date.now()));
+        compiler.stderr.on("data", (chunk) => { if (diagnostic.length < 16384) diagnostic += chunk.toString("utf8").slice(0, 16384 - diagnostic.length); });
+        compiler.once("error", (error) => { clearTimeout(timer); reject(error); });
+        compiler.once("close", async (code) => {
+          clearTimeout(timer);
+          if (cleanup) { try { await cleanup; } catch (error) { return reject(error); } }
+          if (expired) return reject(failure("Import launcher compilation exceeded the startup deadline"));
+          if (code !== 0 || !diagnostic.includes("DC_IMPORT_STAGE:compiled")) return reject(failure("Import launcher compilation failed"));
+          resolve();
+        });
+      });
+      assemblyDigest = await readFile(assemblyPath).then((bytes) => sha256(bytes));
+    } catch (error) { await rm(assemblyDirectory, { recursive: true, force: true }); throw error; }
   } else if (backend === "linux-cgroup") {
     ensure(process.platform === "linux" && typeof cgroupRoot === "string" && path.isAbsolute(cgroupRoot), "IMPORT_ISOLATION", "Linux import enforcement requires an absolute delegated cgroup v2 directory");
     const controllers = await readFile(path.join(cgroupRoot, "cgroup.controllers"), "utf8").catch(() => { throw failure("Delegated cgroup v2 directory is unavailable"); });
@@ -67,10 +105,8 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
           await writeFile(path.join(group, "pids.max"), "32");
           child = spawn("/bin/sh", ["-c", 'printf "%s" "$$" > "$1/cgroup.procs" || exit 125; exec "$2" --max-old-space-size="$4" "$3" --stdio', "import-gate", group, process.execPath, workerPath, String(maxHeapMb)], { env: scrubEnvironment(), stdio: ["pipe", "pipe", "pipe"] });
         } else {
-          const quote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
-          const argumentsText = [process.execPath, workerPath, memoryBytes, aggregateMemoryBytes, scopeName, options.maxHeapMb ?? 256].map(quote).join(",");
-          const command = "$importArguments=@(" + argumentsText + "); & ([scriptblock]::Create([IO.File]::ReadAllText(" + quote(helperPath) + "))) @importArguments";
-          child = spawn(powershellPath, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")], { env: scrubEnvironment(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+          ensure(await readFile(assemblyPath).then((bytes) => sha256(bytes)) === assemblyDigest, "IMPORT_ISOLATION", "Import launcher assembly changed");
+          child = spawn(powershellPath, helperCommand([process.execPath, workerPath, memoryBytes, aggregateMemoryBytes, scopeName, maxHeapMb, assemblyPath]), { env: scrubEnvironment(), windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
         }
         return await new Promise((resolve, reject) => {
           let output = "", metrics = "", size = 0, outcomeError;
@@ -100,7 +136,7 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
           child.stdin.on("error", (error) => { outcomeError ??= error; });
           child.stderr.on("data", (chunk) => {
             if (metrics.length < 16384) metrics += chunk.toString("utf8").slice(0, 16384 - metrics.length);
-            for (const stage of metrics.matchAll(/DC_IMPORT_STAGE:(bootstrap|compiled|created|assigned|resumed|exited|terminated|worker-started|request-end|result-writing)/g)) recordStage(stage[1]);
+            for (const stage of metrics.matchAll(/DC_IMPORT_STAGE:(bootstrap|compiled|assembly-loaded|created|assigned|resumed|exited|terminated|worker-started|request-end|result-writing)/g)) recordStage(stage[1]);
           });
           child.once("error", (error) => { outcomeError ??= error; });
           child.once("close", async (code) => {
@@ -153,12 +189,16 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
         for (const entry of active) entry.cancel();
         await Promise.allSettled([...active].map((entry) => entry.completion));
         if (scope) await rmdir(scope);
+        if (assemblyDirectory) await rm(assemblyDirectory, { recursive: true, force: true });
       })();
       return closePromise;
     },
   };
   // A worker must complete a control-only probe before the store accepts uploads.
-  try { await run("probe", null, { timeoutMs: 30000 }); }
+  try {
+    ensure(Date.now() < startupDeadline, "IMPORT_ISOLATION", "Import isolation startup deadline exceeded");
+    await run("probe", null, { timeoutMs: Math.max(1, startupDeadline - Date.now()) });
+  }
   catch (error) { await executor.close(); throw Object.assign(failure("Import isolation startup probe failed: " + error.message), { diagnostics: error.diagnostics }); }
   return executor;
 }

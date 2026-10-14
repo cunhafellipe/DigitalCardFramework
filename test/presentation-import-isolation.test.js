@@ -54,6 +54,10 @@ test("isolated validation and atomic publication retain archive fidelity and dig
     assert.ok(validation.resources.peakJobMemoryBytes > 0);
     if (process.platform === "win32") assert.ok(validation.resources.peakJobMemoryBytes <= validation.resources.memoryLimitBytes);
     t.diagnostic(JSON.stringify({ ...validation.resources, stages: validation.diagnostics }));
+    if (process.platform === "win32") {
+      assert.ok(validation.diagnostics.some((entry) => entry.stage === "assembly-loaded"));
+      assert.ok(!validation.diagnostics.some((entry) => entry.stage === "compiled"));
+    }
     const publication = await executor.publish(file, { contentRoot, expectedDigest: pkg.digest });
     assert.equal(publication.digest, pkg.digest);
     assert.deepEqual(new Uint8Array(await readFile(path.join(publication.folder, "download.dcard"))), pkg.archive);
@@ -130,4 +134,19 @@ test("store aligns its queue with reserved worker budgets and publishes through 
     await waitFor(async () => (await store.get(actor, jobs[2].id)).state === "ready");
     assert.equal((await store.publish(actor, jobs[0].id)).state, "published");
   } finally { await store.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("Windows launcher compilation and assembly integrity failures clean owned temporary files", { skip: process.platform !== "win32" }, async () => {
+  const cacheDirectories = async () => (await readdir(tmpdir())).filter((name) => name.startsWith("dc-import-helper-"));
+  const before = new Set(await cacheDirectories());
+  await assert.rejects(createImportExecutor({ backend: "windows-job", powershellPath: process.execPath }), /compilation failed/);
+  assert.deepEqual((await cacheDirectories()).filter((name) => !before.has(name)), []);
+  const executor = await createImportExecutor({ backend: "windows-job" });
+  const owned = (await cacheDirectories()).filter((name) => !before.has(name));
+  assert.equal(owned.length, 1);
+  try {
+    await writeFile(path.join(tmpdir(), owned[0], "launcher.dll"), Buffer.from("invalid assembly"));
+    await assert.rejects(executor.validate("unused"), /assembly changed/);
+  } finally { await executor.close(); }
+  assert.deepEqual((await cacheDirectories()).filter((name) => !before.has(name)), []);
 });

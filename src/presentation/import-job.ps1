@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 # The launcher applies Job Object limits while the worker is suspended.
 [Console]::Error.WriteLine('DC_IMPORT_STAGE:bootstrap')
-Add-Type -TypeDefinition @'
+$source = @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -70,5 +70,11 @@ public static class ImportJob {
  }
 }
 '@
-[Console]::Error.WriteLine('DC_IMPORT_STAGE:compiled')
+if ($args[0] -eq '--compile') {
+  Add-Type -TypeDefinition $source -OutputAssembly $args[1] -OutputType Library
+  [Console]::Error.WriteLine('DC_IMPORT_STAGE:compiled')
+  exit 0
+}
+Add-Type -Path $args[6]
+[Console]::Error.WriteLine('DC_IMPORT_STAGE:assembly-loaded')
 exit [ImportJob]::Run($args[0], $args[1], [UInt64]$args[2], [UInt64]$args[3], $args[4], $args[5])

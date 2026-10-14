@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added verified offline recovery bundles for the database, published artwork, moderation policies and durable imports, with restoration into a new installation directory.
+
 - Added required OS-backed import execution with Windows job or Linux cgroup memory limits, shared validation/publication reservations and bounded staging cleanup.
 
 - Added portable complete collection views with host-owned filtering, comparison, preferences and reviewed trade-ups, plus independent Python/Go layouts.

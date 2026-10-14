@@ -90,6 +90,28 @@ To restore, stop the service, preserve the damaged/current database and its SQLi
 
 `tools/migrate-encryption.js source.sqlite new.sqlite` writes a verified new encrypted database and preserves the source. Supply the new `STATE_ENCRYPTION_KEY`/file; supply `OLD_STATE_ENCRYPTION_KEY`/file when the source is already encrypted. A plaintext demo source needs no old key. Sessions are intentionally not copied during migration, so collectors sign in again. Stop writers during migration/cutover. Keep the old key with old backups until the recovery policy permits retiring them.
 
+### Recover database and published artwork together
+
+For a host using `PRESENTATION_ROOT`, stop the host and all other database or presentation writers before creating a recovery bundle:
+
+```sh
+node --env-file=.env tools/recovery.js backup data/production.sqlite data/presentations backups/full-recovery --stopped
+```
+
+The destination must be new. The bundle contains the database, published presentation files and availability policies, durable import jobs, and their retained uploads. It preserves encrypted state, sessions and code-vault data; it does not contain encryption keys. Supply the same state and code-vault key configuration used by the host. Keep those keys in separate protected recovery storage.
+
+The tool verifies database invariants, decryption, file hashes, presentation archives and local presentation references. Stop and drain active imports before backup. A writer lock, active job or unfinished publication causes refusal rather than a partial checkpoint. References to externally hosted assets remain external; back up those assets and reconcile external payment or fulfillment systems separately.
+
+Restore into a new installation directory while the host is stopped:
+
+```sh
+node --env-file=.env tools/recovery.js restore backups/full-recovery data/restored --stopped
+```
+
+After verification, the tool publishes `data/restored/state.sqlite` and `data/restored/presentations` together. Existing destinations are refused. Configure `DATABASE_PATH` and `PRESENTATION_ROOT` to those paths, retain the matching keys, and start an isolated host first. Check collector sign-in, card artwork, moderation policy, preserved import jobs and a synthetic transaction before returning traffic. Presentation URLs are not rewritten: retain their routing or configure the corresponding origin separately.
+
+A recovery manifest detects missing or changed files; it is not a signature proving who created the bundle. Restrict access to the entire bundle, preserve the original installation until recovery is verified, and treat an interrupted staging directory as incomplete rather than a usable backup.
+
 ## Health and extensibility
 
 `GET /healthz` returns 200 when the framework worker is ready and its admission queue is not saturated; otherwise it returns 503. Startup does full integrity checks; `/api/operator/audit` provides authenticated read-only diagnostics. Request logs contain request ID, path, method and status, never bodies, tokens or attached codes. Monitor these logs, latency and storage externally. Trade expiration maintenance runs each minute and relevant commands also handle expiry. SIGINT/SIGTERM stop accepting new work and close stores.

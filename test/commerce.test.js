@@ -1,3 +1,4 @@
+import {validateFrameworkEvent} from '../src/action-contracts.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, admin, code } from "./helpers.js";
@@ -226,6 +227,9 @@ test("raffle draws unique winners once, restricts claims and releases unclaimed 
   assert.throws(() => buy(x, l.id), code("RAFFLE_CLAIM"));
   now = "2026-10-01T01:00:00Z";
   const draw = x.core.drawRaffle(admin, { key: "draw", listingId: l.id });
+  const drawEvent=x.core.events(admin,{limit:1000}).find(event=>event.type==='raffle.drawn');
+  assert(drawEvent);assert.equal(validateFrameworkEvent(drawEvent,'raffle.drawn'),drawEvent);assert.equal(drawEvent.data.userId,null);
+
   assert.equal(draw.winners.length, 1);
   assert.deepEqual(
     x.core.drawRaffle(admin, { key: "redraw", listingId: l.id }),

@@ -15,6 +15,24 @@ const nullableEventString={anyOf:[eventString,{type:'null'}]};
 const codeIdentity={codeId:eventString,copyId:eventString,actorId:eventString};
 const codeConfirmation={codeId:eventString,copyId:nullableEventString,actorId:nullableEventString,providerId:eventString,eventId:eventString,occurredAt:eventString};
 const coreEventData={
+  'trading.configured':eventData({userId:nullableEventString}),
+  'card.transfer-lock':eventData({userId:nullableEventString}),
+  'admin.configured':eventData({userId:nullableEventString}),
+  'admin.cards.give':eventData({userId:nullableEventString}),
+  'admin.cards.remove':eventData({userId:nullableEventString}),
+  'card-policy.saved':eventData({userId:nullableEventString}),
+  'card-policy.activated':eventData({userId:nullableEventString}),
+  'card-policy.retired':eventData({userId:nullableEventString}),
+  'card-policy.restored':eventData({userId:nullableEventString}),
+  'card-library.saved':eventData({userId:nullableEventString}),
+  'card-library.retired':eventData({userId:nullableEventString}),
+  'card-library.restored':eventData({userId:nullableEventString}),
+  'card-stats.updated':eventData({userId:nullableEventString}),
+  'card-presentation.registered':eventData({userId:nullableEventString}),
+  'commerce.configured':eventData({userId:nullableEventString}),
+  'shop.status':eventData({userId:nullableEventString}),
+  'raffle.drawn':eventData({userId:nullableEventString}),
+
   'card.revealed':eventData({userId:eventString}),
   'preferences.updated':eventData({userId:eventString}),
   'notifications.read':eventData({userId:eventString}),

@@ -104,3 +104,32 @@ test('core command event contracts validate actual commands and reject malformed
     }
   }finally{x.core.close();}
 });
+
+
+test('operator event contracts retain service actors and validate actual core/admin/commerce emissions',()=>{
+  const x=coreFixture(),operator={...x.alice,role:'admin'};
+  try{
+    const copy=x.open()[0];
+    x.core.configureTrading(admin,{key:'event-trading',expectedRevision:0,policy:{enabled:true}});
+    x.core.setCardTransferLock(admin,{key:'event-lock',copyId:copy.id,reason:'Review'});
+    x.core.configureAdmin(admin,{key:'event-admin',expectedRevision:0,reason:'Review',scope:'site',changes:{packPurchasesPaused:false}});
+    x.core.administerCards(admin,{key:'event-give',expectedRevision:1,reason:'Award',action:'give',userId:x.alice.userId,variantId:'dawn.standard',quantity:1});
+    const granted=x.core.inventory(x.alice).find(row=>row.id!==copy.id);
+    x.core.administerCards(admin,{key:'event-remove',expectedRevision:2,reason:'Correction',action:'remove',userId:x.alice.userId,copyIds:[granted.id]});
+    x.core.configureCommerce(admin,{key:'event-commerce',expectedRevision:0,settings:{playerShops:true}});
+    const shop=x.core.createShop(operator,{key:'event-shop',name:'Events',kind:'admin'});
+    x.core.setShopEnabled(operator,{key:'event-shop-status',shopId:shop.id,enabled:false});
+    const events=x.core.events(admin,{limit:1000});
+    for(const type of ['trading.configured','card.transfer-lock','admin.configured','admin.cards.give','admin.cards.remove','commerce.configured','shop.status']){
+      const event=events.find(row=>row.type===type);assert(event,type);assert.equal(validateFrameworkEvent(event,type),event);
+      assert.equal(event.data.userId,type==='shop.status'?x.alice.userId:null);
+    }
+    const schema=JSON.parse(readFileSync(new URL('../docs/action-delivery.schema.json',import.meta.url),'utf8')),compiler=new Ajv2020({strict:true,allowUnionTypes:true});compiler.addSchema(schema);const published=compiler.compile({$ref:schema.$id+'#/$defs/event'});
+    const types=['trading.configured', 'card.transfer-lock', 'admin.configured', 'admin.cards.give', 'admin.cards.remove', 'card-policy.saved', 'card-policy.activated', 'card-policy.retired', 'card-policy.restored', 'card-library.saved', 'card-library.retired', 'card-library.restored', 'card-stats.updated', 'card-presentation.registered', 'commerce.configured', 'shop.status', 'raffle.drawn'];
+    for(const type of types){
+      const envelope={id:'operator-event',sequence:1,type,at:'2026-09-30T12:00:00Z'};
+      for(const userId of [null,x.alice.userId]){const event={...envelope,data:{userId}};validateFrameworkEvent(event);assert.equal(published(event),true);}
+      for(const data of [{},{userId:1},{userId:''},{userId:null,privateState:{}}]){const event={...envelope,data};assert.throws(()=>validateFrameworkEvent(event));assert.equal(published(event),false);}
+    }
+  }finally{x.core.close();}
+});

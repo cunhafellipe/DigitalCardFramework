@@ -10,6 +10,24 @@ export declare function validateActionDelivery(value:unknown):ActionDelivery;
 export declare function validateActionAcknowledgment(value:unknown):ActionAcknowledgment;
 
 export interface KnownEventData {
+  'trading.configured':{userId:string|null};
+  'card.transfer-lock':{userId:string|null};
+  'admin.configured':{userId:string|null};
+  'admin.cards.give':{userId:string|null};
+  'admin.cards.remove':{userId:string|null};
+  'card-policy.saved':{userId:string|null};
+  'card-policy.activated':{userId:string|null};
+  'card-policy.retired':{userId:string|null};
+  'card-policy.restored':{userId:string|null};
+  'card-library.saved':{userId:string|null};
+  'card-library.retired':{userId:string|null};
+  'card-library.restored':{userId:string|null};
+  'card-stats.updated':{userId:string|null};
+  'card-presentation.registered':{userId:string|null};
+  'commerce.configured':{userId:string|null};
+  'shop.status':{userId:string|null};
+  'raffle.drawn':{userId:string|null};
+
   'card.revealed':{userId:string};
   'preferences.updated':{userId:string};
   'notifications.read':{userId:string};

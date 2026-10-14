@@ -1,3 +1,4 @@
+import {validateFrameworkEvent} from '../src/action-contracts.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, admin, code } from "./helpers.js";
@@ -83,6 +84,9 @@ test("template sets enforce actual structure, retain required dependencies, and 
     ...policy([], { templateSets: ["frames@1"] }),
     defaults: { template: a.key },
   });
+  for(const type of ['card-policy.saved','card-policy.activated','card-library.saved','card-presentation.registered']){
+    const event=core.events(admin,{limit:1000}).find(row=>row.type===type);assert(event,type);assert.equal(validateFrameworkEvent(event,type),event);assert.equal(event.data.userId,null);
+  }
   const e = core.effectiveCardPolicy(admin, { cardId: "dawn" });
   assert.deepEqual(e.policy.requirements.templates, [a.key, b.key]);
   const pkg = await loadTemplate(a);

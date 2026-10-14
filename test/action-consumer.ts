@@ -51,3 +51,15 @@ const recipient:string=grantEvent.data.userId;
 // @ts-expect-error Command events expose the user, not the command's currency amount.
 void grantEvent.data.amount;
 void [externalPreparation,recipient];
+
+const operatorEvent=validateFrameworkEvent(incoming,'admin.cards.give');
+const operatorUser:string|null=operatorEvent.data.userId;
+// @ts-expect-error Service operators may have no linked user.
+const linkedOperator:string=operatorEvent.data.userId;
+if(known.type==='card-library.saved'){
+  const author:string|null=known.data.userId;
+  // @ts-expect-error Operator events do not expose library documents.
+  void known.data.document;
+  void author;
+}
+void [operatorUser,linkedOperator];

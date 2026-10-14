@@ -152,7 +152,7 @@ python examples/plugins/python-program-card.py program-output
 go run examples/plugins/go-program-card/main.go program-output
 ```
 
-Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
+Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js`, `album-display.js`, `media.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
 
 Register the reviewed URL in trusted host configuration and supply the standard renderer adapter:
 
@@ -218,6 +218,46 @@ packRenderer.dispose();
 The adapter replaces pack artwork in the shop and owned-pack list. Host controls switch front/back; selecting the program artwork focuses the normal review or open/replay control without activating it. Purchase review, payment, opening and replay retain their existing host behavior. Reveal progress is cosmetic and follows the authoritative opening result; the frame receives no product, price, ownership or reward records.
 
 Direct calls return `{node, setSide, setPresentationInputs, dispose}` for mapped programs. Native fallback views may omit `setPresentationInputs`. The renderer also provides `setEnabled(boolean)` and `dispose()`, with the same frame, timeout, message and mapping bounds as the card adapter. Disabled, unapproved, failed or unmapped programs retain native pack artwork and preview cards. This replaces pack appearance, not the complete opener view or its command authority.
+
+## Install a reviewed album layout
+
+The album program profile supplies current album contents to a reviewed custom HTML/CSS layout. Generate the example with either language:
+
+```sh
+python examples/plugins/python-program-card.py --album album-output
+go run examples/plugins/go-program-card/main.go --album album-output
+```
+
+Use the separate-origin setup above and also serve `program-album-bootstrap.js` at the program origin's root. Grant the `dc.album-display@1` profile and each display field explicitly. For example:
+
+```js
+import { createProgramAlbumRenderer } from '@digital-card/framework/presentation/program-album-view';
+
+const fields = ['albumName', 'cardName', 'rarity', 'pageName', 'preview'];
+const journal = createProgramAlbumRenderer({
+  registry: new Map([['celestial-album', {
+    approved: true,
+    version: '1',
+    url: 'https://programs.example/albums/index.html',
+    title: 'Celestial album',
+    intents: ['select-item'],
+    albumDisplay: { profile: 'dc.album-display@1', fields },
+  }]]),
+  programId: 'celestial-album',
+  displayFields: fields,
+});
+const view = mountFramework(root, { client, layouts: { journal } });
+// Choose journal in the album editor's layout selector.
+// When removing the host view:
+view.dispose();
+journal.dispose();
+```
+
+Use `albumRenderer: journal` instead to replace the album renderer directly. The program receives a full snapshot of up to 1,000 placements, so it can arrange or paginate them itself. Fields requested by `displayFields` must be granted by the registry. Album and card names, rarity, page labels and image previews are independently optional. The host never sends copy/owner identifiers, bindings, codes, provenance, arbitrary metadata or raw placement data. Temporary handles resolve selection back to the current host copy for ordinary inspection; they are not mutation credentials.
+
+The [display schema](album-display.schema.json) describes the content shape. Runtime validation additionally checks grants, unique handles and positions, page associations, well-formed text and raster limits. Labels allow 100 UTF-16 code units; encoded metadata is limited to 2 MiB. Preview data uses native `Uint8Array` values, not JSON/base64: PNG, JPEG or WebP, at most 256 KiB and 1,048,576 pixels each, and 4 MiB/8,388,608 pixels in aggregate. The parent resolves a validated pinned poster and sends only granted raster bytes; source URLs and credentials never enter the snapshot. Missing, unsupported or over-budget previews retain text identification. Native CSS-only or live card rendering is not automatically converted to a faithful bitmap.
+
+The adapter uses native album fallback for denied grants or invalid content. Its viewport defaults to 640 pixels high and accepts 200–4,096; its active-frame limit defaults to two and accepts 1–32. `setEnabled(false)` disables the program; `dispose()` releases its resources. The standard bootstrap inserts labels as text and manages image object URLs. Custom web-compatible programs can use `connectProgram({onAlbumDisplay})` and `selectItem(snapshotId, handle)` with the same profile, grants and session checks.
 
 ## Album appearance
 

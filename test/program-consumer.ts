@@ -1,6 +1,8 @@
 import {mountProgram, connectProgram, programHeaders, type ProgramRegistry} from '@digital-card/framework/presentation/program';
 import {createProgramCardRenderer} from '@digital-card/framework/presentation/program-card-view';
 import {createProgramPackRenderer} from '@digital-card/framework/presentation/program-pack-view';
+import {validateAlbumDisplay, type AlbumDisplayField} from '@digital-card/framework/presentation/album-display';
+import {createProgramAlbumRenderer} from '@digital-card/framework/presentation/program-album-view';
 
 const registry: ProgramRegistry = new Map([['celestial', {approved: true, url: 'https://programs.example/card/', version: '1', intents: ['select']}]]);
 const root = document.createElement('div');
@@ -33,3 +35,14 @@ if ('node' in pack) {
 }
 packs.setEnabled(false);
 packs.dispose();
+const fields: AlbumDisplayField[] = ['albumName', 'cardName', 'rarity'];
+const albums = createProgramAlbumRenderer({registry, programId: 'celestial', displayFields: fields});
+const album = albums({name: 'Journal', cards: [{copy: {definition: {name: 'Dawn'}, variant: {}, rarityId: 'common'}}]});
+album.dispose?.();
+albums.setEnabled(false);
+albums.dispose();
+const snapshot = validateAlbumDisplay(JSON.parse('{}'));
+program.setAlbumDisplay(snapshot);
+void connectProgram({onAlbumDisplay: content => console.log(content.items.length)}).then(bridge => bridge.selectItem(snapshot.snapshotId, snapshot.items[0]!.handle));
+// @ts-expect-error Private copy fields cannot be granted.
+createProgramAlbumRenderer({registry, programId: 'celestial', displayFields: ['bindings']});

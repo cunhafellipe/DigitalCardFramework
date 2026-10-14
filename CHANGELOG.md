@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added approved browser album layouts with explicit display-field grants, bounded full-album snapshots and raster previews, and host-controlled card inspection.
+
 - Added host-approved browser pack renderers with custom front/back artwork, cosmetic reveal progress, native fallback and Python/Go pack examples.
 
 - Added a host-approved browser-program card renderer with bounded frame allocation, native fallback and Python/Go custom HTML/CSS examples.

@@ -18,6 +18,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir src/presentation install --frozen-lockfile
       - run: pnpm test:sdk
+      - run: node tools/generate-album-display.mjs --check
       - run: node --test test/*.test.js
         env:
           DC_TEST_PYTHON_PLUGIN: '1'
@@ -106,6 +107,11 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
       - run: xvfb-run --auto-servernum node test/localization-browser.mjs test-results/localization
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: xvfb-run --auto-servernum node test/program-album-browser.mjs test-results/program-album
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

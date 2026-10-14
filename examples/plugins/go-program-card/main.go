@@ -1,6 +1,7 @@
 // Generate reviewed custom card HTML/CSS using the Go standard library.
 // Run: go run main.go OUTPUT_DIR
 // Pack artwork: go run main.go --pack OUTPUT_DIR
+// Album display: go run main.go --album OUTPUT_DIR
 // The approved separate-origin host supplies /program-bootstrap.js and its
 // framework imports. This generator emits no JavaScript.
 package main
@@ -134,14 +135,84 @@ body { background: #131424; }
 @media (prefers-reduced-motion: reduce) { .sealed-sleeve, .seal-star { transform: none; } }
 `
 
+const albumHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Celestial Archive Album</title>
+  <link rel="stylesheet" href="card.css">
+  <script type="module" src="/program-album-bootstrap.js"></script>
+</head>
+<body>
+  <main class="archive-album" aria-label="Celestial Archive album display">
+    <header class="album-heading">
+      <p class="album-eyebrow">THE CELESTIAL ARCHIVE</p>
+      <h1 data-dc-album-name>Your collection</h1>
+      <p class="album-intro">A gallery of discoveries. Select a card to inspect it in the host.</p>
+    </header>
+    <div class="album-pages" data-dc-album-pages></div>
+    <template data-dc-album-page>
+      <section class="album-page">
+        <header class="page-heading"><span class="page-mark" aria-hidden="true">+</span><h2 data-dc-page-name>Collection page</h2></header>
+        <div class="page-items" data-dc-album-items></div>
+      </section>
+    </template>
+    <template data-dc-album-item>
+      <article class="album-item">
+        <button class="item-select" type="button" data-dc-item-select>
+          <span class="item-art"><span class="item-emblem" aria-hidden="true">+</span><img data-dc-item-preview alt=""></span>
+          <span class="item-caption"><strong data-dc-item-name>Card name</strong><small data-dc-item-rarity>Rarity</small></span>
+          <span class="item-hint">Inspect card</span>
+        </button>
+      </article>
+    </template>
+  </main>
+</body>
+</html>
+`
+
+const albumCSS = `:root { color-scheme: dark; font-family: Georgia, serif; }
+* { box-sizing: border-box; }
+html, body { width: 100%; min-height: 100%; margin: 0; }
+body { background: #111d27; color: #f4e6c4; }
+.archive-album { padding: 24px; }
+.album-heading { max-width: 760px; margin: 0 auto 28px; padding-bottom: 18px; border-bottom: 1px solid #a48c59; }
+.album-eyebrow { font: 10px system-ui, sans-serif; letter-spacing: .2em; }
+.album-heading h1 { font-size: clamp(24px, 5vw, 44px); font-weight: normal; margin: 12px 0; overflow-wrap: anywhere; }
+.album-intro { color: #c6c6b5; font: 13px system-ui, sans-serif; line-height: 1.6; }
+.album-pages { display: grid; gap: 28px; }
+.album-page { min-width: 0; padding: 20px; border: 1px solid #817653; border-radius: 8px; background: linear-gradient(110deg, #1e3038, #162831); box-shadow: 0 8px 28px #050b1555; }
+.page-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.page-heading h2 { font-size: 22px; font-weight: normal; margin: 0; overflow-wrap: anywhere; }
+.page-mark { color: #c6b277; font-size: 30px; transform: rotate(45deg); }
+.page-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 18px; }
+.album-item { min-width: 0; }
+.item-select { display: flex; flex-direction: column; align-items: stretch; width: 100%; height: 100%; padding: 10px; border: 1px solid #9a9066; border-radius: 8px; background: #16232f; color: inherit; font: inherit; text-align: center; cursor: pointer; }
+.item-select:hover { background: #243846; }
+.item-select:focus-visible { outline: 3px solid #a5e5df; outline-offset: 2px; }
+.item-art { position: relative; display: grid; place-items: center; aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid #526978; border-radius: 4px; background: radial-gradient(circle, #3d6869, #1c3248 65%); }
+.item-emblem { font-size: 56px; color: #c6b77e; transform: rotate(45deg); }
+.item-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.item-art img:not([src]) { display: none; }
+.item-caption { display: flex; flex-direction: column; gap: 7px; padding-top: 12px; overflow-wrap: anywhere; }
+.item-caption strong { font-size: 17px; font-weight: normal; }
+.item-caption small, .item-hint { font: 11px system-ui, sans-serif; color: #cbcbb9; }
+.item-hint { margin-top: auto; padding-top: 16px; }
+@media (max-width: 440px) { .archive-album { padding: 12px; } .album-page { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .page-mark, .item-emblem { transform: none; } }
+`
+
 func run() error {
 	directory, markup, stylesheet := "", html, css
 	if len(os.Args) == 3 && os.Args[1] == "--pack" {
 		directory, markup, stylesheet = os.Args[2], packHTML, packCSS
-	} else if len(os.Args) == 2 && os.Args[1] != "--pack" {
+	} else if len(os.Args) == 3 && os.Args[1] == "--album" {
+		directory, markup, stylesheet = os.Args[2], albumHTML, albumCSS
+	} else if len(os.Args) == 2 && os.Args[1] != "--pack" && os.Args[1] != "--album" {
 		directory = os.Args[1]
 	} else {
-		return fmt.Errorf("Usage: program-card [--pack] OUTPUT_DIR")
+		return fmt.Errorf("Usage: program-card [--pack|--album] OUTPUT_DIR")
 	}
 	if err := os.MkdirAll(directory, 0755); err != nil {
 		return err

@@ -205,3 +205,44 @@ jobs:
         with:
           name: browser-${{ matrix.engine }}
           path: test-results/
+
+  import-isolation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - run: pnpm install --frozen-lockfile
+      - name: Delegate a disposable Linux cgroup
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          group="/sys/fs/cgroup/digital-card-import-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo mkdir "$group"
+          printf '+memory +pids' | sudo tee /sys/fs/cgroup/cgroup.subtree_control >/dev/null
+          printf '+memory +pids' | sudo tee "$group/cgroup.subtree_control" >/dev/null
+          sudo chown -R "$(id -u):$(id -g)" "$group"
+          echo "DC_IMPORT_CGROUP_ROOT=$group" >> "$GITHUB_ENV"
+      - name: Qualify required OS import enforcement
+        run: node --test test/presentation-import-isolation.test.js
+        env:
+          DC_REQUIRE_IMPORT_ISOLATION: '1'
+      - name: Remove disposable Linux cgroup
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          group="/sys/fs/cgroup/digital-card-import-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ -d "$group" ]; then
+            echo 1 | sudo tee "$group/cgroup.kill" >/dev/null
+            sudo find "$group" -depth -type d -exec rmdir {} +
+          fi

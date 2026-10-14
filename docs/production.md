@@ -380,3 +380,30 @@ For example, `access-records.json` can contain:
 Use the issuer, subject and framework user ID from your actual authenticated account. A `denied` or `disabled` record contains those three identity fields and its `status`, with no role or permission fields.
 
 The example loopback HTTP listener is for local integration. Production endpoints require HTTPS; explicit `allowLoopbackHttp: true` is available only for loopback testing. Existing hosts without a remote provider retain their default access configuration.
+
+## Enforce import process memory limits
+
+For hosts that accept presentation uploads, configure required process isolation in the trusted host module. Validation and publication processing share the executor's memory reservations:
+
+```js
+export const presentationOptions = {
+  importIsolation: {
+    backend: process.platform === 'win32' ? 'windows-job' : 'linux-cgroup',
+    memoryBytes: 512 * 1024 ** 2,
+    aggregateMemoryBytes: 1024 * 1024 ** 2,
+    temporaryBytes: 2 * 1024 ** 3,
+    aggregateTemporaryBytes: 4 * 1024 ** 3,
+    ...(process.platform === 'linux' ? {
+      cgroupRoot: '/sys/fs/cgroup/card-imports',
+    } : {}),
+  },
+};
+```
+
+Provision the Linux path as an empty, writable cgroup v2 subtree delegated to the service account, with the memory and process-count controllers available. Keep the main application outside the import subtree. The executor must be able to create child groups and configure their limits; an ordinary directory is not a substitute. No Docker socket or privileged application container is required by the executor. A container deployment must explicitly provide the delegated execution environment; the base Compose file alone does not establish per-import isolation.
+
+Temporary-byte reservations bound application-managed publication staging; they are not filesystem quotas. Retained published content and uploaded archives have their own storage lifecycle.
+
+Windows uses an OS job object assigned before the worker executes. Its memory budget limits committed memory, including native buffer allocations; it is not an RSS sampling limit. Peak accounting counters can show small overages during allocation failure, so use the configured limits and failure diagnostics together rather than assuming every peak sample stays below the configured value. The trusted PowerShell/.NET launcher has startup overhead outside the worker memory envelope and does not execute imported code. The helper uses Windows PowerShell by default; `powershellPath` may select a trusted absolute PowerShell executable. Linux uses cgroup memory and swap controls. The kernel can temporarily charge memory beyond `memory.max` before reclaim or termination, so do not interpret that value as a promise of zero transient overage.
+
+When `importIsolation` is configured, missing or unsupported enforcement must prevent startup rather than silently falling back to the heap-only worker. Existing configurations without it retain their previous behavior. Size budgets against representative accepted artwork and reserve separate capacity for the main service. These resource controls do not make trusted host callbacks or arbitrary executable plugins a general-purpose sandbox.

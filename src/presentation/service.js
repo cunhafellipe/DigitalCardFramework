@@ -23,6 +23,7 @@ import {
 import { publishPackage } from "./compiler.js";
 import { performancePolicy, enforcePerformance } from "./performance.js";
 import { DEFAULT_LIMITS } from "./package.js";
+import { createImportExecutor } from "./import-executor.js";
 
 const atomic = async (file, value) => {
   const tmp = file + "." + randomUUID() + ".tmp";
@@ -119,6 +120,7 @@ export async function createPresentationStore({
   validationTimeoutMs = 30000,
   validationHeapMb = 256,
   validate = validateInWorker,
+  importIsolation,
   maxStoredUploadBytes = 512 * 1024 * 1024,
   clock = Date.now,
 }) {
@@ -182,7 +184,13 @@ export async function createPresentationStore({
     closePromise = null,
     tail = Promise.resolve();
   const ceiling = { ...DEFAULT_LIMITS, ...limits };
+  let executor, importConcurrency = maxConcurrentImports;
   try {
+    if (importIsolation) {
+      ensure(validate === validateInWorker, "IMPORT_ISOLATION", "Custom validation cannot replace required import isolation");
+      executor = await createImportExecutor(importIsolation);
+      importConcurrency = Math.min(maxConcurrentImports, Math.floor((importIsolation.aggregateMemoryBytes ?? 1024 * 1024 ** 2) / (importIsolation.memoryBytes ?? 512 * 1024 ** 2)), Math.floor((importIsolation.aggregateTemporaryBytes ?? 4 * 1024 ** 3) / (importIsolation.temporaryBytes ?? 2 * 1024 ** 3)));
+    }
     for (const file of await readdir(jobsDir))
       if (file.endsWith(".json")) {
         const job = parseJSON(await readFile(path.join(jobsDir, file), "utf8"));
@@ -194,8 +202,8 @@ export async function createPresentationStore({
         jobs.set(job.id, job);
       }
   } catch (error) {
-    await lock.close();
-    await unlink(path.join(root, "writer.lock"));
+    try { await executor?.close(); }
+    finally { await lock.close(); await unlink(path.join(root, "writer.lock")); }
     throw error;
   }
   const serialize = (fn) => {
@@ -223,7 +231,7 @@ export async function createPresentationStore({
     while (
       !closed &&
       pending.length &&
-      controllers.size < maxConcurrentImports
+      controllers.size < importConcurrency
     ) {
       const job = pending.shift();
       const task = run(job)
@@ -244,7 +252,7 @@ export async function createPresentationStore({
     try {
       job.state = "validating";
       await save(job);
-      const validation = await validate(job.uploadPath, {
+      const validation = await (executor?.validate ?? validate)(job.uploadPath, {
         timeoutMs: validationTimeoutMs,
         maxHeapMb: validationHeapMb,
         limits: ceiling,
@@ -411,18 +419,25 @@ export async function createPresentationStore({
           "Import is not ready",
         );
         if (job.state === "published") return publicJob(job);
+        while (executor && controllers.size >= importConcurrency) await Promise.race([...tasks]);
+        ensure(!closed, "CLOSED", "Store closed");
         const archive=new Uint8Array(await readFile(job.uploadPath));
         await validatePublication(actor,{archive,digest:job.digest});
-        const result = await publishPackage(
-          archive,
-          { contentRoot, limits: ceiling, performance },
-        );
+        ensure(!closed, "CLOSED", "Store closed");
+        const publicationController = new AbortController();
+        controllers.set(job.id, publicationController);
+        let result;
+        try {
+          result = executor
+            ? await executor.publish(job.uploadPath, { contentRoot, limits: ceiling, performance, expectedDigest: job.digest, timeoutMs: validationTimeoutMs, maxHeapMb: validationHeapMb, signal: publicationController.signal })
+            : await publishPackage(archive, { contentRoot, limits: ceiling, performance, expectedDigest: job.digest });
+        } finally { controllers.delete(job.id); pump(); }
         ensure(
           result.digest === job.digest,
           "INTEGRITY",
           "Staged bytes changed",
         );
-        await onPublished(actor, {archive:new Uint8Array(await readFile(job.uploadPath)), digest:result.digest});
+        await onPublished(actor, {archive, digest:result.digest});
         job.state = "published";
         job.publishedAt = clock();
         await save(job);
@@ -503,6 +518,7 @@ export async function createPresentationStore({
     async close() {
       if (closePromise) return closePromise;
       closed = true;
+      for (const c of controllers.values()) c.abort();
       closePromise = (async () => {
         await tail;
         for (const c of controllers.values()) c.abort();
@@ -517,9 +533,10 @@ export async function createPresentationStore({
         }
         await Promise.allSettled([...tasks]);
         try {
-          await lock.close();
+          await executor?.close();
         } finally {
-          await unlink(path.join(root, "writer.lock"));
+          try { await lock.close(); }
+          finally { await unlink(path.join(root, "writer.lock")); }
         }
         if (failure) throw failure;
       })();

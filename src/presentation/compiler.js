@@ -139,13 +139,18 @@ export function buildReport(pkg, performance) {
   return report;
 }
 /** Content-addressed publication; importing content never creates an owned copy. */
-export async function publishPackage(bytes, { contentRoot, limits, performance }) {
+export async function publishPackage(bytes, { contentRoot, limits, performance, expectedDigest, stagingPath, temporaryBytes }) {
   const pkg = await importPackage(bytes, { limits }),
     folder = path.join(contentRoot, pkg.digest.slice(7)),
-    staging = path.join(contentRoot, ".pending-" + randomUUID());
+    staging = stagingPath ?? path.join(contentRoot, ".pending-" + randomUUID());
+  if (expectedDigest) ensure(pkg.digest === expectedDigest, "INTEGRITY", "Staged bytes changed");
   const report = buildReport(pkg, performance);
   for(const field of pkg.manifest.authoring?.fields??[])ensure((field.visibility??"public")==="public"&&field.scope!=="copy","PRIVATE_SNAPSHOT","Publish an exported card without private draft metadata");
   enforcePerformance(report.performance);
+  const reportBytes = utf8(canonical(report));
+  if (temporaryBytes !== undefined) {
+    ensure(reportBytes.length <= 4 * 1024 ** 2 && [...pkg.files.values()].reduce((sum, file) => sum + file.length, 0) + bytes.length + reportBytes.length <= temporaryBytes, "LIMIT", "Publication temporary byte budget exceeded");
+  }
   await mkdir(contentRoot, { recursive: true });
   try {
     await writeCompiled(
@@ -154,7 +159,7 @@ export async function publishPackage(bytes, { contentRoot, limits, performance }
     );
     await writeFile(
       path.join(staging, "build-report.json"),
-      utf8(canonical(report)),
+      reportBytes,
     );
     try {
       await rename(staging, folder);

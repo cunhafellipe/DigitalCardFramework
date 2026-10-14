@@ -68,6 +68,7 @@
     "./presentation/album-display": {"types": "./src/presentation/album-display.d.ts", "default": "./src/presentation/album-display.js"},
     "./presentation/program-album-view": {"types": "./src/presentation/program-album-view.d.ts", "default": "./src/presentation/program-album-view.js"},
     "./presentation/program-album-bootstrap": "./src/presentation/program-album-bootstrap.js",
+    "./presentation/import-executor": {"types":"./src/presentation/import-executor.d.ts","default":"./src/presentation/import-executor.js"},
     "./presentation/collection-display": {"types":"./src/presentation/collection-display.d.ts","default":"./src/presentation/collection-display.js"},
     "./presentation/program-collection-view": {"types":"./src/presentation/program-collection-view.d.ts","default":"./src/presentation/program-collection-view.js"},
     "./presentation/program-collection-bootstrap": {"types":"./src/presentation/program-collection-bootstrap.d.ts","default":"./src/presentation/program-collection-bootstrap.js"},

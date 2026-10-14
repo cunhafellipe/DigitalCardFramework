@@ -1,13 +1,19 @@
 import { readFile, stat } from "node:fs/promises";
 import { importPackage, DEFAULT_LIMITS } from "./package.js";
-import { buildReport } from "./compiler.js";
-process.once("message", async (data) => {
+import { buildReport, publishPackage } from "./compiler.js";
+async function execute(data) {
   let result;
   try {
+    if (data.operation === "probe") return { ok: true };
     const limits = { ...DEFAULT_LIMITS, ...data.limits };
     if ((await stat(data.path)).size > limits.compressed)
       throw Object.assign(new Error("Upload too large"), { code: "LIMIT" });
-    const pkg = await importPackage(new Uint8Array(await readFile(data.path)), {
+    const bytes = new Uint8Array(await readFile(data.path));
+    if (data.operation === "publish") {
+      const publication = await publishPackage(bytes, { contentRoot: data.contentRoot, limits, performance: data.performance, expectedDigest: data.expectedDigest, stagingPath: data.stagingPath, temporaryBytes: data.temporaryBytes });
+      return { ok: true, ...publication };
+    }
+    const pkg = await importPackage(bytes, {
       limits,
     });
     result = {
@@ -23,5 +29,22 @@ process.once("message", async (data) => {
       message: String(error.message).slice(0, 1000),
     };
   }
-  process.send?.(result, () => process.disconnect());
+  return result;
+}
+if (process.argv.includes("--stdio")) {
+  let request = "", bytes = 0;
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    bytes += Buffer.byteLength(chunk);
+    if (bytes > 1024 * 1024) process.exit(125);
+    request += chunk;
+  });
+  process.stdin.once("end", async () => {
+    let result;
+    try { result = await execute(JSON.parse(request)); }
+    catch { result = { ok: false, code: "IMPORT", message: "Invalid import worker request" }; }
+    process.stdout.write(JSON.stringify(result), () => process.exit(0));
+  });
+} else process.once("message", async (data) => {
+  process.send?.(await execute(data), () => process.disconnect());
 });

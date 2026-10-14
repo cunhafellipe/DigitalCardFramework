@@ -20,6 +20,7 @@ jobs:
       - run: pnpm test:sdk
       - run: node tools/generate-album-display.mjs --check
       - run: node tools/generate-editor-transforms.mjs --check
+      - run: node tools/generate-opener-display.mjs --check
       - run: node --test test/*.test.js
         env:
           DC_TEST_PYTHON_PLUGIN: '1'
@@ -126,6 +127,11 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
       - run: xvfb-run --auto-servernum node test/program-album-browser.mjs test-results/program-album
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: xvfb-run --auto-servernum node test/program-opener-browser.mjs test-results/program-opener
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

@@ -189,13 +189,16 @@ export function renderAlbum(model,{cardRenderer=renderCard,onSelect,layouts={},l
   shadow.append(style,wrap);return host;
 }
 export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSelect,packArtwork,locale='en',messages={},localization=createLocalization({locale,messages})}={}) {
-  let cleanup;const t=localization.text,oldLang=root.getAttribute('lang'),oldDir=root.getAttribute('dir');
+  let cleanup,retained,disposed=false,failedView=false;const t=localization.text,oldLang=root.getAttribute('lang'),oldDir=root.getAttribute('dir');
+  const clean=()=>{try{cleanup?.();}catch{}cleanup=undefined;retained=undefined;};
   root.setAttribute('lang',localization.locale);root.setAttribute('dir',localization.dir);
   const unsubscribe=controller.subscribe(state=>{
-    cleanup?.();root.replaceChildren();
-    if(view) {const rendered=view(state,controller,{localization});if(rendered.node){root.append(rendered.node);cleanup=rendered.dispose;}else{root.append(rendered);cleanup=undefined;}return;}
-    const node=element('div','dc-opener'),renderAbort=new AbortController();let revealImage;
-    cleanup=()=>{renderAbort.abort();revealImage?.removeAttribute('src');};
+    if(disposed)return;
+    if(retained){try{retained.update(state);return;}catch{failedView=true;clean();}}
+    clean();root.replaceChildren();
+    if(view&&!failedView)try{const rendered=view(state,controller,{localization,onSelect,cardRenderer,packArtwork});if(rendered?.node){root.append(rendered.node);cleanup=()=>rendered.dispose?.();if(typeof rendered.update==='function')retained=rendered;}else root.append(rendered);return;}catch{failedView=true;clean();root.replaceChildren();}
+    const node=element('div','dc-opener'),renderAbort=new AbortController(),cardsToDispose=[];let revealImage;
+    cleanup=()=>{renderAbort.abort();revealImage?.removeAttribute('src');for(const card of cardsToDispose)try{card.dispose?.();}catch{}};
     const artwork=state.receipt?packArtwork?.(state.receipt.id):undefined,url=assetURL(artwork?.reveal);
     if(url){const image=revealImage=element('img','dc-reveal-artwork');image.src=url;image.alt=artwork.alt??t('artwork.reveal');image.style.maxWidth='100%';image.style.maxHeight='240px';image.style.objectFit='contain';image.addEventListener('error',()=>image.remove(),{once:true,signal:renderAbort.signal});node.append(image);}
     node.append(element('h3','',t(state.phase==='complete'?'opener.complete':'opener.title')));
@@ -210,14 +213,14 @@ export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSele
       row.append(next,all,button(t('opener.replay'),()=>controller.replay()));node.append(row);
       const cards=element('div','dc-grid');
       for(const copy of state.receipt.cards.slice(0,state.revealed)){
-        const result=element('div','dc-result-card');result.append(cardRenderer(copy,{onSelect,localization}),element('small','dc-result-label',t(copy.isNew?'opener.new':'opener.duplicate')));cards.append(result);
+        const result=element('div','dc-result-card'),card=cardRenderer(copy,{onSelect,localization});cardsToDispose.push(card);result.append(card,element('small','dc-result-label',t(copy.isNew?'opener.new':'opener.duplicate')));cards.append(result);
       }
       for(let i=state.revealed;i<state.receipt.cards.length;i++) {const back=element('div','dc-sealed-card');back.append(element('span','','◇'),element('small','',t('opener.card',{number:i+1})));cards.append(back);}
       node.append(cards);
     }
     root.append(node);
   });
-  return ()=>{unsubscribe();cleanup?.();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);};
+  return ()=>{if(disposed)return;disposed=true;unsubscribe();clean();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);};
 }
 export function mountFramework(root,{client,theme={},css='',cardRenderer=renderCard,packRenderer=renderPack,albumRenderer=renderAlbum,inspectorRenderer=render3DInspector,comparisonRenderer=renderComparison,codeRevealRenderer,listingRenderer,views:customViews={},viewLabels={},
   backRenderer,metadataRenderer,openerView,layouts={},participants=[],navigation='sections',

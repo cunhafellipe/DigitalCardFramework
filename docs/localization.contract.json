@@ -509,6 +509,10 @@
       ],
       "plural": false
     },
+    "opener.portableError": {
+      "placeholders": [],
+      "plural": false
+    },
     "card.label": {
       "placeholders": [
         "name",

@@ -1,5 +1,6 @@
 import { ensure, canonical, clamp } from "./data.js";
 import {albumDisplayProfile,validateAlbumDisplay} from './album-display.js';
+import {openerDisplayProfile,validateOpenerDisplay} from './opener-display.js';
 /** Serve reviewed programs from this origin with these HTTP response headers. */
 export function programHeaders(assetOrigin) {
   const origin = new URL(assetOrigin).origin;
@@ -26,6 +27,8 @@ export function mountProgram(
     onError = () => {},
     albumDisplay,
     onAlbumSelect = () => {},
+    openerDisplay,
+    onOpenerIntent = () => {},
   },
 ) {
   const entry = registry.get(programId);
@@ -45,9 +48,11 @@ export function mountProgram(
   let session,
     disposed = false,
     hostVisible = true,
-    lastInputs = filterInputs(inputs),lastAlbum;
+    lastInputs = filterInputs(inputs),lastAlbum,lastOpener;
   const prepareAlbum=value=>{const snapshot=validateAlbumDisplay(value);ensure(entry.albumDisplay?.profile===albumDisplayProfile&&Array.isArray(entry.albumDisplay.fields)&&snapshot.fields.every(field=>entry.albumDisplay.fields.includes(field)),'PROGRAM_CONTENT','Album display is not granted');return snapshot;};
   if(albumDisplay!==undefined)lastAlbum=prepareAlbum(albumDisplay);
+  const prepareOpener=value=>{const snapshot=validateOpenerDisplay(value);ensure(entry.openerDisplay?.profile===openerDisplayProfile&&Array.isArray(entry.openerDisplay.fields)&&snapshot.fields.every(field=>entry.openerDisplay.fields.includes(field)),'PROGRAM_CONTENT','Opener display is not granted');return snapshot;};
+  if(openerDisplay!==undefined)lastOpener=prepareOpener(openerDisplay);
   const current = state => session === state && !disposed && hostVisible && !document.hidden;
   const send = message => { if (session?.ready && current(session)) session.port.postMessage(message); };
   const clean = () => {
@@ -106,6 +111,7 @@ export function mountProgram(
             inputs: lastInputs,
           });
           if(lastAlbum)send({version:1,type:'content',content:lastAlbum});
+          if(lastOpener)send({version:1,type:'content',content:lastOpener});
           onReady();
         } else {
           ensure(
@@ -118,6 +124,11 @@ export function mountProgram(
           if(message.intent==='select-item'){
             ensure(lastAlbum&&Object.keys(message).sort().join(',')==='handle,intent,nonce,snapshotId,type,version'&&message.snapshotId===lastAlbum.snapshotId&&lastAlbum.items.some(item=>item.handle===message.handle),'PROGRAM_CONTENT','Invalid album selection');
             onAlbumSelect({snapshotId:message.snapshotId,handle:message.handle});
+          }else if(['opener-reveal','opener-skip','opener-replay','opener-inspect'].includes(message.intent)){
+            const keys=message.intent==='opener-inspect'?'handle,intent,nonce,snapshotId,type,version':'intent,nonce,snapshotId,type,version';ensure(lastOpener&&Object.keys(message).sort().join(',')===keys&&typeof message.snapshotId==='string','PROGRAM_CONTENT','Invalid opener intent');
+            if(message.snapshotId!==lastOpener.snapshotId)return;
+            if(message.intent==='opener-inspect')ensure(lastOpener.items.slice(0,lastOpener.revealed).some(item=>item.handle===message.handle),'PROGRAM_CONTENT','Invalid opener selection');
+            onOpenerIntent({intent:message.intent,snapshotId:message.snapshotId,...(message.intent==='opener-inspect'?{handle:message.handle}:{})});
           }else onIntent({ intent: message.intent });
         }
       } catch (error) {
@@ -144,6 +155,7 @@ export function mountProgram(
   start();
   return {
     setAlbumDisplay(value){if(disposed)return;lastAlbum=prepareAlbum(value);send({version:1,type:'content',content:lastAlbum});},
+    setOpenerDisplay(value){if(disposed)return;lastOpener=prepareOpener(value);send({version:1,type:'content',content:lastOpener});},
     setInputs(value) {
       if(disposed)return;
       lastInputs = filterInputs(value);
@@ -173,7 +185,7 @@ function filterInputs(input) {
 }
 
 /** Called by the reviewed program entrypoint; source + transferred port authenticate the parent. */
-export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{} } = {}) {
+export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{} } = {}) {
   return new Promise((resolve) => {
     const listener = (event) => {
       if (
@@ -193,7 +205,7 @@ export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{} } = {
         if(disposed)return;
         if (e.data?.version === 1 && e.data.type === "inputs")
           onInputs(filterInputs(e.data.inputs ?? {}));
-        else if(e.data?.version===1&&e.data.type==='content')onAlbumDisplay(validateAlbumDisplay(e.data.content));
+        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
       };
       port.postMessage({ version: 1, type: "ready", nonce });
       resolve({
@@ -202,6 +214,7 @@ export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{} } = {
           port.postMessage({ version: 1, type: "intent", nonce, intent: name });
         },
         selectItem(snapshotId,handle){if(!disposed)port.postMessage({version:1,type:'intent',nonce,intent:'select-item',snapshotId,handle});},
+        openerIntent(intent,snapshotId,handle){if(!disposed)port.postMessage({version:1,type:'intent',nonce,intent,snapshotId,...(handle===undefined?{}:{handle})});},
         dispose() {
           disposed=true;port.onmessage=null;
           port.close();

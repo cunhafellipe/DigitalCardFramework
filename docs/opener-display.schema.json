@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/opener-display/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "snapshotId",
+    "fields",
+    "phase",
+    "revealed",
+    "total",
+    "locale",
+    "dir",
+    "labels",
+    "items",
+    "previews"
+  ],
+  "properties": {
+    "profile": {
+      "const": "dc.opener-display@1"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "cardName",
+          "rarity",
+          "isNew",
+          "preview"
+        ]
+      }
+    },
+    "phase": {
+      "enum": [
+        "idle",
+        "loading",
+        "ready",
+        "revealing",
+        "complete",
+        "error"
+      ]
+    },
+    "revealed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "locale": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "dir": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "status",
+        "progress",
+        "reveal",
+        "skip",
+        "replay",
+        "inspect",
+        "new",
+        "duplicate"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "progress": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "reveal": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "skip": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "replay": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "inspect": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "new": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "duplicate": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "position",
+          "label"
+        ],
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "handle": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "rarity": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "isNew": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "previews": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "mediaType",
+          "bytes"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "mediaType": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "bytes": {
+            "description": "Native Uint8Array, separately validated with image and aggregate budgets."
+          }
+        }
+      }
+    }
+  }
+}

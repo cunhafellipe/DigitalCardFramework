@@ -138,6 +138,7 @@ def main():
     "opener.title": "Revela tus cartas",
     "opener.idle": "Elige un sobre sellado arriba. Tras abrirlo, sus cartas pertenecen a tu colección.",
     "opener.loading": "Cargando las cartas confirmadas…",
+    "opener.portableError": "La apertura falló. Usa los controles originales del sobre para reintentarlo.",
     "opener.progress": "{revealed} de {total} reveladas · Las cartas ya están guardadas en tu colección.",
     "opener.next": "Revelar siguiente",
     "opener.all": "Revelar todas",

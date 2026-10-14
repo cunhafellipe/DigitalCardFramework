@@ -3,6 +3,7 @@
 Run: python python-program-card.py OUTPUT_DIR
 Pack artwork: python python-program-card.py --pack OUTPUT_DIR
 Album display: python python-program-card.py --album OUTPUT_DIR
+Opening region: python python-program-card.py --opener OUTPUT_DIR
 The host supplies /program-bootstrap.js and its framework imports on the
 approved separate origin. This generator emits no JavaScript.
 """
@@ -205,18 +206,89 @@ body { background: #111d27; color: #f4e6c4; }
 '''
 
 
+OPENER_HTML = '''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Celestial Archive Opening Theater</title>
+  <link rel="stylesheet" href="card.css">
+  <script type="module" src="/program-opener-bootstrap.js"></script>
+</head>
+<body>
+  <main class="opening-theater" aria-label="Celestial Archive opening region">
+    <header class="opening-heading">
+      <p class="opening-eyebrow">THE CELESTIAL ARCHIVE</p>
+      <h1 data-dc-opener-label="title">Reveal your cards</h1>
+      <p class="opening-status" role="status" aria-live="polite" data-dc-opener-label="status">Choose a pack in the host.</p>
+      <p class="opening-progress" data-dc-opener-label="progress">No cards revealed yet.</p>
+    </header>
+    <nav class="opening-controls" aria-label="Reveal controls">
+      <button class="reveal-next" type="button" data-dc-opener-intent="reveal" disabled><span data-dc-opener-label="reveal">Reveal next</span></button>
+      <button class="reveal-all" type="button" data-dc-opener-intent="skip" disabled><span data-dc-opener-label="skip">Reveal all</span></button>
+      <button class="replay-reveal" type="button" data-dc-opener-intent="replay" disabled><span data-dc-opener-label="replay">Replay reveal</span></button>
+    </nav>
+    <div class="opening-items" data-dc-opener-items></div>
+    <template data-dc-opener-item-template>
+      <article class="opening-card">
+        <p class="opening-slot" data-dc-item-label>Card</p>
+        <div class="opening-art"><span class="opening-symbol" aria-hidden="true">+</span><img data-dc-item-preview alt=""></div>
+        <div class="opening-details"><h2 data-dc-item-name>Card name</h2><p data-dc-item-rarity>Rarity</p><p class="opening-discovery" data-dc-item-new>Collection discovery</p></div>
+        <button class="inspect-reveal" type="button" data-dc-opener-inspect><span data-dc-opener-label="inspect">Inspect card</span></button>
+      </article>
+    </template>
+  </main>
+</body>
+</html>
+'''
+
+OPENER_CSS = ''':root { color-scheme: dark; font-family: Georgia, serif; }
+* { box-sizing: border-box; }
+html, body { width: 100%; min-height: 100%; margin: 0; }
+body { background: #151a2b; color: #f6e7c3; }
+.opening-theater { padding: 24px; }
+.opening-heading { padding: 18px 20px; border: 1px solid #8f815d; border-radius: 12px; background: linear-gradient(110deg, #2a3146, #1a2538); }
+.opening-eyebrow { font: 10px system-ui, sans-serif; letter-spacing: .2em; }
+.opening-heading h1 { margin: 12px 0; font-size: clamp(24px, 5vw, 42px); font-weight: normal; overflow-wrap: anywhere; }
+.opening-status, .opening-progress { font: 13px system-ui, sans-serif; line-height: 1.6; overflow-wrap: anywhere; }
+.opening-status { color: #d4ceb7; }
+:root[data-dc-opener-phase="loading"] .opening-status { color: #aedfe0; }
+:root[data-dc-opener-phase="error"] .opening-status { color: #ffb7ad; }
+:root[data-dc-opener-phase="complete"] .opening-status { color: #bae4bd; }
+.opening-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 24px; }
+.opening-controls button, .inspect-reveal { padding: 10px 16px; border: 1px solid #b9a779; border-radius: 6px; background: #304355; color: #fff0cb; font: 13px system-ui, sans-serif; cursor: pointer; }
+.opening-controls button:disabled { opacity: .45; cursor: default; }
+.opening-controls button:focus-visible, .inspect-reveal:focus-visible { outline: 3px solid #a7e4df; outline-offset: 3px; }
+.opening-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 20px; }
+.opening-card { display: flex; flex-direction: column; min-width: 0; padding: 12px; border: 1px solid #8c8265; border-radius: 10px; background: #212d40; box-shadow: 0 8px 24px #07101d66; }
+.opening-slot { margin: 0 0 12px; font: 12px system-ui, sans-serif; color: #d5caa9; }
+.opening-art { position: relative; display: grid; place-items: center; aspect-ratio: 2 / 3; overflow: hidden; border: 1px solid #647489; border-radius: 6px; background: repeating-linear-gradient(45deg, #273b53 0 14px, #2c425b 14px 28px); }
+.opening-symbol { font-size: 64px; color: #c8b780; transform: rotate(45deg); }
+.opening-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.opening-art img:not([src]) { display: none; }
+.opening-details { overflow-wrap: anywhere; }
+.opening-details h2 { font-size: 19px; font-weight: normal; margin: 14px 0 8px; }
+.opening-details p { font: 12px system-ui, sans-serif; color: #c8d0d0; }
+.opening-discovery { border-block-start: 1px solid #617186; padding-block-start: 10px; }
+.inspect-reveal { margin-top: auto; }
+[hidden] { display: none !important; }
+@media (max-width: 440px) { .opening-theater { padding: 12px; } .opening-heading { padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { .opening-symbol { transform: none; } }
+'''
+
+
 def main(directory, mode="card"):
     output = Path(directory)
     output.mkdir(parents=True, exist_ok=True)
-    markup, stylesheet = {"card": (HTML, CSS), "pack": (PACK_HTML, PACK_CSS), "album": (ALBUM_HTML, ALBUM_CSS)}[mode]
+    markup, stylesheet = {"card": (HTML, CSS), "pack": (PACK_HTML, PACK_CSS), "album": (ALBUM_HTML, ALBUM_CSS), "opener": (OPENER_HTML, OPENER_CSS)}[mode]
     (output / "index.html").write_text(markup, encoding="utf-8", newline="\n")
     (output / "card.css").write_text(stylesheet, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] in ("--pack", "--album"):
+    if len(sys.argv) == 3 and sys.argv[1] in ("--pack", "--album", "--opener"):
         main(sys.argv[2], mode=sys.argv[1][2:])
-    elif len(sys.argv) == 2 and sys.argv[1] not in ("--pack", "--album"):
+    elif len(sys.argv) == 2 and sys.argv[1] not in ("--pack", "--album", "--opener"):
         main(sys.argv[1])
     else:
-        raise SystemExit("Usage: python-program-card.py [--pack|--album] OUTPUT_DIR")
+        raise SystemExit("Usage: python-program-card.py [--pack|--album|--opener] OUTPUT_DIR")

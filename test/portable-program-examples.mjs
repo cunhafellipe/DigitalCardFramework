@@ -20,17 +20,23 @@ function run(executable,args,environment={}){
  });
 }
 async function content(directory,mode='card'){
- const pack=mode==='pack',album=mode==='album';
+ const pack=mode==='pack',album=mode==='album',opener=mode==='opener';
  assert.deepEqual((await readdir(directory)).sort(),['card.css','index.html']);
  const html=await readFile(join(directory,'index.html'),'utf8'),css=await readFile(join(directory,'card.css'),'utf8');assert(Buffer.byteLength(html)+Buffer.byteLength(css)<16384);assert(html.endsWith('\n'));assert(css.endsWith('\n'));
  const window=new Window({settings:{disableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true,disableCSSFileLoading:true}});
  try{
   window.document.write(html);const document=window.document;
-  assert.equal(document.documentElement.lang,'en');assert.equal(document.title,album?'Celestial Archive Album':pack?'Celestial Archive Pack':'Celestial Archive');
-  assert.equal(document.scripts.length,1);assert.equal(document.scripts[0].type,'module');assert.equal(document.scripts[0].getAttribute('src'),album?'/program-album-bootstrap.js':'/program-bootstrap.js');assert.equal(document.scripts[0].textContent,'');
+  assert.equal(document.documentElement.lang,'en');assert.equal(document.title,opener?'Celestial Archive Opening Theater':album?'Celestial Archive Album':pack?'Celestial Archive Pack':'Celestial Archive');
+  assert.equal(document.scripts.length,1);assert.equal(document.scripts[0].type,'module');assert.equal(document.scripts[0].getAttribute('src'),opener?'/program-opener-bootstrap.js':album?'/program-album-bootstrap.js':'/program-bootstrap.js');assert.equal(document.scripts[0].textContent,'');
   assert.equal(document.querySelectorAll('style,[style],iframe,object,embed,form').length,0);for(const element of document.querySelectorAll('*'))for(const attribute of element.attributes)assert(!/^on/i.test(attribute.name),'No executable author event handlers');
   assert.equal(document.querySelectorAll('link').length,1);assert.equal(document.querySelector('link').rel,'stylesheet');assert.equal(document.querySelector('link').getAttribute('href'),'card.css');
-  if(album){
+  if(opener){
+   for(const label of ['title','status','progress','reveal','skip','replay'])assert(document.querySelector('[data-dc-opener-label="'+label+'"]'),label);assert.equal(document.querySelector('[data-dc-opener-items]').childElementCount,0);assert.equal(document.querySelectorAll('template').length,1);
+   assert.deepEqual([...document.querySelectorAll('button[data-dc-opener-intent]')].map(button=>button.getAttribute('data-dc-opener-intent')),['reveal','skip','replay']);for(const button of document.querySelectorAll('button')){assert.equal(button.type,'button');assert(button.disabled);assert(!button.closest('template'));}
+   const item=document.querySelector('template[data-dc-opener-item-template]').content;for(const field of ['label','name','rarity','new'])assert(item.querySelector('[data-dc-item-'+field+']'));assert.equal(item.querySelector('img[data-dc-item-preview]').getAttribute('src'),null);const inspect=item.querySelector('button[data-dc-opener-inspect]');assert(inspect);assert.equal(inspect.type,'button');assert(inspect.querySelector('[data-dc-opener-label="inspect"]'));assert.equal(item.querySelectorAll('button').length,1);
+   for(const root of [document,item]){assert.equal(root.querySelectorAll('[data-dc-intent],[data-dc-item-select],style,[style],iframe,object,embed,form').length,0);for(const element of root.querySelectorAll('*'))for(const attribute of element.attributes){assert(!/^on/i.test(attribute.name));assert(!/^(data-copy|data-user|data-product|data-binding)/i.test(attribute.name));}}
+   assert(css.includes('.opening-items'));assert(css.includes('data-dc-opener-phase="error"'));assert(css.includes('img:not([src])'));assert(css.includes('[hidden]'));
+  }else if(album){
    assert(document.querySelector('[data-dc-album-name]'));assert.equal(document.querySelector('[data-dc-album-pages]').childElementCount,0);assert.equal(document.querySelectorAll('template').length,2);
    const page=document.querySelector('template[data-dc-album-page]').content,item=document.querySelector('template[data-dc-album-item]').content;assert(page.querySelector('[data-dc-page-name]'));assert(page.querySelector('[data-dc-album-items]'));const select=item.querySelector('button[data-dc-item-select]');assert(select);assert.equal(select.type,'button');assert(select.querySelector('[data-dc-item-name]'));assert(select.querySelector('[data-dc-item-rarity]'));assert.equal(select.querySelector('img[data-dc-item-preview]').getAttribute('src'),null);assert.equal(item.querySelectorAll('button').length,1);
    for(const root of [document,page,item]){assert.equal(root.querySelectorAll('[data-dc-intent],style,[style],iframe,object,embed,form').length,0);for(const element of root.querySelectorAll('*'))for(const attribute of element.attributes){assert(!/^on/i.test(attribute.name));assert(!/^(data-copy|data-user|data-product|data-binding)/i.test(attribute.name));}}
@@ -48,16 +54,16 @@ async function content(directory,mode='card'){
 
 // Browser handshake, separate-origin approval and renderer lifecycle are
 // qualified separately; this test runs both independent native generators.
-test('Python and Go emit equivalent deterministic card, pack and album DOM without adopter JavaScript',async t=>{
+test('Python and Go emit equivalent deterministic card, pack, album and opener DOM without adopter JavaScript',async t=>{
  const base=resolve(tmpdir()),directory=await mkdtemp(join(base,'portable-program-'));t.after(async()=>{assert(resolve(directory).startsWith(base+sep));await rm(directory,{recursive:true,force:true});});
  const executable=join(directory,process.platform==='win32'?'program-card.exe':'program-card');assert.deepEqual(await run(go,['build','-trimpath','-o',executable,goSource],{GOCACHE:join(directory,'go-cache')}),{stdout:'',stderr:''});
  const modes=[];
- for(const kind of ['card','pack','album']){
+ for(const kind of ['card','pack','album','opener']){
   const outputs=[];
   for(const [language,command,args]of [['python',python,[pythonSource]],['go',executable,[]]]){
    const name=language+'-'+kind,first=join(directory,name),second=join(directory,name+'-repeat'),mode=kind==='card'?[]:['--'+kind];assert.deepEqual(await run(command,[...args,...mode,first]),{stdout:'',stderr:''});assert.deepEqual(await run(command,[...args,...mode,second]),{stdout:'',stderr:''});const generated=await content(first,kind);assert.deepEqual(generated,await content(second,kind),name+' output must be deterministic');outputs.push(generated);
   }
   assert.deepEqual(outputs[0],outputs[1]);modes.push(outputs[0]);
  }
- assert.equal(new Set(modes.map(mode=>mode.html)).size,3);assert.equal(new Set(modes.map(mode=>mode.css)).size,3);
+ assert.equal(new Set(modes.map(mode=>mode.html)).size,4);assert.equal(new Set(modes.map(mode=>mode.css)).size,4);
 });

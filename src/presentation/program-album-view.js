@@ -2,9 +2,7 @@ import {createProgramViewRenderer} from './program-view.js';
 import {ensure} from './data.js';
 import {renderAlbum} from '../ui.js';
 import {albumDisplayProfile,albumDisplayFields,albumDisplayLimits,validateAlbumDisplay} from './album-display.js';
-import {directoryResolver} from './resolver.js';
-import {validatePresentationReference} from './integration.js';
-import {rasterDimensions} from './media.js';
+import {loadProgramPreviews} from './program-previews.js';
 
 /** Explicit display grants only; complete album/copy records stay in the parent. */
 export function createProgramAlbumRenderer({registry,programId,displayFields=[],fallbackRenderer=renderAlbum,viewportHeight=640,maxActivePrograms=2,...limits}={}){
@@ -25,23 +23,7 @@ export function createProgramAlbumRenderer({registry,programId,displayFields=[],
       if(displayFields.includes('albumName')&&model.name!==undefined)snapshot.name=model.name;
       session.snapshot=validateAlbumDisplay(snapshot);
       if(displayFields.includes('preview'))queueMicrotask(async()=>{
-        let totalBytes=0,totalPixels=0;const previews=[],cache=new Map();
-        for(const item of session.snapshot.items){
-          if(controller.signal.aborted||sessions.get(node)!==session)return;
-          if(totalBytes>=albumDisplayLimits.totalPreviewBytes||totalPixels>=albumDisplayLimits.totalPreviewPixels)break;
-          const copy=session.handles.get(item.handle),ref=copy.variant?.presentation??copy.definition.presentation;if(!ref)continue;
-          try{
-            validatePresentationReference(ref);const key=ref.digest+'\n'+ref.baseURL;
-            // At most sixteen 256 KiB rasters are retained, including rejected
-            // lookups only until this iteration finishes. Output has its own cap.
-            if(!cache.has(key)){if(cache.size>=16)cache.delete(cache.keys().next().value);cache.set(key,(async()=>{const resolver=await directoryResolver(ref.baseURL,{digest:ref.digest,signal:controller.signal});try{
-              const descriptor=resolver.manifest.assets.find(asset=>asset.id===resolver.manifest.faces.front.poster);ensure(descriptor&&['image/png','image/jpeg','image/webp'].includes(descriptor.mediaType)&&descriptor.bytes<=Math.min(albumDisplayLimits.previewBytes,albumDisplayLimits.totalPreviewBytes-totalBytes)&&(!Number.isFinite(descriptor.width*descriptor.height)||descriptor.width*descriptor.height<=albumDisplayLimits.totalPreviewPixels-totalPixels),'ALBUM_DISPLAY','Preview exceeds limit');
-              const asset=await resolver.asset(descriptor.id),response=await fetch(asset.url,{signal:controller.signal}),bytes=new Uint8Array(await response.arrayBuffer()),dimensions=rasterDimensions(bytes,descriptor.mediaType),pixels=dimensions.width*dimensions.height;ensure(pixels<=albumDisplayLimits.previewPixels,'ALBUM_DISPLAY','Preview exceeds limit');return {mediaType:descriptor.mediaType,bytes,pixels};
-            }finally{resolver.dispose();}})());}
-            const preview=await cache.get(key);if(totalBytes+preview.bytes.byteLength>albumDisplayLimits.totalPreviewBytes||totalPixels+preview.pixels>albumDisplayLimits.totalPreviewPixels)continue;
-            totalBytes+=preview.bytes.byteLength;totalPixels+=preview.pixels;previews.push({handle:item.handle,mediaType:preview.mediaType,bytes:preview.bytes});
-          }catch{cache.delete(ref.digest+'\n'+ref.baseURL);if(controller.signal.aborted)return;}
-        }
+        const previews=await loadProgramPreviews({items:session.snapshot.items,referenceFor:item=>{const copy=session.handles.get(item.handle);return copy.variant?.presentation??copy.definition.presentation;},signal:controller.signal,isCurrent:()=>sessions.get(node)===session,limits:albumDisplayLimits});
         if(!controller.signal.aborted&&sessions.get(node)===session&&node.isConnected&&!node._programTerminal())try{node.setAlbumDisplay({...session.snapshot,previews});}catch{}
       });
       return session.snapshot;

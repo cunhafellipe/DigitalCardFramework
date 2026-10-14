@@ -224,7 +224,7 @@ python examples/plugins/python-program-card.py program-output
 go run examples/plugins/go-program-card/main.go program-output
 ```
 
-Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js`, `album-display.js`, `media.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
+Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js`, `album-display.js`, `opener-display.js`, `media.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
 
 Register the reviewed URL in trusted host configuration and supply the standard renderer adapter:
 
@@ -290,6 +290,44 @@ packRenderer.dispose();
 The adapter replaces pack artwork in the shop and owned-pack list. Host controls switch front/back; selecting the program artwork focuses the normal review or open/replay control without activating it. Purchase review, payment, opening and replay retain their existing host behavior. Reveal progress is cosmetic and follows the authoritative opening result; the frame receives no product, price, ownership or reward records.
 
 Direct calls return `{node, setSide, setPresentationInputs, dispose}` for mapped programs. Native fallback views may omit `setPresentationInputs`. The renderer also provides `setEnabled(boolean)` and `dispose()`, with the same frame, timeout, message and mapping bounds as the card adapter. Disabled, unapproved, failed or unmapped programs retain native pack artwork and preview cards. This replaces pack appearance, not the complete opener view or its command authority.
+
+## Replace the opening view with a reviewed program
+
+Generate a complete opening view with either language:
+
+```sh
+python examples/plugins/python-program-card.py --opener opener-output
+go run examples/plugins/go-program-card/main.go --opener opener-output
+```
+
+Use the separate-origin setup above and also serve `program-opener-bootstrap.js` at the program origin's root. Register the opener display profile and permitted actions:
+
+```js
+import { createProgramOpenerView } from '@digital-card/framework/presentation/program-opener-view';
+
+const fields = ['cardName', 'rarity', 'isNew', 'preview'];
+const openerView = createProgramOpenerView({
+  registry: new Map([['celestial-opener', {
+    approved: true, version: '1',
+    url: 'https://programs.example/opener/index.html',
+    intents: ['opener-reveal', 'opener-skip', 'opener-replay', 'opener-inspect'],
+    openerDisplay: {profile: 'dc.opener-display@1', fields},
+  }]]),
+  programId: 'celestial-opener', displayFields: fields,
+});
+const view = mountFramework(root, {client, openerView});
+// When removing the host component:
+view.dispose();
+openerView.dispose();
+```
+
+The custom region covers opening status, unrevealed slots, revealed cards and reveal/replay controls. The host retains purchasing, pack Open commands and error recovery. Program actions can reveal the next card, reveal all, replay the existing receipt or inspect a revealed card; they cannot request another purchase or opening. Actions identify the current display snapshot, and obsolete actions cannot affect a replacement snapshot.
+
+Only already-revealed cards receive temporary inspection handles and explicitly granted name, rarity, new/duplicate status or raster previews. Unrevealed slots contain only their position and a generic localized label. Receipt, pack, copy and owner identifiers, bindings, codes, purchase terms and raw error bodies are absent. Labels and phase/progress come from the host's localization. Missing or unsupported previews retain text identification.
+
+The [opener display schema](opener-display.schema.json) describes the snapshot. It supports up to 1,000 slots, 100-character card fields, 500-character labels and 2 MiB of encoded metadata. Native `Uint8Array` previews use the same raster limits as album displays: PNG/JPEG/WebP, 256 KiB and 1,048,576 pixels each, 4 MiB and 8,388,608 pixels total. The parent resolves pinned image bytes; it never sends their source URLs or credentials.
+
+The opener retains its frame across reveal updates. The supplied bootstrap preserves control focus when updating its contents. The viewport defaults to 640 pixels and the active-frame limit to one. `setEnabled(false)`, unavailable grants or program failures retain native opening controls; `dispose()` releases the adapter. Existing host-written opener callbacks remain supported. This profile replaces the opening view, not arbitrary application views or server command authority.
 
 ## Install a reviewed album layout
 

@@ -46,3 +46,21 @@ program.setAlbumDisplay(snapshot);
 void connectProgram({onAlbumDisplay: content => console.log(content.items.length)}).then(bridge => bridge.selectItem(snapshot.snapshotId, snapshot.items[0]!.handle));
 // @ts-expect-error Private copy fields cannot be granted.
 createProgramAlbumRenderer({registry, programId: 'celestial', displayFields: ['bindings']});
+
+import {createProgramOpenerView} from '@digital-card/framework/presentation/program-opener-view';
+import type {RevealState, RevealController} from '@digital-card/framework/client';
+declare const revealState: RevealState;
+declare const revealController: RevealController;
+const opener = createProgramOpenerView({registry, programId: 'celestial', displayFields: ['cardName', 'isNew']});
+const opening = opener(revealState, revealController, {onSelect: copy => console.log(copy.id)});
+opening.update(revealState);
+opening.dispose();
+opener.setEnabled(false);
+opener.dispose();
+// @ts-expect-error Private card fields are not display grants.
+createProgramOpenerView({registry, programId: 'celestial', displayFields: ['bindings']});
+void connectProgram({onOpenerDisplay: snapshot => console.log(snapshot.revealed)}).then(bridge => {
+  bridge.openerIntent('opener-reveal', 'snapshot');
+  // @ts-expect-error Browser programs cannot request authoritative pack opening.
+  bridge.openerIntent('openPack', 'snapshot');
+});

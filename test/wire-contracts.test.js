@@ -136,3 +136,46 @@ test('query and path contracts fail before fetch and omit optional null values',
   await assert.rejects(()=>read('inspectCard',undefined,{path:{copyId:'copy /?&'}}),WireApiError);
   assert.deepEqual(sent,['/api/inventory?limit=50&sort=ordinal','/api/inventory?limit=50&sort=id','/api/cards/copy%20%2F%3F%26']);
 });
+
+test('checked wallet, exact and rounded conversions, and listing quote branches use actual HTTP shapes',async t=>{
+  const x=fixture({actionHandlers:{'external.item':async()=>{}}}),seller={...x.alice,role:'admin'};let handler;
+  const shop=x.core.createShop(seller,{key:'contract-shop',name:'Shop',kind:'admin'});
+  const owned=x.open('common',x.alice)[0];
+  const stocks=[{kind:'mint-card',variantId:'dawn.standard',quantity:2},{kind:'copies',ids:[owned.id]},{kind:'mint-pack',productId:'common',quantity:1},{kind:'action',handler:'external.item',quantity:1,params:{sku:'hat'}}];
+  const listings=stocks.map((items,index)=>x.core.createListing(seller,{key:'contract-listing-'+index,shopId:shop.id,title:'Stock',price:{currencyId:'credits',amount:index===3?0:20},items}));
+  const server=createServer((request,response)=>handler(request,response));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>x.bob,allowedOrigin:origin,requirePrincipal:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>x.bob.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  assert.deepEqual(await call('wallet',undefined),{credits:10000});
+  validateWireResponse('wallet',200,{});
+  validateWireResponse('wallet',200,{credits:0,custom:Number.MAX_SAFE_INTEGER});
+  for(const wallet of [{credits:-1},{credits:1.5},{credits:'1'},{credits:null},{credits:Number.MAX_SAFE_INTEGER+1},{credits:{amount:1}}])assert.throws(()=>validateWireResponse('wallet',200,wallet),WireContractError);
+  for(const [index,amount]of [100,101].entries()){
+    const input={key:'convert-contract-'+index,from:'credits',to:'gems',amount,rounding:index?'floor':'exact',catalogVersion:1};
+    const receipt=await call('convert',input);
+    assert.equal(receipt.received,1);assert.equal(receipt.remainderNumerator,String(index));assert.equal(receipt.remainderDenominator,'100');
+    assert.deepEqual(await call('convert',input),receipt);
+    for(const mutate of [value=>delete value.received,value=>value.received=0,value=>value.amount='100',value=>value.remainderNumerator=0,value=>value.remainderNumerator='-1',value=>value.remainderDenominator='0',value=>value.remainderDenominator='100\n',value=>value.privateAccount='hidden']){
+      const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('convert',200,invalid),WireContractError);
+    }
+  }
+  assert.deepEqual(await call('wallet',undefined),{credits:9799,gems:2});
+  for(const [index,listing]of listings.entries()){
+    const quote=await call('quoteListing',{listingId:listing.id,quantity:index===0?2:1});
+    assert.equal(quote.items[0].kind,['copy','copy','pack','custom'][index]);
+    assert.equal(quote.price.amount,index===0?40:index===3?0:20);
+    for(const mutate of [value=>delete value.price,value=>value.quantity='1',value=>value.digest='invalid',value=>value.price.amount=-1,value=>value.unitIds.push(value.unitIds[0]),value=>value.items[0].kind='unknown',value=>value.items[0].privateData='hidden']){
+      const invalid=structuredClone(quote);mutate(invalid);assert.throws(()=>validateWireResponse('quoteListing',200,invalid),WireContractError);
+    }
+    const item=quote.items[0];
+    if(item.kind==='copy'){
+      const extended=structuredClone(quote);extended.items[0].copy.metadata.custom={nested:true};validateWireResponse('quoteListing',200,extended);
+      const invalid=structuredClone(quote);invalid.items[0].copy.state='unknown';assert.throws(()=>validateWireResponse('quoteListing',200,invalid),WireContractError);
+    }else if(item.kind==='pack'){
+      const invalid=structuredClone(quote);invalid.items[0].pack.copyIds=['sealed'];assert.throws(()=>validateWireResponse('quoteListing',200,invalid),WireContractError);
+    }
+  }
+});

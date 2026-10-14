@@ -83,3 +83,27 @@ void call('bindingFactoryStatus',undefined,{query:{batchId:'11111111-1111-4111-8
 void call('inventory',undefined,{query:{limit:50,after:null,search:undefined,sort:'ordinal'}});
 void call('inventory',undefined,{query:{limit:50,sort:'id'}});
 void call('viewAlbum',undefined,{path:{albumId:'album'}});
+
+async function walletAndListing(){
+  const wallet=await call('wallet',undefined);
+  const balance:number|undefined=wallet.credits;
+  const conversion=await call('convert',{key:'convert',from:'credits',to:'gems',amount:100,catalogVersion:1});
+  const received:number=conversion.received,remainder:string=conversion.remainderNumerator;
+  const quote=await call('quoteListing',{listingId:'listing'});
+  const total:number=quote.price.amount;
+  for(const item of quote.items){
+    const unitId:string=item.unitId;
+    if(item.kind==='copy'){const cardId:string=item.copy.cardId;void cardId;}
+    else if(item.kind==='pack'){const productId:string=item.pack.productId;void productId;}
+    else {
+      // @ts-expect-error custom goods do not disclose a copy
+      void item.copy;
+    }
+    void unitId;
+  }
+  return {balance,received,remainder,total};
+}
+void walletAndListing;
+// @ts-expect-error balance entries are integer JSON numbers
+const invalidWallet:Schemas['Wallet']={credits:'100'};
+void invalidWallet;

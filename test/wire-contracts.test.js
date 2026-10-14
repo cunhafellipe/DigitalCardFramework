@@ -6,6 +6,7 @@ import {createWireTransport,WireApiError} from '../src/wire-client.js';
 import {openapi} from '../src/contracts.js';
 import {createApiHandler} from '../src/http.js';
 import {createServer} from 'node:http';
+import {MemoryStore} from '../src/store.js';
 import {createCurrencyGateway} from '../src/currency-gateway.js';
 
 test('acquisition request and real detached responses validate, including immutable replay',()=>{
@@ -254,4 +255,37 @@ test('commerce settings and shop responses preserve effective controls, metadata
     const invalid=structuredClone(managed);mutate(invalid);assert.throws(()=>validateWireResponse(id,200,invalid),WireContractError);
   }
   const page=await call('shops',undefined);for(const mutate of [value=>delete value.items[0].mine,value=>value.items[0].mine=1,value=>value.total=-1]){const invalid=structuredClone(page);mutate(invalid);assert.throws(()=>validateWireResponse('shops',200,invalid),WireContractError);}
+});
+
+
+test('raffle HTTP responses cover entry replay, private status, draw replay and claimed winners',async t=>{
+  let now='2026-09-30T12:00:00.000Z',handler;
+  const store=new MemoryStore(),x=fixture({store,clock:()=>now,raffleRandom:()=>0}),manager={...x.alice,role:'admin'};let actor=manager;
+  const shop=x.core.createShop(manager,{key:'raffle-shop',name:'Raffles',kind:'admin'});
+  const listing=key=>x.core.createListing(manager,{key,shopId:shop.id,title:key,price:{currencyId:'credits',amount:0},items:{kind:'mint-card',variantId:'dawn.standard',quantity:1},raffle:{entryClosesAt:'2026-09-30T12:01:00.000Z',claimSeconds:60,winners:1}});
+  const active=listing('raffle-active'),empty=listing('raffle-empty'),canceled=listing('raffle-canceled');
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  actor=x.bob;
+  const before=await call('raffleStatus',{listingId:active.id});assert.equal(before.entered,false);assert.equal(before.drawnAt,null);assert.equal(before.claimUntil,null);assert.equal(before.orderId,null);
+  const entryInput={key:'raffle-entry',listingId:active.id},entry=await call('enterRaffle',entryInput);assert.equal(entry.entered,true);assert.equal(entry.entryCount,1);const enteredState=store.read(state=>state);assert.deepEqual(await call('enterRaffle',entryInput),entry);assert.deepEqual(store.read(state=>state),enteredState);
+  assert.deepEqual(await call('enterRaffle',{...entryInput,key:'raffle-entry-again'}),entry);
+  actor=manager;await call('cancelListing',{key:'raffle-cancel',listingId:canceled.id});assert.equal((await call('raffleStatus',{listingId:canceled.id})).status,'canceled');
+  now='2026-09-30T12:01:00.000Z';
+  const drawInput={key:'raffle-draw',listingId:active.id},draw=await call('drawRaffle',drawInput);assert.equal(draw.winners.length,1);assert.equal(draw.winners[0].userId,x.bob.userId);assert.equal(draw.winners[0].orderId,null);const drawnState=store.read(state=>state);assert.deepEqual(await call('drawRaffle',drawInput),draw);assert.deepEqual(store.read(state=>state),drawnState);assert.deepEqual(await call('drawRaffle',{...drawInput,key:'raffle-redraw'}),draw);
+  assert.deepEqual((await call('drawRaffle',{key:'raffle-empty-draw',listingId:empty.id})).winners,[]);
+  const observer=await call('raffleStatus',{listingId:active.id});assert.equal(observer.winner,false);assert.equal(observer.claimUntil,null);assert.equal(observer.drawnAt,draw.at);
+  actor=x.bob;const winner=await call('raffleStatus',{listingId:active.id});assert.equal(winner.winner,true);assert.equal(winner.claimUntil,draw.claimUntil);assert.equal(winner.orderId,null);
+  const quote=await call('quoteListing',{listingId:active.id});const order=await call('buyListing',{key:'raffle-claim',...quote});
+  const claimed=await call('raffleStatus',{listingId:active.id});assert.equal(claimed.orderId,order.id);assert.deepEqual(await call('enterRaffle',entryInput),entry);
+  actor=manager;assert.deepEqual(await call('drawRaffle',drawInput),draw);assert.equal((await call('drawRaffle',{...drawInput,key:'raffle-after-claim'})).winners[0].orderId,order.id);
+  now='2026-09-30T12:02:00.000Z';x.core.expireListings(manager);assert.equal((await call('raffleStatus',{listingId:empty.id})).status,'expired');
+  for(const operation of ['enterRaffle','raffleStatus'])for(const mutate of [value=>delete value.entered,value=>value.entryCount=-1,value=>value.winner='true',value=>value.drawnAt='invalid',value=>value.claimUntil=0,value=>value.orderId={},value=>value.status='unknown',value=>value.winners=draw.winners]){
+    const invalid=structuredClone(claimed);mutate(invalid);assert.throws(()=>validateWireResponse(operation,200,invalid),WireContractError);
+  }
+  for(const mutate of [value=>delete value.winners,value=>value.at=null,value=>value.claimUntil='invalid',value=>delete value.winners[0].unitId,value=>value.winners[0].orderId=1,value=>value.winners[0].privateAccount={},value=>value.entries={}]){
+    const invalid=structuredClone(draw);mutate(invalid);assert.throws(()=>validateWireResponse('drawRaffle',200,invalid),WireContractError);
+  }
 });

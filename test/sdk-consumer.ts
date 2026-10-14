@@ -146,3 +146,21 @@ async function shopSettings(){
   return {available,maximum,kind,metadata,enabled,mine};
 }
 void shopSettings;
+
+
+async function raffleResponses(){
+  const entry=await call('enterRaffle',{key:'entry',listingId:'listing'});
+  const entered:boolean=entry.entered,count:number=entry.entryCount;
+  const status=await call('raffleStatus',{listingId:entry.listingId});
+  const orderId:string|null=status.orderId,deadline:string|null=status.claimUntil;
+  const state:'active'|'canceled'|'expired'=status.status;
+  // @ts-expect-error public status never exposes other entrants or winner records
+  void status.winners;
+  const draw=await call('drawRaffle',{key:'draw',listingId:entry.listingId});
+  const drawnAt:string=draw.at;
+  for(const winner of draw.winners){const userId:string=winner.userId,unitId:string=winner.unitId,claim:string|null=winner.orderId;void [userId,unitId,claim];}
+  // @ts-expect-error draw winners retain nullable order IDs before claim
+  const claimed:string=draw.winners[0]!.orderId;
+  return {entered,count,orderId,deadline,state,drawnAt,claimed};
+}
+void raffleResponses;

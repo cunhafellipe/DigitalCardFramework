@@ -1,3 +1,4 @@
+import {validateRecordPlan} from '../src/record-transaction.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {SQLiteStore} from '../src/sqlite.js';
@@ -80,4 +81,15 @@ test('oversized configured raffles retain compatibility support before randomnes
 });
 test('expired candidate windows advance without hiding later healthy due raffles',t=>{
   const z=setup(t),ended=z.list('ended',{endsAt:'2026-09-30T13:00:00.000Z',raffle:{entryClosesAt:'2026-09-30T12:30:00.000Z',claimSeconds:60,winners:1}}),healthy=z.list('healthy');z.store.prepareRecordTransactions();assert.deepEqual(z.store.selectDueRaffles('2026-09-30T13:00:00.000Z',1),[]);assert.deepEqual(z.store.selectDueRaffles('2026-09-30T13:00:00.000Z',1),[healthy.id]);assert.deepEqual(z.store.selectDueRaffles('2026-09-30T13:00:00.000Z',1),[]);assert.equal(z.store.query(q=>q.get('listings',ended.id)).draw,null);
+});
+
+
+test('raffle receipt-only plans admit no writes and retain first-execution guards',()=>{
+  for(const raffleDraw of [false,true]){
+    const empty={changes:[],scalars:[],loaded:[]};
+    assert.doesNotThrow(()=>validateRecordPlan(empty,{raffle:true,raffleDraw}));
+    assert.throws(()=>validateRecordPlan({...empty,changes:[{collection:raffleDraw?'operatorRequests':'requests',key:'receipt',value:{result:{}}}]},{raffle:true,raffleDraw}),code('INVALID_STATE'));
+    assert.throws(()=>validateRecordPlan({...empty,scalars:[{name:'revision',value:1}]},{raffle:true,raffleDraw}),code('RECORD_TRANSACTION_UNSUPPORTED'));
+    assert.throws(()=>validateRecordPlan({...empty,completion:{id:'unrelated'}},{raffle:true,raffleDraw}),code('RECORD_TRANSACTION_UNSUPPORTED'));
+  }
 });

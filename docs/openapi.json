@@ -7116,7 +7116,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/RaffleStatus"
                 }
               }
             }
@@ -7237,7 +7237,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/RaffleStatus"
                 }
               }
             }
@@ -7358,7 +7358,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/RaffleDraw"
                 }
               }
             }
@@ -19686,6 +19686,116 @@
         },
         "additionalProperties": false
       },
+      "RaffleStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "listingId",
+          "entryCount",
+          "entered",
+          "drawnAt",
+          "winner",
+          "orderId",
+          "claimUntil",
+          "status"
+        ],
+        "properties": {
+          "listingId": {
+            "type": "string"
+          },
+          "entryCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "entered": {
+            "type": "boolean"
+          },
+          "drawnAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "winner": {
+            "type": "boolean"
+          },
+          "orderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "claimUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "canceled",
+              "expired"
+            ]
+          }
+        }
+      },
+      "RaffleWinner": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userId",
+          "unitId",
+          "orderId"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "unitId": {
+            "type": "string"
+          },
+          "orderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RaffleDraw": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "at",
+          "claimUntil",
+          "winners"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "claimUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "winners": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/RaffleWinner"
+            }
+          }
+        }
+      },
       "CommandIntent": {
         "type": "object",
         "additionalProperties": false,
@@ -21832,7 +21942,7 @@
                 ]
               },
               "result": {
-                "type": "object"
+                "$ref": "#/components/schemas/RaffleStatus"
               }
             }
           },

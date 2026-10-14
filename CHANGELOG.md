@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Restore original raffle entry and draw receipts on same-key retries without changing raffle state.
+- Define checked shop, commerce settings and raffle response contracts, including viewer-specific status and nullable claim details.
+
 - Preserve marketplace review controls across unchanged display updates while retaining stale-request checks for changed data.
 
 - Validate wallet balances, conversion receipts and listing quote item shapes in checked clients.

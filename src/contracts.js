@@ -1566,6 +1566,7 @@ openapi.paths['/inventory'].get.parameters=pageParameters;
 openapi.paths['/inventory'].get.responses['200'].content['application/json'].schema={oneOf:[{type:'array',items:ref('Copy')},ref('Page')]};
 for(const value of Object.values(openapi.paths))for(const [method,operation]of Object.entries(value))if(method==='post'&&!operation.parameters.some(p=>p.name==='X-DC-Principal'))operation.parameters.push({name:'X-DC-Principal',in:'header',schema:str,description:'Required by the production host; verified principal binding.'});
 
+schemas.ExternalCreditReceipt={type:'object',additionalProperties:false,required:['providerId','transactionId','userId','currencyId','amount','balance','at'],properties:{providerId:{type:'string',minLength:1,maxLength:300},transactionId:{type:'string',minLength:1,maxLength:300},userId:{type:'string',minLength:1,maxLength:300},currencyId:{type:'string',minLength:1,maxLength:300},amount:{type:'integer',minimum:1,maximum:Number.MAX_SAFE_INTEGER},balance:{type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER},at:{type:'string',format:'date-time'}}};
 openapi.paths['/currency/reconcile'] = {post: {
   operationId:'reconcileCurrency', description:'Optional external-currency provider bridge. The server verifies final settlement; body amounts and identities are never trusted. Deduplicated by provider and transaction, not client retry key.',
   security:[{hostSession:[]}], parameters:[{name:'Origin',in:'header',required:true,schema:{type:'string'}},{name:'X-DC-Principal',in:'header',required:true,schema:{type:'string'}}],
@@ -1583,7 +1584,7 @@ openapi.paths['/currency/reconcile'] = {post: {
       },
     },
   },
-  responses:{200:{description:'Verified settlement credited exactly once'},400:{description:'Invalid provider or units'},401:{description:'Authentication required'},403:{description:'Origin or ownership rejected'},404:{description:'Gateway/provider not configured'},409:{description:'Pending or conflicting settlement'}}
+  responses:{200:{description:'Verified settlement credited exactly once',content:{'application/json':{schema:ref('ExternalCreditReceipt')}}},400:{description:'Invalid provider or units'},401:{description:'Authentication required'},403:{description:'Origin or ownership rejected'},404:{description:'Gateway/provider not configured'},409:{description:'Pending or conflicting settlement'}}
 }};
 
 // Code secrets belong only in operator imports and authenticated reveal responses.
@@ -1628,6 +1629,10 @@ schemas.CommerceSettings={type:'object',additionalProperties:false,properties:{e
 schemas.ConfigureCommerce={type:'object',required:['key','expectedRevision','settings'],properties:{key:requestKey,expectedRevision:{type:'integer',minimum:0},settings:ref('CommerceSettings')}};
 schemas.CreateShop={type:'object',required:['key','name'],properties:{key:requestKey,name:{type:'string',maxLength:100},kind:{enum:['admin','player'],default:'player'},ownerId:codeId,metadata:{type:'object'}}};
 schemas.ListingStock={type:'object',additionalProperties:false,required:['kind'],properties:{kind:{enum:['copies','packs','mint-card','mint-pack','action']},ids:{...boundedIds,uniqueItems:true,minItems:1},variantId:codeId,productId:codeId,quantity:{type:'integer',minimum:1,maximum:1000},handler:codeId,params:{type:'object'}},description:'Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock.'};
+schemas.ListingStock={oneOf:[
+  ['copies',['ids']],['packs',['ids']],['mint-card',['quantity','variantId']],
+  ['mint-pack',['quantity','productId']],['action',['quantity','handler']]
+].map(([kind,required])=>({...schemas.ListingStock,required:['kind',...required],properties:{...schemas.ListingStock.properties,kind:{const:kind}}}))};
 schemas.RaffleTerms={type:'object',additionalProperties:false,required:['entryClosesAt','claimSeconds','winners'],properties:{entryClosesAt:{type:'string',format:'date-time'},claimSeconds:{type:'integer',minimum:60,maximum:604800},winners:{type:'integer',minimum:1,maximum:1000}}};
 schemas.CreateListing={type:'object',required:['key','shopId','title','price','items'],properties:{key:requestKey,shopId:codeId,title:{type:'string',maxLength:200},description:{type:'string',maxLength:2000},price:{type:'object',additionalProperties:false,required:['currencyId','amount'],properties:{currencyId:codeId,amount:{type:'integer',minimum:0,maximum:9007199254740991}}},items:ref('ListingStock'),previewAt:maybeTime,startsAt:{type:'string',format:'date-time'},endsAt:maybeTime,perBuyerLimit:{type:'integer',minimum:1,maximum:1000,default:10},metadata:{type:'object'},raffle:{oneOf:[ref('RaffleTerms'),{type:'null'}]}}};
 schemas.CreateListing.properties.allocationDigest=allocationDigest;

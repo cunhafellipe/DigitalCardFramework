@@ -1,4 +1,4 @@
-import {operationContract,validateWireRequest,validateWireResponse} from './wire-contracts.js';
+import {WireContractError,operationContract,validateWireRequest,validateWireResponse} from './wire-contracts.js';
 import type {Operations, Schemas} from './wire-types.js';
 export class WireApiError extends Error {
   readonly code: string;
@@ -29,7 +29,8 @@ export function createWireTransport({baseUrl='/api',fetch:request=globalThis.fet
     const headers:Record<string,string>={};
     if(input!==undefined){headers['Content-Type']='application/json';const actor=principal();if(actor)headers['X-DC-Principal']=actor;}
     const response=await request(baseUrl+resolved+(query.size?'?'+query.toString():''),{method,credentials:'same-origin',headers,body:input===undefined?undefined:JSON.stringify(input),signal:options.signal});
-    const value:unknown=await response.json();
+    let value:unknown;
+    try{value=await response.json();}catch(error){if(error instanceof SyntaxError)throw new WireContractError(id,'response',[]);throw error;}
     validateWireResponse(id,response.status,value);
     if(!response.ok)throw new WireApiError(value as Schemas['Error'],response.status);
     return value as Operations[K]['response'];

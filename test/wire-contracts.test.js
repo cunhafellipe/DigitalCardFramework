@@ -6,6 +6,7 @@ import {createWireTransport,WireApiError} from '../src/wire-client.js';
 import {openapi} from '../src/contracts.js';
 import {createApiHandler} from '../src/http.js';
 import {createServer} from 'node:http';
+import {createCurrencyGateway} from '../src/currency-gateway.js';
 
 test('acquisition request and real detached responses validate, including immutable replay',()=>{
   const x=fixture(),quote=x.core.quote(x.alice,{productId:'common'});
@@ -54,7 +55,7 @@ test('checked transport validates actual HTTP acquisition and error responses',a
   const server=createServer((request,response)=>handler(request,response));
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin='http://127.0.0.1:'+server.address().port;
-  handler=createApiHandler({framework:x.core,resolveIdentity:()=>x.alice,allowedOrigin:origin,requirePrincipalBinding:true,requireTradeReview:true});
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>x.alice,allowedOrigin:origin,requirePrincipal:true,requireTradeReview:true});
   t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
   const call=createWireTransport({baseUrl:origin+'/api',principal:()=>x.alice.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
   const quote=await call('quote',{productId:'common'});
@@ -77,4 +78,37 @@ test('checked transport preserves session and principal binding and fails before
   await assert.rejects(()=>fail('quote',{productId:'common'}),error=>error instanceof WireApiError&&error.code==='UNAUTHENTICATED'&&error.status===401);
   const malformed=createWireTransport({principal:()=>null,fetch:async()=>new Response('{}',{status:200})});
   await assert.rejects(()=>malformed('quote',{productId:'common'}),WireContractError);
+});
+
+test('listing stock contracts require the fields for each existing stock kind',()=>{
+  const listing=items=>({key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items});
+  for(const items of [{kind:'copies',ids:['copy']},{kind:'packs',ids:['pack']},{kind:'mint-card',variantId:'card',quantity:1},{kind:'mint-pack',productId:'pack',quantity:1},{kind:'action',handler:'reward',quantity:1}]){
+    validateWireRequest('createListing',listing(items));
+    // Fields belonging to another branch remain permitted by the existing server contract.
+    validateWireRequest('createListing',listing({...items,params:{},productId:'pack'}));
+    for(const field of Object.keys(items).filter(key=>key!=='kind')){
+      const invalid={...items};delete invalid[field];
+      assert.throws(()=>validateWireRequest('createListing',listing(invalid)),WireContractError);
+    }
+  }
+  for(const items of [{kind:'copies',ids:[]},{kind:'packs',ids:['pack','pack']},{kind:'action',handler:'reward',quantity:0},{kind:'mint-card',variantId:'card',quantity:'1'}])assert.throws(()=>validateWireRequest('createListing',listing(items)),WireContractError);
+});
+
+test('checked currency reconciliation returns the retained receipt and enforces principal binding',async t=>{
+  const x=fixture();let handler;
+  const gateway=createCurrencyGateway({framework:x.core,providers:{points:{currencies:{POINTS:{currencyId:'credits'}},resolveAccount:({userId})=>'external:'+userId,lookup:({transactionId,account})=>({transactionId,account,status:'settled',currency:'POINTS',amountUnits:'150'})}}});
+  const server=createServer((request,response)=>handler(request,response));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,currencyGateway:gateway,resolveIdentity:()=>x.alice,allowedOrigin:origin,requirePrincipal:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const transport=principal=>createWireTransport({baseUrl:origin+'/api',principal,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const input={providerId:'points',transactionId:'settled-transaction'};
+  for(const principal of [()=>null,()=>x.bob.userId])await assert.rejects(()=>transport(principal)('reconcileCurrency',input),error=>error instanceof WireApiError&&error.code==='PRINCIPAL_CHANGED'&&error.status===409);
+  const call=transport(()=>x.alice.userId),receipt=await call('reconcileCurrency',input);
+  assert.deepEqual(receipt,{...input,userId:x.alice.userId,currencyId:'credits',amount:150,balance:10150,at:'2026-09-30T12:00:00.000Z'});
+  assert.deepEqual(await call('reconcileCurrency',input),receipt);
+  for(const mutate of [value=>delete value.balance,value=>value.amount='150',value=>value.balance=Number.MAX_SAFE_INTEGER+1,value=>value.externalUnits='150',value=>value.at='invalid']){
+    const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('reconcileCurrency',200,invalid),WireContractError);
+  }
 });

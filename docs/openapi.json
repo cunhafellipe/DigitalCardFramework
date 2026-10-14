@@ -3437,7 +3437,14 @@
         },
         "responses": {
           "200": {
-            "description": "Verified settlement credited exactly once"
+            "description": "Verified settlement credited exactly once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalCreditReceipt"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid provider or units",
@@ -12737,6 +12744,55 @@
           }
         }
       },
+      "ExternalCreditReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerId",
+          "transactionId",
+          "userId",
+          "currencyId",
+          "amount",
+          "balance",
+          "at"
+        ],
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "transactionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "userId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "currencyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "balance": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CardType": {
         "type": "object",
         "required": [
@@ -13506,57 +13562,251 @@
         }
       },
       "ListingStock": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "enum": [
-              "copies",
-              "packs",
-              "mint-card",
-              "mint-pack",
-              "action"
-            ]
-          },
-          "ids": {
-            "type": "array",
-            "maxItems": 1000,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "properties": {
+              "kind": {
+                "const": "copies"
+              },
+              "ids": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "handler": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "params": {
+                "type": "object"
+              }
             },
-            "uniqueItems": true,
-            "minItems": 1
+            "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
           },
-          "variantId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "ids"
+            ],
+            "properties": {
+              "kind": {
+                "const": "packs"
+              },
+              "ids": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "handler": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
           },
-          "productId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "quantity",
+              "variantId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "mint-card"
+              },
+              "ids": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "handler": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
           },
-          "quantity": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 1000
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "quantity",
+              "productId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "mint-pack"
+              },
+              "ids": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "handler": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
           },
-          "handler": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "params": {
-            "type": "object"
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "quantity",
+              "handler"
+            ],
+            "properties": {
+              "kind": {
+                "const": "action"
+              },
+              "ids": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "productId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              },
+              "handler": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
           }
-        },
-        "description": "Existing stock requires ids. Mint sources require quantity and variantId/productId. Custom stock requires quantity and installed handler. Only admin shops with commerce.manage may issue new/custom stock."
+        ]
       },
       "RaffleTerms": {
         "type": "object",

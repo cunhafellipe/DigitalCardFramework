@@ -50,3 +50,15 @@ void call('registerCommandIntent',{command:'configureAdmin',input:{expectedRevis
 void call('registerCommandIntent',{command:'purchase',input:{productId:'sample',quantity:1,productRevision:1}});
 // @ts-expect-error an intent identifier cannot be replaced with caller-supplied command data
 void call('executeCommandIntent',{command:'purchase',input:{}});
+
+async function externalCurrency(){
+  const receipt=await call('reconcileCurrency',{providerId:'points',transactionId:'settled'});
+  const balance:number=receipt.balance;
+  return balance;
+}
+void externalCurrency;
+// @ts-expect-error owned stock requires its existing IDs
+void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items:{kind:'copies'}});
+// @ts-expect-error newly issued card stock requires a variant
+void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items:{kind:'mint-card',quantity:1}});
+void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items:{kind:'action',handler:'reward',quantity:1}});

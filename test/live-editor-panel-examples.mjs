@@ -113,6 +113,16 @@ async function checkInteraction(files){
   }
 }
 
+test('Selection received before the connect continuation cannot enable an unready proposal button',async()=>{
+  const dom=new Window(),document=dom.document,sent=[];document.write('<textarea data-editor-field="text"></textarea><button data-editor-propose>Propose</button>');
+  let listener;const saved={window:globalThis.window,parent:globalThis.parent,AbortController:globalThis.AbortController};globalThis.window={addEventListener(type,callback){listener=callback;},removeEventListener(){}};globalThis.parent={};globalThis.AbortController=dom.AbortController;let mounted;
+  try{const ready=bootstrapEditorPanel(document),port={onmessage:null,postMessage(value){sent.push(value);},close(){}};listener({source:globalThis.parent,data:{type:'dc.program.init',version:1,nonce:'early-selection'},ports:[port]});
+    const snapshot={profile:'dc.editor-selection@1',snapshotId:'00000000-0000-4000-8000-000000000001',revision:0,side:'front',nodeType:'text',locked:false,fields:['text'],values:{text:'Original'}};
+    port.onmessage({data:{version:1,type:'content',content:snapshot}});const control=document.querySelector('textarea'),button=document.querySelector('button');assert(control.disabled);assert(button.disabled);button.click();assert.equal(sent.length,1);
+    mounted=await ready;assert(!control.disabled);assert(!button.disabled);control.value='Reviewed';button.click();assert.equal(sent.length,2);assert.equal(sent[1].patch.text,'Reviewed');
+  }finally{mounted?.dispose();for(const [key,value]of Object.entries(saved))if(value===undefined)delete globalThis[key];else globalThis[key]=value;await dom.happyDOM.close();}
+});
+
 test('Python generates deterministic accessible live editor HTML with framework proposals',async t=>{
   const directory=await temporary(t),first=join(directory,'first'),second=join(directory,'second');
   assert.deepEqual(await run(python,[pythonSource,first]),{stdout:'',stderr:''});

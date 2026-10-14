@@ -65,7 +65,7 @@ try{
   await product.getByLabel('Packs',{exact:true}).fill('2');
   const review=product.getByRole('button',{name:'Review purchase · 20 Credits',exact:true});
   await program.frameLocator('iframe').getByRole('button',{name:'Select Celestial Archive pack',exact:true}).click();
-  assert(await review.evaluate(button=>document.activeElement===button));assert.equal(calls.quotes.length,0);assert.equal(calls.purchases.length,0);assert.equal(calls.openings.length,0);
+  await page.waitForFunction(button=>document.activeElement===button,await review.elementHandle(),{timeout:20000});assert(await review.evaluate(button=>document.activeElement===button));assert.equal(calls.quotes.length,0);assert.equal(calls.purchases.length,0);assert.equal(calls.openings.length,0);
   await program.getByRole('button',{name:'Show pack back',exact:true}).click();await program.frameLocator('iframe').locator('html[data-dc-side="back"]').waitFor();
   await program.getByRole('button',{name:'Show pack front',exact:true}).click();await program.frameLocator('iframe').locator('html[data-dc-side="front"]').waitFor();
   await review.click();const buy=product.getByRole('button',{name:'Buy reviewed packs · 20 Credits',exact:true});await buy.waitFor();
@@ -78,7 +78,7 @@ try{
   const unopened=page.locator('.dc-owned-pack').filter({has:page.getByRole('button',{name:'Open pack',exact:true})}).first();
   await unopened.locator('dc-program-pack').frameLocator('iframe').locator('html[data-dc-side]').waitFor();
   await unopened.locator('dc-program-pack').frameLocator('iframe').getByRole('button',{name:'Select Celestial Archive pack',exact:true}).click();
-  assert(await unopened.getByRole('button',{name:'Open pack',exact:true}).evaluate(button=>document.activeElement===button));assert.equal(calls.openings.length,0);
+  await page.waitForFunction(button=>document.activeElement===button,await unopened.getByRole('button',{name:'Open pack',exact:true}).elementHandle(),{timeout:20000});assert(await unopened.getByRole('button',{name:'Open pack',exact:true}).evaluate(button=>document.activeElement===button));assert.equal(calls.openings.length,0);
   await page.evaluate(()=>{window.packTest.throwCosmetic=true;});await unopened.getByRole('button',{name:'Open pack',exact:true}).click();
   await page.getByRole('button',{name:'Reveal next',exact:true}).waitFor();assert.equal(calls.openings.length,1);assert.equal(x.core.inventory(x.alice).length,2);
   const committed=structuredClone(x.core.inventory(x.alice)),opened=page.locator('.dc-owned-pack').filter({has:page.getByRole('button',{name:'Replay pack',exact:true})}),sealed=page.locator('.dc-owned-pack').filter({has:page.getByRole('button',{name:'Open pack',exact:true})});

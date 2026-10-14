@@ -131,18 +131,18 @@ try {
     external.dispose();
     results.push(check(true, "public cross-origin card metadata and artwork still load"));
     const diagnostics=[],stage = createPlayerStage({ root,onDiagnostic:event=>diagnostics.push(event) });
-    const awaitQuiescence = async () => {
-      const deadline=performance.now()+5000,samples=[];let stableSince=performance.now(),previous=stage.diagnostics().frames;
+    const awaitQuiescence = async (targetStage = stage) => {
+      const deadline=performance.now()+5000,samples=[];let stableSince=performance.now(),previous=targetStage.diagnostics().frames;
       while(performance.now()<deadline){
         await new Promise(resolve=>setTimeout(resolve,25));
-        const current=stage.diagnostics(),now=performance.now();
+        const current=targetStage.diagnostics(),now=performance.now();
         samples.push({elapsed:Math.round(5000-(deadline-now)),frames:current.frames,scheduledFrames:current.scheduledFrames,pendingJobs:current.pendingJobs});
         if(samples.length>20)samples.shift();
         if(current.frames!==previous||current.scheduledFrames!==0||current.pendingJobs!==0)stableSince=now;
         previous=current.frames;
         if(now-stableSince>=250)return {current,samples};
       }
-      throw new Error('Input-driven stage did not become quiescent within 5000ms: '+JSON.stringify({stage:stage.diagnostics(),samples,diagnostics}));
+      throw new Error('Input-driven stage did not become quiescent within 5000ms: '+JSON.stringify({stage:targetStage.diagnostics(),samples,diagnostics}));
     };
     let view = stage.mount(root, { resolver });
     const initialReady = await view.ready;
@@ -591,12 +591,14 @@ try {
         "worker GIF transparency/disposal survives angle-driven GPU rendering",
       ),
     );
-    const idleFrames = gs.diagnostics().frames;
-    await settle();
+    const gifQuiescence = await awaitQuiescence(gs), idleFrames = gifQuiescence.current.frames;
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const gifIdle = gs.diagnostics();
     results.push(
       check(
-        gs.diagnostics().frames === idleFrames,
+        gifIdle.frames === idleFrames && gifIdle.scheduledFrames === 0 && gifIdle.pendingJobs === 0,
         "angle-driven GIF has no idle animation loop",
+        {before:idleFrames,afterIdle:gifIdle,quiescence:gifQuiescence.samples},
       ),
     );
     gv.dispose();

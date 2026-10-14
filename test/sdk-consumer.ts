@@ -164,3 +164,21 @@ async function raffleResponses(){
   return {entered,count,orderId,deadline,state,drawnAt,claimed};
 }
 void raffleResponses;
+
+
+async function bindingResponses(){
+  const copy=await call('inspectCard',undefined,{path:{copyId:'copy'}});
+  const cardId:string=copy.cardId,name:string=copy.definition.name;
+  const held=await call('bindings',undefined);
+  for(const binding of held){const holder:string=binding.holderId,namespace:string=binding.namespace,providerValue:unknown=binding.data?.custom;void [holder,namespace,providerValue];}
+  const receipt=await call('consumeBinding',{key:'use',copyId:copy.id,namespace:'example.binding'});
+  const state:'used'=receipt.state,usedAt:string=receipt.usedAt;
+  // @ts-expect-error use receipts do not disclose provider data
+  void receipt.data;
+  const read=await call('readNotifications',{key:'read',ids:[]});
+  const ok:true=read.ok;
+  // @ts-expect-error provider-owned JSON values need narrowing
+  const privateValue:string=held[0]?.data?.custom;
+  return {cardId,name,state,usedAt,ok,privateValue};
+}
+void bindingResponses;

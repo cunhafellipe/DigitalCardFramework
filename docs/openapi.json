@@ -979,7 +979,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/BindingUseReceipt"
                 }
               }
             }
@@ -1505,7 +1505,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/Copy"
                 }
               }
             }
@@ -1621,7 +1621,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "$ref": "#/components/schemas/HeldBinding"
                   }
                 }
               }
@@ -2757,7 +2757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/NotificationReadReceipt"
                 }
               }
             }
@@ -19796,6 +19796,130 @@
           }
         }
       },
+      "BindingUseReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "copyId",
+          "namespace",
+          "state",
+          "usedAt"
+        ],
+        "properties": {
+          "copyId": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "state": {
+            "const": "used"
+          },
+          "usedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HeldBinding": {
+        "type": "object",
+        "required": [
+          "copyId",
+          "namespace",
+          "visibility",
+          "transfer",
+          "holderId",
+          "state"
+        ],
+        "properties": {
+          "copyId": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "owner"
+            ]
+          },
+          "transfer": {
+            "enum": [
+              "follow",
+              "retain",
+              "block"
+            ]
+          },
+          "holderId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "state": {
+            "enum": [
+              "active",
+              "used",
+              "activation-pending",
+              "activation-failed"
+            ]
+          },
+          "data": {
+            "type": "object"
+          },
+          "usedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "active",
+                    "used"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "data"
+              ]
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "data"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "usedAt"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "NotificationReadReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        }
+      },
       "CommandIntent": {
         "type": "object",
         "additionalProperties": false,
@@ -21632,7 +21756,7 @@
                 ]
               },
               "result": {
-                "type": "object"
+                "$ref": "#/components/schemas/BindingUseReceipt"
               }
             }
           },
@@ -21725,7 +21849,7 @@
                 ]
               },
               "result": {
-                "type": "object"
+                "$ref": "#/components/schemas/NotificationReadReceipt"
               }
             }
           },

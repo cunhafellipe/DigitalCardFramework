@@ -289,3 +289,35 @@ test('raffle HTTP responses cover entry replay, private status, draw replay and 
     const invalid=structuredClone(draw);mutate(invalid);assert.throws(()=>validateWireResponse('drawRaffle',200,invalid),WireContractError);
   }
 });
+
+
+test('binding, owned-card and notification HTTP contracts preserve provider data and retained-holder privacy',async t=>{
+  const store=new MemoryStore(),providerData={code:'example-private-value',custom:{handle:'authored',snapshotId:'authored',values:[1,null,true]}};
+  const x=fixture({store,bindings:{'demo.code':()=>providerData}}),copy=x.open('unique')[0];let actor=x.alice,handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const inspected=await call('inspectCard',undefined,{path:{copyId:copy.id}});assert.equal(inspected.id,copy.id);assert.deepEqual(inspected.bindings['demo.code'].data,providerData);
+  const held=await call('bindings',undefined);assert.equal(held.length,1);assert.equal(held[0].copyId,copy.id);assert.equal(held[0].namespace,'demo.code');assert.deepEqual(held[0].data,providerData);
+  const trade=x.core.proposeTrade(x.alice,{key:'binding-transfer',toUserId:x.bob.userId,give:{copyIds:[copy.id],currencies:[]},receive:{copyIds:[],currencies:[]}});x.core.acceptTrade(x.bob,{key:'binding-accept',tradeId:trade.id});
+  actor=x.bob;const transferred=await call('inspectCard',undefined,{path:{copyId:copy.id}});assert.equal(transferred.ownerId,x.bob.userId);assert.equal(transferred.bindings['demo.code'],undefined);assert.deepEqual(await call('bindings',undefined),[]);
+  actor=x.alice;assert.equal((await call('bindings',undefined))[0].holderId,x.alice.userId);
+  const input={key:'binding-use',copyId:copy.id,namespace:'demo.code'},used=await call('consumeBinding',input);assert.equal(used.state,'used');assert.equal(typeof used.usedAt,'string');
+  const replayState=()=>store.read(({copies,requests,events,notifications})=>({copies,requests,events,notifications}));
+  const consumedState=replayState();assert.deepEqual(await call('consumeBinding',input),used);assert.deepEqual(replayState(),consumedState);
+  const usedBinding=(await call('bindings',undefined))[0];assert.equal(usedBinding.state,'used');assert.equal(usedBinding.usedAt,used.usedAt);assert.deepEqual(usedBinding.data,providerData);
+  const notifications=x.core.notifications(actor).items,ids=notifications.map(row=>row.id);assert(ids.length>0);
+  const readInput={key:'binding-notifications',ids},read=await call('readNotifications',readInput);assert.deepEqual(read,{ok:true});assert(x.core.notifications(actor).items.every(row=>row.read));
+  const readState=replayState();assert.deepEqual(await call('readNotifications',readInput),read);assert.deepEqual(replayState(),readState);
+  // Activation states deliberately omit provider data until activation succeeds.
+  for(const state of ['activation-pending','activation-failed']){
+    store.transact(s=>{Object.assign(s.copies[copy.id].bindings['demo.code'],{state,activationId:'internal-invocation'});});
+    const pending=(await call('bindings',undefined))[0];assert.equal(pending.state,state);assert.equal(Object.hasOwn(pending,'data'),false);assert.equal(Object.hasOwn(pending,'usedAt'),false);assert.equal(Object.hasOwn(pending,'activationId'),false);
+    for(const field of ['data','usedAt','activationId']){const invalid=structuredClone(pending);invalid[field]=field==='data'?{}:'internal';assert.throws(()=>validateWireResponse('bindings',200,[invalid]),WireContractError);}
+  }
+  for(const mutate of [value=>delete value.copyId,value=>value.state='active',value=>value.usedAt='invalid',value=>value.data={}]){const invalid=structuredClone(used);mutate(invalid);assert.throws(()=>validateWireResponse('consumeBinding',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.namespace,value=>delete value.holderId,value=>delete value.data,value=>value.transfer='unknown',value=>value.data=null,value=>value.activationId='private']){const invalid=structuredClone(usedBinding);mutate(invalid);assert.throws(()=>validateWireResponse('bindings',200,[invalid]),WireContractError);}
+  for(const mutate of [value=>delete value.id,value=>value.state='unknown',value=>value.definition.name=1,value=>value.bindings['demo.code'].data=null]){const invalid=structuredClone(inspected);mutate(invalid);assert.throws(()=>validateWireResponse('inspectCard',200,invalid),WireContractError);}
+  for(const invalid of [{},{ok:false},{ok:'true'},{ok:true,ids}])assert.throws(()=>validateWireResponse('readNotifications',200,invalid),WireContractError);
+});

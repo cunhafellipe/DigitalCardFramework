@@ -1781,6 +1781,11 @@ schemas.RaffleStatus={type:'object',additionalProperties:false,required:['listin
 schemas.RaffleWinner={type:'object',additionalProperties:false,required:['userId','unitId','orderId'],properties:{userId:str,unitId:str,orderId:{type:['string','null']}}};
 schemas.RaffleDraw={type:'object',additionalProperties:false,required:['id','at','claimUntil','winners'],properties:{id:str,at:{type:'string',format:'date-time'},claimUntil:{type:'string',format:'date-time'},winners:{type:'array',maxItems:schemas.RaffleTerms.properties.winners.maximum,items:ref('RaffleWinner')}}};
 for(const [path,schema]of [['/raffles/enter','RaffleStatus'],['/raffles/status','RaffleStatus'],['/operator/raffles/draw','RaffleDraw']])openapi.paths[path].post.responses['200'].content['application/json'].schema=ref(schema);
+schemas.BindingUseReceipt={type:'object',additionalProperties:false,required:['copyId','namespace','state','usedAt'],properties:{copyId:str,namespace:str,state:{const:'used'},usedAt:{type:'string',format:'date-time'}}};
+schemas.HeldBinding={...schemas.CardBindingView,required:['copyId','namespace',...schemas.CardBindingView.required],properties:{copyId:str,namespace:str,...schemas.CardBindingView.properties}};
+schemas.NotificationReadReceipt={type:'object',additionalProperties:false,required:['ok'],properties:{ok:{const:true}}};
+for(const [path,method,schema]of [['/bindings/use','post','BindingUseReceipt'],['/cards/{copyId}','get','Copy'],['/notifications/read','post','NotificationReadReceipt']])openapi.paths[path][method].responses['200'].content['application/json'].schema=ref(schema);
+openapi.paths['/bindings'].get.responses['200'].content['application/json'].schema={type:'array',items:ref('HeldBinding')};
 const durableCommands=['purchase','openPack','convert','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','consumeBinding','counterTrade','preferences','readNotifications','commitImport','reportCodeUsage','createShop','createListing','buyListing','cancelListing','enterRaffle','openCard','configureAdmin','administerCards'];
 const commandOperations=Object.fromEntries(Object.values(openapi.paths).flatMap(item=>Object.values(item).map(operation=>[operation.operationId,operation])));
 const commandSchema=command=>commandOperations[command==='preferences'?'setPreferences':command].requestBody.content['application/json'].schema;

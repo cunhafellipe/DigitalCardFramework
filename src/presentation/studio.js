@@ -131,8 +131,9 @@ export function mountStudio(
     file.type = "file";
     file.accept = accept;
     file.onchange = () => {
-      if (file.files[0])
-        Promise.resolve(fn(file.files[0])).catch((e) => report(e.message));
+      const selectedFile=file.files[0];
+      if (selectedFile)
+        schedule(()=>fn(selectedFile)).catch((e) => {if(!disposed)report(e.message);});
     };
     file.click();
   }

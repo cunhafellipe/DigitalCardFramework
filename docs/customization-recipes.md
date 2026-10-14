@@ -143,6 +143,36 @@ In Creator studio, select the card and optional variant you want to update and o
 
 Use this route for portable artwork built from supported scene, material and motion primitives. It does not install custom executable renderers, editor tools or live-effect adapters. A developer can also load the archive through `importPackage` from `@digital-card/framework/presentation`.
 
+## Author a live vector effect with Python or Go
+
+Generate a card package containing a passive dotLottie animation with either standard-library example:
+
+```sh
+python examples/plugins/python-lottie-card.py stars.dcard
+go run examples/plugins/go-lottie-card/main.go stars.dcard
+```
+
+The default animation responds to the player's normalized angle input. Add `--clock` before the output path for autonomous playback. These examples generate vector/keyframe animation data, not executable browser code or pre-rendered animation frames.
+
+Import and publish the archive through the normal card-package workflow. The host must enable the existing optional dotLottie adapter and self-host its matching WASM runtime. Install and bundle the pinned optional dependencies as described in [the runtime guide](complex-cards/runtime.md#install-and-entry-points), then register the adapter:
+
+```js
+import { createPlayerStage } from '@digital-card/framework/presentation';
+import { dotLottieAdapter } from '@digital-card/framework/presentation/adapters';
+
+const stage = createPlayerStage({
+  root: region,
+  adapters: [dotLottieAdapter({ wasmURL: '/runtime/dotlottie-player.wasm' })],
+});
+// Mount a published package with its pinned resolver as in the runtime guide.
+// Release the stage when its host component is removed:
+stage.dispose();
+```
+
+The adapter renders a layer inside the card's normal composition. The player supplies angle/time inputs, surface budgets and lifecycle management; reduced motion stops autonomous playback. Without the required adapter, the card displays its poster. Uploaded assets cannot install the adapter or enable executable code.
+
+This route supports passive vector/keyframe effects accepted by the dotLottie validator. It does not provide arbitrary custom shaders, Lottie expressions or state machines, or a general-purpose WASM compute interface. Python and Go author the portable assets; the installed browser runtime renders them.
+
 ## Install a reviewed browser card renderer
 
 Use `createProgramCardRenderer` to replace a card's visual structure with a host-approved browser program. The Python and Go examples generate custom HTML/CSS and use the framework's bootstrap; the browser does not execute native Python or Go.

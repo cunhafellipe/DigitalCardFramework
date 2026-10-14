@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added Python and Go examples for portable live vector effects using the optional dotLottie adapter, with angle-driven and clock-driven card packages.
+
 - Added approved browser album layouts with explicit display-field grants, bounded full-album snapshots and raster previews, and host-controlled card inspection.
 
 - Added host-approved browser pack renderers with custom front/back artwork, cosmetic reveal progress, native fallback and Python/Go pack examples.

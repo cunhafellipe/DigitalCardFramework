@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir, rm, access } from "node:fs/promises";
+import { spawn, execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { deflateRawSync } from "node:zlib";
@@ -149,4 +150,59 @@ test("Windows launcher compilation and assembly integrity failures clean owned t
     await assert.rejects(executor.validate("unused"), /assembly changed/);
   } finally { await executor.close(); }
   assert.deepEqual((await cacheDirectories()).filter((name) => !before.has(name)), []);
+});
+
+test("Windows compiler runtime diagnostics", { skip: process.env.DC_IMPORT_RUNTIME_DIAGNOSTICS !== "1" }, async (t) => {
+  assert.equal(process.platform, "win32", "Windows runtime diagnostics require Windows");
+  const root = await mkdtemp(path.join(tmpdir(), "dc-import-runtime-"));
+  const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
+  const runtimes = [
+    ["powershell5", path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")],
+    ["powershell7", process.env.DC_IMPORT_DIAGNOSTIC_PWSH ?? path.join(process.env.ProgramFiles ?? "C:\\Program Files", "PowerShell", "7", "pwsh.exe")],
+  ];
+  const taskkill = path.join(systemRoot, "System32", "taskkill.exe");
+  const minimumKeys = ["PATH", "SYSTEMROOT", "WINDIR"];
+  const runtimeKeys = [...minimumKeys, "TEMP", "TMP", "COMSPEC", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "APPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "PROGRAMDATA", "PSMODULEPATH", "DOTNET_ROOT"];
+  const quote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
+  async function invoke(executable, command, env) {
+    const started = Date.now(), stages = [];
+    const child = spawn(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(command, "utf16le").toString("base64")], { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "", timedOut = false, cleanup;
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        timedOut = true;
+        cleanup = new Promise((done, failed) => execFile(taskkill, ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 5000, maxBuffer: 65536 }, (error) => error ? failed(new Error("Runtime diagnostic process-tree cleanup failed")) : done()));
+        void cleanup.catch(reject);
+      }, 30000);
+      child.stdout.on("data", (chunk) => { if (stdout.length < 8192) stdout += chunk.toString("utf8").slice(0, 8192 - stdout.length); });
+      child.stderr.on("data", (chunk) => {
+        if (stderr.length < 8192) stderr += chunk.toString("utf8").slice(0, 8192 - stderr.length);
+        for (const stage of stderr.matchAll(/DC_RUNTIME_STAGE:(bootstrap|compiled|loaded)/g)) if (!stages.some((entry) => entry.stage === stage[1])) stages.push({ stage: stage[1], elapsedMs: Date.now() - started });
+      });
+      child.once("error", (error) => { clearTimeout(timer); reject(error); });
+      child.once("close", async (code) => {
+        clearTimeout(timer);
+        if (cleanup) { try { await cleanup; } catch (error) { return reject(error); } }
+        resolve({ code, timedOut, elapsedMs: Date.now() - started, version: stdout.match(/DC_RUNTIME_VERSION:([\d.]+)/)?.[1], stages });
+      });
+    });
+  }
+  try {
+    for (const [runtime, executable] of runtimes) {
+      assert.ok(path.isAbsolute(executable)); await access(executable);
+      for (const [environment, keys] of [["minimum", minimumKeys], ["runtime", runtimeKeys]]) {
+        const scratch = path.join(root, runtime + "-" + environment);
+        await import("node:fs/promises").then((fs) => fs.mkdir(scratch));
+        const assembly = path.join(scratch, "probe.dll");
+        const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => keys.includes(key.toUpperCase()))), TEMP: scratch, TMP: scratch };
+        const prefix = "$ErrorActionPreference='Stop';[Console]::Error.WriteLine('DC_RUNTIME_STAGE:bootstrap');[Console]::Out.WriteLine('DC_RUNTIME_VERSION:'+$PSVersionTable.PSVersion.ToString());";
+        const compiled = await invoke(executable, prefix + "Add-Type -TypeDefinition 'public static class RuntimeProbe { public static int Value=1; }' -OutputAssembly " + quote(assembly) + " -OutputType Library;[Console]::Error.WriteLine('DC_RUNTIME_STAGE:compiled');", env);
+        t.diagnostic(JSON.stringify({ runtime, environment, operation: "compile", ...compiled }));
+        if (compiled.code === 0 && !compiled.timedOut) {
+          const loaded = await invoke(executable, prefix + "Add-Type -Path " + quote(assembly) + ";[Console]::Error.WriteLine('DC_RUNTIME_STAGE:loaded');", env);
+          t.diagnostic(JSON.stringify({ runtime, environment, operation: "load", ...loaded }));
+        } else t.diagnostic(JSON.stringify({ runtime, environment, operation: "load", skipped: "Compilation did not complete" }));
+      }
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -242,6 +242,13 @@ jobs:
           node --test test/presentation-import-isolation.test.js
         env:
           DC_REQUIRE_IMPORT_ISOLATION: '1'
+      - name: Diagnose Windows import runtime startup
+        if: runner.os == 'Windows'
+        run: |
+          $env:DC_IMPORT_DIAGNOSTIC_PWSH = (Get-Command pwsh).Source
+          node --test --test-name-pattern="Windows compiler runtime diagnostics" test/presentation-import-isolation.test.js
+        env:
+          DC_IMPORT_RUNTIME_DIAGNOSTICS: '1'
       - name: Qualify required Windows import enforcement
         if: runner.os == 'Windows'
         run: node --test test/presentation-import-isolation.test.js

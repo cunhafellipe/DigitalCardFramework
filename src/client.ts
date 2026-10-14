@@ -1,5 +1,5 @@
 import {createWireTransport,WireApiError} from './wire-client.js';
-import type {WireCallOptions} from './wire-client.js';
+import type {WireCallArguments} from './wire-client.js';
 import {WireContractError,validateWireResponse} from './wire-contracts.js';
 import type {Operations,Schemas} from './wire-types.js';
 
@@ -10,7 +10,7 @@ type DirectMethods={
     ? ()=>Promise<Operations[K]['response']>
     : (input:Operations[K]['request'])=>Promise<Operations[K]['response']>;
 };
-type QueryMethods={[K in QueryOperation]:(options?:QueryOptions)=>Promise<Operations[K]['response']>};
+type QueryMethods={[K in QueryOperation]:(options?:Operations[K]['query'])=>Promise<Operations[K]['response']>};
 export interface QueryOptions {
   limit?:number;after?:string;search?:string;sort?:'newest'|'name'|'ordinal';
   [key:string]:string|number|boolean|null|undefined;
@@ -24,10 +24,10 @@ export interface Client extends DirectMethods,QueryMethods {
   acknowledgeAllocation(input:Operations['acknowledgeAllocation']['request']):Promise<Operations['acknowledgeAllocation']['response']>;
   capabilities():Promise<Schemas['CapabilityAvailability']>;
   commandIntents(options?:{command?:DurableCommand}):Promise<Operations['commandIntents']['response']>;
-  adminUser(options:QueryOptions&{userId:string}):Promise<Schemas['AdminUserDetail']>;
+  adminUser(options:Operations['adminUser']['query']):Promise<Schemas['AdminUserDetail']>;
   inventory():Promise<Schemas['InventoryCopy'][]>;
-  inventoryPage(options?:QueryOptions):Promise<Schemas['InventoryPage']>;
-  tradeInventory(userId:string,options?:QueryOptions):Promise<Schemas['TradeInventoryPage']>;
+  inventoryPage(options?:Operations['inventory']['query']):Promise<Schemas['InventoryPage']>;
+  tradeInventory(userId:string,options?:Operations['tradeInventory']['query']):Promise<Schemas['TradeInventoryPage']>;
   reviewTransfer(input:Operations['reviewTransfer']['request'],options?:{signal?:AbortSignal}):Promise<Operations['reviewTransfer']['response']>;
   inspectCard(copyId:string):Promise<Operations['inspectCard']['response']>;
   viewAlbum(albumId:string):Promise<Operations['viewAlbum']['response']>;
@@ -78,8 +78,8 @@ export class ApiError extends Error {
 export function createClient({baseUrl='/api',fetch:request=globalThis.fetch}:{baseUrl?:string;fetch?:typeof globalThis.fetch}={}):Client {
   let principal:string|null=null;
   const wire=createWireTransport({baseUrl,fetch:request,principal:()=>principal});
-  async function call<K extends keyof Operations>(id:K,input:Operations[K]['request'],options:WireCallOptions<K>={}):Promise<Operations[K]['response']>{
-    try{return await wire(id,input,options);}catch(error){if(error instanceof WireApiError)throw new ApiError(error.code,error.message,error.status);if(error instanceof WireContractError&&error.phase==='request')throw new ApiError('INVALID_INPUT',error.message,400);throw error;}
+  async function call<K extends keyof Operations>(id:K,input:Operations[K]['request'],...args:WireCallArguments<K>):Promise<Operations[K]['response']>{
+    try{return await wire(id,input,...args);}catch(error){if(error instanceof WireApiError)throw new ApiError(error.code,error.message,error.status);if(error instanceof WireContractError&&['request','query','path'].includes(error.phase))throw new ApiError('INVALID_INPUT',error.message,400);throw error;}
   }
   return {
     bindingFactoryStatus:options=>call('bindingFactoryStatus',undefined,{query:options}),recoverBindingFactories:input=>call('recoverBindingFactories',input),

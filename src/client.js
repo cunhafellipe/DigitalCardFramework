@@ -8,14 +8,14 @@ export class ApiError extends Error {
 export function createClient({ baseUrl = '/api', fetch: request = globalThis.fetch } = {}) {
     let principal = null;
     const wire = createWireTransport({ baseUrl, fetch: request, principal: () => principal });
-    async function call(id, input, options = {}) {
+    async function call(id, input, ...args) {
         try {
-            return await wire(id, input, options);
+            return await wire(id, input, ...args);
         }
         catch (error) {
             if (error instanceof WireApiError)
                 throw new ApiError(error.code, error.message, error.status);
-            if (error instanceof WireContractError && error.phase === 'request')
+            if (error instanceof WireContractError && ['request', 'query', 'path'].includes(error.phase))
                 throw new ApiError('INVALID_INPUT', error.message, 400);
             throw error;
         }

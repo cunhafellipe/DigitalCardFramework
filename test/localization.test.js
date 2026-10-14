@@ -107,6 +107,8 @@ test('malformed response JSON is a response diagnostic and network failures reta
   const local=createLocalization({locale:'es',messages:{'diagnostic.contract':'No se pudo leer la respuesta.'}});
   const call=createWireTransport({principal:()=>null,fetch:async()=>new Response('{',{status:200})});
   await assert.rejects(()=>call('catalog'),error=>error.code==='INVALID_WIRE_CONTRACT'&&error.phase==='response'&&localizeDiagnostic(local,error)==='No se pudo leer la respuesta.');
+  const webkit=createWireTransport({principal:()=>null,fetch:async()=>({json:async()=>{throw new DOMException('Malformed JSON','SyntaxError');}})});
+  await assert.rejects(()=>webkit('catalog'),error=>error.code==='INVALID_WIRE_CONTRACT'&&error.phase==='response');
   const aborted=new DOMException('Stopped','AbortError');
   const interrupted=createWireTransport({principal:()=>null,fetch:async()=>({json:async()=>{throw aborted;}})});
   await assert.rejects(()=>interrupted('catalog'),error=>error===aborted);

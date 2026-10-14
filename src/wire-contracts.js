@@ -23,3 +23,12 @@ export function validateWireResponse(id,status,value){
   if(!name)throw new WireContractError(id,'response-status',[]);
   return validate(id,'response:'+status,name,value);
 }
+
+export function validateWireParameters(id,{path={},query={}}={}){
+  operationContract(id);
+  if(!query||typeof query!=='object'||Array.isArray(query))throw new WireContractError(id,'query',[]);
+  const normalized=Object.fromEntries(Object.entries(query).filter(([,value])=>value!==null&&value!==undefined));
+  validate(id,'path',validators.wireValidators[id].path,path);
+  validate(id,'query',validators.wireValidators[id].query,normalized);
+  return {path,query:normalized};
+}

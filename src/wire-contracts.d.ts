@@ -9,3 +9,4 @@ export class WireContractError extends Error {
 export function operationContract(id: keyof Operations): {path: string; method: string};
 export function validateWireRequest<K extends keyof Operations>(id: K, value: unknown): Operations[K]['request'];
 export function validateWireResponse(id: keyof Operations, status: number, value: unknown): unknown;
+export function validateWireParameters<K extends keyof Operations>(id: K, value?: {path?: unknown; query?: unknown}): {path: Operations[K]['path']; query: Operations[K]['query']};

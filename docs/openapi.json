@@ -1368,7 +1368,9 @@
             "schema": {
               "enum": [
                 "newest",
-                "name"
+                "name",
+                "ordinal",
+                "id"
               ]
             }
           }

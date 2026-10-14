@@ -5,7 +5,7 @@ type DirectMethods = {
     [K in DirectOperation]: Operations[K]['request'] extends undefined ? () => Promise<Operations[K]['response']> : (input: Operations[K]['request']) => Promise<Operations[K]['response']>;
 };
 type QueryMethods = {
-    [K in QueryOperation]: (options?: QueryOptions) => Promise<Operations[K]['response']>;
+    [K in QueryOperation]: (options?: Operations[K]['query']) => Promise<Operations[K]['response']>;
 };
 export interface QueryOptions {
     limit?: number;
@@ -34,12 +34,10 @@ export interface Client extends DirectMethods, QueryMethods {
     commandIntents(options?: {
         command?: DurableCommand;
     }): Promise<Operations['commandIntents']['response']>;
-    adminUser(options: QueryOptions & {
-        userId: string;
-    }): Promise<Schemas['AdminUserDetail']>;
+    adminUser(options: Operations['adminUser']['query']): Promise<Schemas['AdminUserDetail']>;
     inventory(): Promise<Schemas['InventoryCopy'][]>;
-    inventoryPage(options?: QueryOptions): Promise<Schemas['InventoryPage']>;
-    tradeInventory(userId: string, options?: QueryOptions): Promise<Schemas['TradeInventoryPage']>;
+    inventoryPage(options?: Operations['inventory']['query']): Promise<Schemas['InventoryPage']>;
+    tradeInventory(userId: string, options?: Operations['tradeInventory']['query']): Promise<Schemas['TradeInventoryPage']>;
     reviewTransfer(input: Operations['reviewTransfer']['request'], options?: {
         signal?: AbortSignal;
     }): Promise<Operations['reviewTransfer']['response']>;

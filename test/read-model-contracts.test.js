@@ -29,6 +29,7 @@ test('actual HTTP administration, inventory and immutable trade responses use ch
   await call('administerCards',{key:'model-remove',expectedRevision:grant.revision,reason:'Award correction',userId:x.bob.userId,action:'remove',copyIds:[grant.cards[0].id]});
   const history=await call('adminHistory',undefined);assert.equal(history.items.length,6);assert.equal(typeof history.items[0].actorName,'string');
   const inventory=await call('inventory',undefined,{query:{limit:50}});assert.equal(inventory.items[0].tradable,true);
+  for(const sort of ['ordinal','id'])assert.equal((await call('inventory',undefined,{query:{limit:50,sort,after:null}})).items[0].id,inventory.items[0].id);
   const other=await call('tradeInventory',undefined,{path:{userId:x.bob.userId},query:{limit:50}});assert.equal(other.owner.id,x.bob.userId);
   const trade=await call('proposeTrade',{key:'model-trade',toUserId:x.bob.userId,give:{copyIds:[inventory.items[0].id],currencies:[]},receive:{copyIds:[other.items[0].id],currencies:[]}});
   assert.equal(trade.status,'pending');assert.equal(Object.keys(trade.snapshots).length,2);

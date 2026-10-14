@@ -1562,7 +1562,7 @@ Object.assign(openapi.paths,{
   '/operator/import/preview':route('post','previewImport',ref('ImportPreview'),{requestSchema:ref('ImportPreviewRequest'),description:'Opt-in operator route. Validation only; 8 MiB limit. Rejects stale base revision.'}),
   '/operator/import/commit':route('post','commitImport',{type:'object'},{requestSchema:ref('ImportCommit'),description:'Opt-in operator route. Revalidates manifest and digest and publishes one atomic revision.'})
 });
-openapi.paths['/inventory'].get.parameters=pageParameters;
+openapi.paths['/inventory'].get.parameters=pageParameters.map(parameter=>parameter.name==='sort'?{...parameter,schema:{enum:['newest','name','ordinal','id']}}:parameter);
 openapi.paths['/inventory'].get.responses['200'].content['application/json'].schema={oneOf:[{type:'array',items:ref('Copy')},ref('Page')]};
 for(const value of Object.values(openapi.paths))for(const [method,operation]of Object.entries(value))if(method==='post'&&!operation.parameters.some(p=>p.name==='X-DC-Principal'))operation.parameters.push({name:'X-DC-Principal',in:'header',schema:str,description:'Required by the production host; verified principal binding.'});
 

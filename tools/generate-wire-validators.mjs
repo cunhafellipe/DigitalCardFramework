@@ -29,10 +29,15 @@ function add(schema){
   ajv.addSchema(local(schema),id);exports[name]=id;return name;
 }
 const error=add({$ref:'#/components/schemas/Error'});
-for(const item of Object.values(openapi.paths))for(const operation of Object.values(item)){
+for(const [path,item] of Object.entries(openapi.paths))for(const operation of Object.values(item)){
   const request=operation.requestBody?.content?.['application/json']?.schema;
   const responses=Object.fromEntries(Object.entries(operation.responses).filter(([,response])=>response.content?.['application/json']?.schema).map(([status,response])=>[status,Number(status)>=400?error:add(response.content['application/json'].schema)]));
-  entries[operation.operationId]={request:request?add(request):null,responses};
+  const parameters=operation.parameters??[];
+  const queries=parameters.filter(p=>p.in==='query');
+  const pathNames=[...path.matchAll(/\{([^}]+)\}/g)].map(match=>match[1]);
+  const querySchema={type:'object',additionalProperties:false,required:queries.filter(p=>p.required).map(p=>p.name),properties:Object.fromEntries(queries.map(p=>[p.name,p.schema]))};
+  const pathSchema={type:'object',additionalProperties:false,required:pathNames,properties:Object.fromEntries(pathNames.map(name=>[name,{type:'string',minLength:1,...parameters.find(p=>p.in==='path'&&p.name===name)?.schema}]))};
+  entries[operation.operationId]={request:request?add(request):null,responses,query:add(querySchema),path:add(pathSchema)};
 }
 let code=standalone(ajv,exports);
 // Ajv's Unicode length helper is emitted as a CommonJS import even in ESM mode.

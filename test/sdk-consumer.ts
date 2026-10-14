@@ -62,3 +62,24 @@ void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{curr
 // @ts-expect-error newly issued card stock requires a variant
 void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items:{kind:'mint-card',quantity:1}});
 void call('createListing',{key:'listing',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:1},items:{kind:'action',handler:'reward',quantity:1}});
+
+// @ts-expect-error required query parameters require call options
+void call('codeIssuanceStatus',undefined);
+// @ts-expect-error binding status requires a batch ID
+void call('bindingFactoryStatus',undefined,{query:{}});
+// @ts-expect-error required batch ID cannot be omitted using null
+void call('bindingFactoryStatus',undefined,{query:{batchId:null}});
+// @ts-expect-error numeric limits are not strings
+void call('inventory',undefined,{query:{limit:'50'}});
+// @ts-expect-error query names are operation-specific
+void call('inventory',undefined,{query:{limti:50}});
+// @ts-expect-error operations without query parameters reject extra keys
+void call('wallet',undefined,{query:{limit:50}});
+// @ts-expect-error path bindings are required
+void call('viewAlbum',undefined);
+// @ts-expect-error path bindings retain their required key
+void call('inspectCard',undefined,{path:{}});
+void call('bindingFactoryStatus',undefined,{query:{batchId:'11111111-1111-4111-8111-111111111111'}});
+void call('inventory',undefined,{query:{limit:50,after:null,search:undefined,sort:'ordinal'}});
+void call('inventory',undefined,{query:{limit:50,sort:'id'}});
+void call('viewAlbum',undefined,{path:{albumId:'album'}});

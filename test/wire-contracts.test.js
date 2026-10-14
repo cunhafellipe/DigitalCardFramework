@@ -112,3 +112,27 @@ test('checked currency reconciliation returns the retained receipt and enforces 
     const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('reconcileCurrency',200,invalid),WireContractError);
   }
 });
+
+test('query and path contracts fail before fetch and omit optional null values',async()=>{
+  let requests=0;
+  const call=createWireTransport({principal:()=>null,fetch:async()=>{requests++;return new Response(JSON.stringify({code:'NOT_FOUND',message:'Missing record'}),{status:404});}});
+  const batchId='11111111-1111-4111-8111-111111111111';
+  for(const id of ['codeIssuanceStatus','bindingFactoryStatus']){
+    for(const options of [undefined,{}, {query:{}},{query:{batchId:null}},{query:{batchId:'invalid'}}])await assert.rejects(()=>call(id,undefined,options),error=>error instanceof WireContractError&&error.phase==='query');
+  }
+  for(const [id,options]of [
+    ['adminUser',{query:{}}],['allocationStatus',{query:{}}],['stockAllocationStatus',{query:{productId:'common'}}],
+    ['inventory',{query:{limit:'50'}}],['inventory',{query:{limit:0}}],['inventory',{query:{limit:201}}],['inventory',{query:{limit:1.5}}],['inventory',{query:{limit:NaN}}],
+    ['inventory',{query:{search:'x'.repeat(101)}}],['inventory',{query:{sort:'invalid'}}],['inventory',{query:{limti:50}}],['wallet',{query:{limit:50}}],
+    ['viewAlbum',undefined],['inspectCard',{path:{copyId:''}}],['tradeInventory',{path:{userId:1}}]
+  ])await assert.rejects(()=>call(id,undefined,options),WireContractError);
+  assert.equal(requests,0);
+  for(const id of ['codeIssuanceStatus','bindingFactoryStatus'])await assert.rejects(()=>call(id,undefined,{query:{batchId}}),WireApiError);
+  assert.equal(requests,2);
+  const sent=[];
+  const read=createWireTransport({principal:()=>null,fetch:async url=>{sent.push(url);return new Response(JSON.stringify({code:'NOT_FOUND',message:'Missing record'}),{status:404});}});
+  await assert.rejects(()=>read('inventory',undefined,{query:{limit:50,after:null,search:undefined,sort:'ordinal'}}),WireApiError);
+  await assert.rejects(()=>read('inventory',undefined,{query:{limit:50,sort:'id'}}),WireApiError);
+  await assert.rejects(()=>read('inspectCard',undefined,{path:{copyId:'copy /?&'}}),WireApiError);
+  assert.deepEqual(sent,['/api/inventory?limit=50&sort=ordinal','/api/inventory?limit=50&sort=id','/api/cards/copy%20%2F%3F%26']);
+});

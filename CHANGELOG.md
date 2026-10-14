@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validate documented query and path parameters before sending checked-client requests, including required fields and supported inventory sorts.
+
 - Fixed checked currency-reconciliation responses, required stock fields for listing requests, and malformed response diagnostics.
 
 - Localized structured collector, administration and Studio diagnostic summaries, preserving original error codes, recovery identity and detailed font diagnostics.

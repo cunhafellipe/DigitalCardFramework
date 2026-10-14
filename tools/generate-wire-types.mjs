@@ -32,8 +32,11 @@ output+='export interface Operations {\n';
 for(const [path,item]of Object.entries(openapi.paths))for(const [method,operation]of Object.entries(item)){
   const request=operation.requestBody?.content?.['application/json']?.schema;
   const response=Object.entries(operation.responses).find(([status])=>Number(status)>=200&&Number(status)<300)?.[1].content?.['application/json']?.schema;
-  const parameters=[...path.matchAll(/\{([^}]+)\}/g)].map(match=>JSON.stringify(match[1])+': string;').join(' ');
-  output+='  '+JSON.stringify(operation.operationId)+': { request: '+(request?type(request):'undefined')+'; response: '+type(response)+'; path: { '+parameters+' }; method: '+JSON.stringify(method.toUpperCase())+' };\n';
+  const parameters=operation.parameters??[];
+  const pathFields=[...path.matchAll(/\{([^}]+)\}/g)].map(match=>JSON.stringify(match[1])+': '+type(parameters.find(p=>p.in==='path'&&p.name===match[1])?.schema??{type:'string'})+';');
+  const queryFields=parameters.filter(p=>p.in==='query').map(p=>JSON.stringify(p.name)+(p.required?'':'?')+': '+type(p.schema)+(p.required?'':' | null')+';');
+  const parameterType=fields=>fields.length?'{ '+fields.join(' ')+' }':'Record<string, never>';
+  output+='  '+JSON.stringify(operation.operationId)+': { request: '+(request?type(request):'undefined')+'; response: '+type(response)+'; path: '+parameterType(pathFields)+'; query: '+parameterType(queryFields)+'; method: '+JSON.stringify(method.toUpperCase())+' };\n';
 }
 output+='}\n';
 const target=new URL('../src/wire-types.d.ts',import.meta.url);

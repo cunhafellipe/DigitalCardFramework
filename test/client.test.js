@@ -133,3 +133,11 @@ test('stock allocation client validates quotes and shared-head recovery without 
   result={...result,command:'createListing',attemptShopId:shopId};assert.deepEqual(await client.stockAllocationStatus({shopId,productId:'deck'}),result);
   result={...result,seed:'private'};await assert.rejects(client.stockAllocationStatus({shopId,productId:'deck'}),error=>error.code==='INVALID_WIRE_CONTRACT');
 });
+
+test('client retains supported query options and rejects invalid parameter calls before fetching',async()=>{
+  const sent=[],client=createClient({fetch:async url=>{sent.push(url);return new Response(JSON.stringify({code:'NOT_FOUND',message:'Missing record'}),{status:404});}});
+  for(const request of [()=>client.bindingFactoryStatus({}),()=>client.codeIssuanceStatus({batchId:'invalid'}),()=>client.adminUser({}),()=>client.inventoryPage({limit:'50'}),()=>client.viewAlbum('')])await assert.rejects(request,error=>error instanceof ApiError&&error.code==='INVALID_INPUT'&&error.status===400);
+  assert.equal(sent.length,0);
+  for(const request of [()=>client.inventoryPage({sort:'ordinal',after:null}),()=>client.listings({shopId:'shop',limit:20,search:undefined}),()=>client.tradeInventory('account',{limit:50,after:null})])await assert.rejects(request,error=>error instanceof ApiError&&error.code==='NOT_FOUND');
+  assert.deepEqual(sent,['/api/inventory?sort=ordinal&limit=50','/api/listings?shopId=shop&limit=20','/api/users/account/inventory?limit=50']);
+});

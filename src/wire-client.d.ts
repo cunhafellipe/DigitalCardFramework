@@ -9,9 +9,16 @@ export interface WireTransportOptions {
     fetch?: typeof globalThis.fetch;
     principal: () => string | null;
 }
-export interface WireCallOptions<K extends keyof Operations> {
-    path?: Operations[K]['path'];
-    query?: Record<string, string | number | boolean | null | undefined>;
+export type WireCallOptions<K extends keyof Operations> = {
     signal?: AbortSignal;
-}
-export declare function createWireTransport({ baseUrl, fetch: request, principal }: WireTransportOptions): <K extends keyof Operations>(id: K, input: Operations[K]['request'], options?: WireCallOptions<K>) => Promise<Operations[K]['response']>;
+} & ({} extends Operations[K]['path'] ? {
+    path?: Operations[K]['path'];
+} : {
+    path: Operations[K]['path'];
+}) & ({} extends Operations[K]['query'] ? {
+    query?: Operations[K]['query'];
+} : {
+    query: Operations[K]['query'];
+});
+export type WireCallArguments<K extends keyof Operations> = {} extends WireCallOptions<K> ? [options?: WireCallOptions<K>] : [options: WireCallOptions<K>];
+export declare function createWireTransport({ baseUrl, fetch: request, principal }: WireTransportOptions): <K extends keyof Operations>(id: K, input: Operations[K]['request'], ...args: WireCallArguments<K>) => Promise<Operations[K]['response']>;

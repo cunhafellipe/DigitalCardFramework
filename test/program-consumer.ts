@@ -117,3 +117,33 @@ exportStatsCSV({manifest:{authoring:{values:{card:{bad:()=>0}}}}});
 // @ts-expect-error CSV scopes exclude per-copy stats.
 const copyCSVRow: StatsCSVRow = {scope:'copy',key:'count',value:1};
 void [changedRows,csvRows,copyCSVRow];
+
+import {mobilePerformanceDefaults,performancePolicy,analyzePerformance,enforcePerformance} from '@digital-card/framework/presentation/performance';
+import type {PerformanceInput,PerformanceReport} from '@digital-card/framework/presentation/performance';
+const performanceConfig=performancePolicy({mode:'reject',quality:'lite',drawLayers:20,layerTextureBytes:1024});
+const performanceScene={version:1,nodes:[{id:'group',type:'group',isolate:true,width:100,height:100,children:[{id:'image',type:'image',asset:'art',width:100,height:100,opacity:1},{id:'video',type:'video',video:{poster:'art'}},{id:'text',type:'text',typography:{size:12},runs:[{text:'Card'}],mask:{polygon:[[0,0],[1,0],[0,1]]},material:{kind:'foil'}}]}]};
+const performanceProject={manifest:{version:1,title:'Card',canvas:{width:240,height:360},assets:[{id:'art',path:'art.png',width:100,height:100,bytes:256}],quality:{standard:{maxEdge:768},lite:{maxEdge:256}},faces:{front:{scene:'front.json'}}},scenes:new Map([['front.json',performanceScene]]),assets:new Map<string,Uint8Array>()};
+const performanceInput:PerformanceInput=performanceProject;
+const performanceReport:PerformanceReport=analyzePerformance(performanceInput,performanceConfig);
+const sameReport:PerformanceReport=enforcePerformance(performanceReport);
+for(const issue of performanceReport.issues){
+  const measured:number|null=issue.measured,threshold:number|null=issue.threshold;
+  if(issue.code==='ADAPTER_COST_UNKNOWN'){const unknownCost:null=issue.measured;void unknownCost;}
+  else {const numericCost:number=issue.measured;void numericCost;}
+  // @ts-expect-error Unknown adapter costs are null, not measured numbers.
+  const cost:number=issue.measured;
+  void [measured,threshold,cost];
+}
+// @ts-expect-error Published defaults are immutable.
+mobilePerformanceDefaults.drawLayers=10;
+// @ts-expect-error Returned policies are immutable.
+performanceConfig.mode='off';
+// @ts-expect-error Unsupported policy mode.
+performancePolicy({mode:'strict'});
+// @ts-expect-error Unsupported quality.
+performancePolicy({quality:'high'});
+// @ts-expect-error Thresholds must be numeric.
+analyzePerformance(performanceInput,{decoders:'1'});
+// @ts-expect-error Scenes must provide a map lookup, not a plain dictionary.
+analyzePerformance({...performanceProject,scenes:{'front.json':performanceScene}});
+void sameReport;

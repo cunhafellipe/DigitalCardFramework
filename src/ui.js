@@ -252,7 +252,8 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   }
   function inspectTogether(copies){if(disposed||!copies.length)return;if(!inspector.open)inspectorInvoker=document.activeElement;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector,localization}));if(!inspector.open)inspector.showModal();}
   inspector.addEventListener('click',event=>{if(event.target===inspector)inspector.close();});
-  const controller=createRevealController({open:input=>mutate('openPack',{packId:input.packId}),key:client.requestKey});
+  const createController=()=>createRevealController({open:input=>mutate('openPack',{packId:input.packId}),key:client.requestKey});
+  let controller=createController();
   async function action(fn,{refreshAfter=true,message=t('status.saved')}={}) {
     if(busy || disposed)return;
     busy=true;status.className='dc-status is-working';status.textContent=t('status.working');
@@ -345,7 +346,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     const generation=++refreshGeneration;
     const [catalog,me,capabilities]=await Promise.all([client.catalog(),client.me(),client.capabilities?.()??null]);
     if(disposed||generation!==refreshGeneration)return;
-    if(shellPrincipal!==me.userId){if(shellPrincipal!==null)shellGeneration++;shellPrincipal=me.userId;}
+    if(shellPrincipal!==me.userId){if(shellPrincipal!==null){shellGeneration++;openerDispose?.();openerDispose=null;controller.dispose();controller=createController();}shellPrincipal=me.userId;}
     const enabled=name=>!capabilities||capabilities.available[name]||capabilities.draining.includes(name);
     const commerce=enabled('directSales')||enabled('resale')||enabled('packs'),packsEnabled=enabled('packs'),trading=enabled('trading');
     const sectionEnabled={shop:!capabilities||capabilities.available.packs,packs:packsEnabled,marketplace:commerce,rewards:commerce||capabilities?.history?.rewards,codes:commerce||packsEnabled||capabilities?.history?.codes,trades:trading,tradingControls:trading,wallet:commerce||packsEnabled||trading,albums:!capabilities||catalog.features.publicAlbums};

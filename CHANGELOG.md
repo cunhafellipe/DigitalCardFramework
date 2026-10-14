@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cleared retained and late opening results when the authenticated account changes, while preserving same-account reveal and replay.
+
 - Added portable application-shell layouts with bounded responsive composition, native navigation and recovery regions, and Python/Go rail and header examples.
 - Restored focus to portable collection and shop controls after closing native inspection and purchase-review dialogs.
 

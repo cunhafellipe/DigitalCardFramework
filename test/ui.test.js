@@ -13,6 +13,24 @@ import {createCommandRunner,createRevealController} from '../src/client.js';
 
 const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setImmediate(r));};
 
+for(const delayed of [false,true])test('account switch clears '+(delayed?'a late opening result':'a retained revealed receipt')+' from the shared opener',async()=>{
+  const window=new Window(),x=fixture();globalThis.document=window.document;globalThis.sessionStorage=window.sessionStorage;
+  let actor=x.alice,key=0,controller,release,started;const entered=new Promise(resolve=>started=resolve),seen=[];
+  const client={requestKey:()=>`account-${++key}`,me:async()=>x.core.me(actor),catalog:async()=>x.core.catalog(actor)};
+  for(const name of ['wallet','packs','inventory','albums','trades','commandIntents','registerCommandIntent','executeCommandIntent','acknowledgeCommandIntent'])client[name]=async input=>x.core[name](actor,input);
+  const execute=client.executeCommandIntent;client.executeCommandIntent=async input=>{const result=await execute(input);if(delayed&&actor===x.alice){started();await new Promise(resolve=>release=resolve);}return result;};
+  const pack=x.buy().packs[0],root=document.createElement('main');document.body.append(root);
+  const app=mountFramework(root,{client,sections:['packs'],navigation:'tabs',openerView(state,value){controller=value;seen.push(structuredClone(state));return document.createElement('section');}});
+  try{
+    await app.ready;const previous=controller,pending=controller.load(pack.id);
+    if(delayed)await entered;else{await pending;controller.skip();await app.refresh();assert.equal(controller,previous);assert.equal(controller.getState().revealed,1);controller.replay();controller.skip();}
+    actor=x.bob;seen.length=0;await app.refresh();assert.notEqual(controller,previous);
+    release?.();await pending;await settle();
+    assert(seen.length>0);assert(seen.every(state=>state.receipt===null));assert.equal(controller.getState().phase,'idle');
+    assert.equal(x.core.packs(x.bob).length,0);const before=seen.length;previous.skip();previous.replay();await previous.load(pack.id);assert.equal(seen.length,before);
+  }finally{release?.();app.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}
+});
+
 const studioMessages=()=>Object.fromEntries(Object.entries(englishMessages).filter(([key])=>key.startsWith('studioShell.')||key.startsWith('policyUI.')).map(([key,value])=>[key,typeof value==='string'?'['+value+']':Object.fromEntries(Object.entries(value).map(([category,text])=>[category,'['+text+']']))]));
 
 test('localized studio previews preserve import inputs, authored rows and reviewed publishing',async()=>{

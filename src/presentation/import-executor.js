@@ -28,6 +28,7 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
     ensure(process.platform === "linux" && typeof cgroupRoot === "string" && path.isAbsolute(cgroupRoot), "IMPORT_ISOLATION", "Linux import enforcement requires an absolute delegated cgroup v2 directory");
     const controllers = await readFile(path.join(cgroupRoot, "cgroup.controllers"), "utf8").catch(() => { throw failure("Delegated cgroup v2 directory is unavailable"); });
     ensure(controllers.split(/\s+/).includes("memory") && controllers.split(/\s+/).includes("pids"), "IMPORT_ISOLATION", "Delegated memory and pids controllers are required");
+    await access(path.join(cgroupRoot, "cgroup.procs"), constants.W_OK).catch(() => { throw failure("Import delegation requires write access to the delegated root cgroup.procs; launch the service in a host leaf beneath that root"); });
     scope = path.join(cgroupRoot, scopeName);
     await mkdir(scope);
     try {
@@ -100,6 +101,7 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
               resources = group ? { peakJobMemoryBytes: Number(await readFile(path.join(group, "memory.peak"), "utf8")), memoryLimitBytes: memoryBytes } : JSON.parse(measurement ?? "null");
               resources.backend = backend;
             } catch { /* Diagnostics are optional on interrupted startup. */ }
+            if (group && code === 125) return reject(Object.assign(failure("Cannot enter the import cgroup before execution: launch the service in a host leaf under the delegated root and grant write access to destination and common-ancestor cgroup.procs"), { resources }));
             if (outcomeError) return reject(Object.assign(outcomeError, { resources }));
             try {
               if (code !== 0) throw failure("Import worker exited within its resource envelope (" + code + ")");

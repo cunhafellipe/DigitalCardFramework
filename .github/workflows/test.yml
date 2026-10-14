@@ -230,9 +230,20 @@ jobs:
           sudo mkdir "$group"
           printf '+memory +pids' | sudo tee /sys/fs/cgroup/cgroup.subtree_control >/dev/null
           printf '+memory +pids' | sudo tee "$group/cgroup.subtree_control" >/dev/null
+          sudo mkdir "$group/host"
           sudo chown -R "$(id -u):$(id -g)" "$group"
           echo "DC_IMPORT_CGROUP_ROOT=$group" >> "$GITHUB_ENV"
-      - name: Qualify required OS import enforcement
+      - name: Qualify required Linux import enforcement
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$$" | sudo tee "$DC_IMPORT_CGROUP_ROOT/host/cgroup.procs" >/dev/null
+          node --test test/presentation-import-isolation.test.js
+        env:
+          DC_REQUIRE_IMPORT_ISOLATION: '1'
+      - name: Qualify required Windows import enforcement
+        if: runner.os == 'Windows'
         run: node --test test/presentation-import-isolation.test.js
         env:
           DC_REQUIRE_IMPORT_ISOLATION: '1'

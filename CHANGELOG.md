@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add opt-in validation and TypeScript contracts for framework event envelopes and eight core event payloads, preserving custom action delivery behavior.
+- Add opt-in validation and TypeScript contracts for framework event envelopes, eight core event payloads and nine code lifecycle event payloads, preserving custom action delivery behavior.
 - Add TypeScript declarations for stat CSV import, export and parsing, including empty-cell deletion and explicit JSON null values.
 
 - Define card-policy and resource lifecycle receipts, catalog import receipts, and healthy or damaged-state audit responses.

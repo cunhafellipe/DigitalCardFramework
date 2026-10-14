@@ -20,3 +20,15 @@ void call('capabilities',{packs:true});
 // @ts-expect-error public workflow flags remain booleans
 const flag:Promise<string>=client.capabilities().then(value=>value.available.packs);
 void flag;
+
+import {cardBehavior,cardTypeDefaults} from '@digital-card/framework/card-types';
+const behavior=cardBehavior({id:'authored-card',name:'Example',type:'custom-type',behavior:{tradable:false}});
+const canTrade:boolean=behavior.tradable;
+const albumEligible:boolean=cardTypeDefaults.collectible.albumEligible;
+// @ts-expect-error behavior overrides require boolean values
+cardBehavior({behavior:{tradable:'yes'}});
+// @ts-expect-error published defaults are immutable
+cardTypeDefaults.collectible.tradable=false;
+// @ts-expect-error only the built-in names index the defaults table
+void cardTypeDefaults.custom;
+void [canTrade,albumEligible];

@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 # The launcher applies Job Object limits while the worker is suspended.
+[Console]::Error.WriteLine('DC_IMPORT_STAGE:bootstrap')
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -41,10 +42,14 @@ public static class ImportJob {
    Startup startup=new Startup(); startup.Size=(uint)Marshal.SizeOf(typeof(Startup)); startup.Flags=0x100; startup.Input=GetStdHandle(-10); startup.Output=GetStdHandle(-11); startup.Error=GetStdHandle(-12);
    foreach(IntPtr handle in new[]{startup.Input,startup.Output,startup.Error}) Check(SetHandleInformation(handle,1,1));
    Check(CreateProcess(node,new StringBuilder(Quote(node)+" --max-old-space-size="+heap+" "+Quote(worker)+" --stdio"),IntPtr.Zero,IntPtr.Zero,true,4|0x08000000,IntPtr.Zero,null,ref startup,out process));
+   Console.Error.WriteLine("DC_IMPORT_STAGE:created");
    Check(AssignProcessToJobObject(parent,process.Process),"Assign aggregate child job"); Check(AssignProcessToJobObject(job,process.Process),"Assign child job");
+   Console.Error.WriteLine("DC_IMPORT_STAGE:assigned");
    attached=true;
    if(ResumeThread(process.Thread)==UInt32.MaxValue) Check(false);
+   Console.Error.WriteLine("DC_IMPORT_STAGE:resumed");
    Check(WaitForSingleObject(process.Process,UInt32.MaxValue)==0); uint code; Check(GetExitCodeProcess(process.Process,out code));
+   Console.Error.WriteLine("DC_IMPORT_STAGE:exited");
    Limits measured; Check(QueryInformationJobObject(job,9,out measured,(uint)Marshal.SizeOf(typeof(Limits)),IntPtr.Zero));
    Console.Error.WriteLine("{\"peakJobMemoryBytes\":"+measured.PeakJobMemory.ToUInt64()+",\"memoryLimitBytes\":"+measured.JobMemory.ToUInt64()+",\"processMemoryLimitBytes\":"+measured.ProcessMemory.ToUInt64()+"}");
    Check(TerminateJobObject(job,code));
@@ -55,6 +60,7 @@ public static class ImportJob {
     if(DateTime.UtcNow>=deadline) throw new InvalidOperationException("Import process tree did not terminate");
     System.Threading.Thread.Sleep(10);
    }
+   Console.Error.WriteLine("DC_IMPORT_STAGE:terminated");
    return (int)code;
   } finally {
    if(!attached && process.Process!=IntPtr.Zero) TerminateProcess(process.Process,125);
@@ -64,4 +70,5 @@ public static class ImportJob {
  }
 }
 '@
+[Console]::Error.WriteLine('DC_IMPORT_STAGE:compiled')
 exit [ImportJob]::Run($args[0], $args[1], [UInt64]$args[2], [UInt64]$args[3], $args[4], $args[5])

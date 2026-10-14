@@ -53,7 +53,7 @@ test("isolated validation and atomic publication retain archive fidelity and dig
     assert.equal(validation.digest, pkg.digest);
     assert.ok(validation.resources.peakJobMemoryBytes > 0);
     if (process.platform === "win32") assert.ok(validation.resources.peakJobMemoryBytes <= validation.resources.memoryLimitBytes);
-    t.diagnostic(JSON.stringify(validation.resources));
+    t.diagnostic(JSON.stringify({ ...validation.resources, stages: validation.diagnostics }));
     const publication = await executor.publish(file, { contentRoot, expectedDigest: pkg.digest });
     assert.equal(publication.digest, pkg.digest);
     assert.deepEqual(new Uint8Array(await readFile(path.join(publication.folder, "download.dcard"))), pkg.archive);
@@ -77,7 +77,7 @@ test("expanding native allocations remain in the OS envelope while host requests
     const failure = load.then(() => assert.fail("Expanding input unexpectedly completed"), (error) => {
       assert.match(error.message, /resource envelope|allocat|memory|heap/i);
       assert.ok(error.resources?.peakJobMemoryBytes > 0);
-      t.diagnostic(JSON.stringify({ ...error.resources, error: error.message }));
+      t.diagnostic(JSON.stringify({ ...error.resources, error: error.message, stages: error.diagnostics }));
       assert.equal(error.resources.memoryLimitBytes, 128 * 1024 ** 2);
       if (process.platform === "win32") {
         assert.equal(error.resources.processMemoryLimitBytes, 128 * 1024 ** 2);

@@ -74,6 +74,10 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
         }
         return await new Promise((resolve, reject) => {
           let output = "", metrics = "", size = 0, outcomeError;
+          const startedAt = Date.now(), diagnostics = [];
+          const recordStage = (stage) => {
+            if (diagnostics.length < 16 && !diagnostics.some((entry) => entry.stage === stage)) diagnostics.push({ stage, elapsedMs: Date.now() - startedAt });
+          };
           let timer;
           stop = (error = new DOMException("Import cancelled", "AbortError")) => {
             outcomeError ??= error;
@@ -81,16 +85,23 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
             child.kill("SIGKILL");
           };
           const abort = () => stop();
-          timer = setTimeout(() => stop(failure("Import worker time limit exceeded")), timeoutMs);
+          timer = setTimeout(() => {
+            const last = diagnostics.at(-1);
+            stop(failure("Import worker time limit exceeded" + (last ? " at " + last.stage + " (" + last.elapsedMs + " ms)" : " before launcher diagnostics")));
+          }, timeoutMs);
           options.signal?.addEventListener("abort", abort, { once: true });
           const decoder = new StringDecoder("utf8");
           child.stdout.on("data", (chunk) => {
+            recordStage("response-received");
             size += chunk.length;
             if (size > 4 * 1024 ** 2) return stop(failure("Import worker response exceeds its budget"));
             output += decoder.write(chunk);
           });
           child.stdin.on("error", (error) => { outcomeError ??= error; });
-          child.stderr.on("data", (chunk) => { if (metrics.length < 16384) metrics += chunk.toString("utf8").slice(0, 16384 - metrics.length); });
+          child.stderr.on("data", (chunk) => {
+            if (metrics.length < 16384) metrics += chunk.toString("utf8").slice(0, 16384 - metrics.length);
+            for (const stage of metrics.matchAll(/DC_IMPORT_STAGE:(bootstrap|compiled|created|assigned|resumed|exited|terminated|worker-started|request-end|result-writing)/g)) recordStage(stage[1]);
+          });
           child.once("error", (error) => { outcomeError ??= error; });
           child.once("close", async (code) => {
             clearTimeout(timer);
@@ -102,13 +113,13 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
               resources.backend = backend;
             } catch { /* Diagnostics are optional on interrupted startup. */ }
             if (group && code === 125) return reject(Object.assign(failure("Cannot enter the import cgroup before execution: launch the service in a host leaf under the delegated root and grant write access to destination and common-ancestor cgroup.procs"), { resources }));
-            if (outcomeError) return reject(Object.assign(outcomeError, { resources }));
+            if (outcomeError) return reject(Object.assign(outcomeError, { resources, diagnostics }));
             try {
               if (code !== 0) throw failure("Import worker exited within its resource envelope (" + code + ")");
               const result = JSON.parse(output + decoder.end());
               if (!result?.ok) throw Object.assign(new Error(result?.message ?? "Import worker failed"), { code: result?.code ?? "IMPORT" });
-              resolve({ ...result, resources });
-            } catch (error) { reject(Object.assign(error, { resources })); }
+              resolve({ ...result, resources, diagnostics });
+            } catch (error) { reject(Object.assign(error, { resources, diagnostics })); }
           });
           if (options.signal?.aborted || closed) stop();
           else child.stdin.end(request);
@@ -148,6 +159,6 @@ export async function createImportExecutor({ backend, memoryBytes = 512 * 1024 *
   };
   // A worker must complete a control-only probe before the store accepts uploads.
   try { await run("probe", null, { timeoutMs: 30000 }); }
-  catch (error) { await executor.close(); throw failure("Import isolation startup probe failed: " + error.message); }
+  catch (error) { await executor.close(); throw Object.assign(failure("Import isolation startup probe failed: " + error.message), { diagnostics: error.diagnostics }); }
   return executor;
 }

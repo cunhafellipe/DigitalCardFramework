@@ -32,6 +32,7 @@ async function execute(data) {
   return result;
 }
 if (process.argv.includes("--stdio")) {
+  process.stderr.write("DC_IMPORT_STAGE:worker-started\n");
   let request = "", bytes = 0;
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => {
@@ -40,9 +41,11 @@ if (process.argv.includes("--stdio")) {
     request += chunk;
   });
   process.stdin.once("end", async () => {
+    process.stderr.write("DC_IMPORT_STAGE:request-end\n");
     let result;
     try { result = await execute(JSON.parse(request)); }
     catch { result = { ok: false, code: "IMPORT", message: "Invalid import worker request" }; }
+    process.stderr.write("DC_IMPORT_STAGE:result-writing\n");
     process.stdout.write(JSON.stringify(result), () => process.exit(0));
   });
 } else process.once("message", async (data) => {

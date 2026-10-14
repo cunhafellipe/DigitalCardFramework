@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve marketplace review controls across unchanged display updates while retaining stale-request checks for changed data.
+
 - Validate wallet balances, conversion receipts and listing quote item shapes in checked clients.
 
 - Validate documented query and path parameters before sending checked-client requests, including required fields and supported inventory sorts.

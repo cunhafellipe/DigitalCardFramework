@@ -180,6 +180,11 @@ jobs:
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/wasm-pixels-browser.mjs
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: node test/codes-browser.mjs test-results/codes
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}

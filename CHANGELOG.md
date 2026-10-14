@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added host-approved procedural WASM pixel effects with bounded workers, program revocation and snapshot capture tied to the requested inputs.
+
 - Added verified offline recovery bundles for the database, published artwork, moderation policies and durable imports, with restoration into a new installation directory.
 
 - Added required OS-backed import execution with Windows job or Linux cgroup memory limits, shared validation/publication reservations and bounded staging cleanup.

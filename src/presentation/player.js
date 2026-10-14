@@ -122,6 +122,11 @@ export function createPlayerStage({
     layoutDirty = true;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const staticMotion = () => motion === "static" || reduced.matches;
+  const adapterFrame = (view, raw = view.inputs, time = view.time, isStatic = staticMotion()) => {
+    const inputs = normalizedInputs({ ...raw, time });
+    if (isStatic) { inputs["tilt.x"] = inputs["tilt.y"] = 0; inputs.angle = 0.5; }
+    return { inputs, activeTimeSeconds: time, deltaSeconds: 0, quality: view.quality, staticMotion: isStatic };
+  };
   const emit = (view, event) => {
     try {
       view.onEvent?.(event);
@@ -477,6 +482,7 @@ export function createPlayerStage({
                 invalidate: wake,
                 width,
                 height,
+                initialFrame: adapterFrame(view),
                 digest: view.resolver.digest,
                 asset: (id) => view.resolver.asset(id),
                 backend: { id: "dc.webgl2", apiVersion: "0.1.0", port: gpu },
@@ -548,7 +554,7 @@ export function createPlayerStage({
     }
     layoutDirty = false;
   }
-  function draw(now) {
+  function draw(now, capture = null) {
     raf = 0;
     if (disposed || document.hidden || !gpu) return;
     const delta = lastTime ? Math.min(0.05, (now - lastTime) / 1000) : 0;
@@ -577,11 +583,9 @@ export function createPlayerStage({
       )
         continue;
       let viewNeedsTime = false;
-      const inputs = normalizedInputs({ ...view.inputs, time: view.time });
-      if (staticMotion()) {
-        inputs["tilt.x"] = inputs["tilt.y"] = 0;
-        inputs.angle = 0.5;
-      }
+      const captured = capture?.view === view ? capture : null,
+        frame = captured?.frame ?? adapterFrame(view), inputs = frame.inputs,
+        rawInputs = captured?.rawInputs ?? view.inputs;
       const viewport = view.rect.map(
           (v, i) => v * (i % 2 ? resolution.scaleY : resolution.scaleX),
         ),
@@ -589,7 +593,7 @@ export function createPlayerStage({
         card = view.resolver.manifest.canvas;
       const flip = Math.abs(
         Math.cos(
-          (view.inputs.flipProgress ?? (view.side === "back" ? 1 : 0)) *
+          (rawInputs.flipProgress ?? (view.side === "back" ? 1 : 0)) *
             Math.PI,
         ),
       );
@@ -673,22 +677,18 @@ export function createPlayerStage({
           if (node.type === "adapter") {
             const a = view.adapterInstances.find((x) => x.id === node.id);
             if (a) {
-              const result = a.instance.update({
-                inputs,
-                activeTimeSeconds: view.time,
-                deltaSeconds: delta,
-                quality: view.quality,
-                staticMotion: staticMotion(),
-              });
-              a.instance.render();
-              if (!a.texture) a.texture = gpu.texture(a.instance.canvas);
-              else gpu.updateTexture(a.texture, a.instance.canvas);
+              const pinned = captured?.leases.get(a),
+                result = pinned ? null : a.instance.update({ ...frame, deltaSeconds: captured ? 0 : delta });
+              if (!pinned) a.instance.render();
+              const adapterCanvas = pinned?.canvas ?? a.instance.canvas;
+              if (!a.texture) a.texture = gpu.texture(adapterCanvas);
+              else gpu.updateTexture(a.texture, adapterCanvas);
               gpu.draw(
                 node,
                 {
                   texture: a.texture,
-                  width: a.instance.canvas.width,
-                  height: a.instance.canvas.height,
+                  width: adapterCanvas.width,
+                  height: adapterCanvas.height,
                 },
                 parent,
                 drawViewport,
@@ -696,7 +696,7 @@ export function createPlayerStage({
                 view.assets.get(node.material?.flakeAsset),
                 view.assets.get(node.material?.mask?.asset ?? node.material?.maskAsset),
               );
-              if (result?.needsTime && !staticMotion()) {
+              if (result?.needsTime && !frame.staticMotion) {
                 viewNeedsTime = true;
               }
             }
@@ -795,7 +795,7 @@ export function createPlayerStage({
       if (
         (view.usesTime || viewNeedsTime) &&
         view.readyToDraw &&
-        !staticMotion()
+        !frame.staticMotion && !captured
       ) {
         view.time += delta;
         needsTime = true;
@@ -1165,9 +1165,20 @@ export function createPlayerStage({
             "SNAPSHOT",
             "Interactive face is not ready for capture",
           );
-          cancelAnimationFrame(raf);
-          raf = 0;
-          draw(performance.now());
+          const generation = view.generation, scene = view.scene,
+            rawInputs = structuredClone(view.inputs), frame = adapterFrame(view, rawInputs),
+            leases = new Map(), instances = [...view.adapterInstances];
+          try {
+            for (const adapter of instances) if (adapter.instance.settle) {
+              const lease = await adapter.instance.settle(frame, { signal: view.loadAbort.signal });
+              ensure(lease?.canvas && typeof lease.dispose === "function", "SNAPSHOT", "Invalid adapter capture lease");
+              leases.set(adapter, lease);
+            }
+            ensure(!view.disposed && !disposed && generation === view.generation && scene === view.scene && view.readyToDraw && instances.every(a => view.adapterInstances.includes(a)), "SNAPSHOT", "View changed during capture");
+            cancelAnimationFrame(raf);
+            raf = 0;
+            draw(performance.now(), { view, frame, rawInputs, leases });
+            ensure(view.readyToDraw && !view.disposed && generation === view.generation, "SNAPSHOT", "Capture rendering failed");
           const r = view.rect,
             scaleX = canvas.width / root.clientWidth,
             scaleY = canvas.height / root.clientHeight,
@@ -1193,6 +1204,10 @@ export function createPlayerStage({
               b ? resolve(b) : reject(new Error("Snapshot failed"));
             }, "image/png"),
           );
+          } finally {
+            for (const lease of leases.values()) lease.dispose();
+            wake();
+          }
         },
         dispose() {
           if (view.disposed) return;

@@ -59,6 +59,7 @@
     "./presentation/layered-package": "./src/presentation/layered-package.js",
     "./access": "./src/access.js",
     "./presentation/adapters": "./src/presentation/adapters.js",
+    "./presentation/wasm-pixels": {"types":"./src/presentation/wasm-pixels.d.ts","default":"./src/presentation/wasm-pixels.js"},
     "./presentation/extensions": "./src/presentation/extensions.js",
     "./presentation/signatures": "./src/presentation/signatures.js",
     "./presentation/integration": "./src/presentation/integration.js",

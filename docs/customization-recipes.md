@@ -215,6 +215,10 @@ The adapter renders a layer inside the card's normal composition. The player sup
 
 This route supports passive vector/keyframe effects accepted by the dotLottie validator. It does not provide arbitrary custom shaders, Lottie expressions or state machines, or a general-purpose WASM compute interface. Python and Go author the portable assets; the installed browser runtime renders them.
 
+## Add a procedural pixel effect
+
+Use the optional [WASM pixel adapter](complex-cards/wasm-pixels.md) when an effect needs custom CPU computation inside a card layer. The host approves an exact program version and module hash; the card supplies bounded numeric parameters. The guide covers the module interface, limits, snapshot capture and revocation. This route is separate from passive vector animation and does not expose arbitrary GPU shader callbacks.
+
 ## Install a reviewed browser card renderer
 
 Use `createProgramCardRenderer` to replace a card's visual structure with a host-approved browser program. The Python and Go examples generate custom HTML/CSS and use the framework's bootstrap; the browser does not execute native Python or Go.

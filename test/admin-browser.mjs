@@ -8,11 +8,11 @@ import * as playwright from 'playwright';
 import {fixture} from './helpers.js';
 import {createApiHandler} from '../src/http.js';
 import {serveReference} from '../src/static.js';
-import {validateLocalizationBundle,createLocalization} from '../src/localization.js';
+import {localizationSchema,validateLocalizationBundle,createLocalization} from '../src/localization.js';
 
 const output=resolve(process.argv[2]??'test-results/admin');
 const engine=process.env.BROWSER_ENGINE??'chromium';
-const bundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:65536})));
+const bundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:localizationSchema.maximumBytes+1})));
 const localization=createLocalization({locale:bundle.locale,messages:bundle.messages}),t=(key,values)=>localization.text(key,values);
 const x=fixture();
 let api;

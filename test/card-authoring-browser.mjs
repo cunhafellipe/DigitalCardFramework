@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import {execFileSync} from 'node:child_process';
 import { resolve, extname } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
@@ -13,6 +14,10 @@ import { serveReference } from "../src/static.js";
 import { createPresentationStore } from "../src/presentation/service.js";
 import { createPresentationHandler } from "../src/presentation/node-http.js";
 import { authorizePresentation } from "../src/access.js";
+import {importPackage} from '../src/presentation/package.js';
+import {validateLocalizationBundle,createLocalization,localizationSchema} from '../src/localization.js';
+const localeBundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python3',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:localizationSchema.maximumBytes+1})));
+const localization=createLocalization({locale:localeBundle.locale,messages:localeBundle.messages}),t=(key,values)=>localization.text(key,values);
 const output = resolve(process.argv[2] ?? "test-results/card-authoring"),
   engine = process.env.BROWSER_ENGINE ?? "chromium";
 await mkdir(output, { recursive: true });
@@ -536,7 +541,7 @@ try {
   const embeddedFontId=await page.evaluate(()=>window.studio.getProject().manifest.assets.find(a=>a.role==="font").id);
   assert.equal(await page.getByLabel("Usage terms for "+embeddedFontId,{exact:true}).inputValue(),"Test fixture: permitted embedding and redistribution");
   await page.getByText("Decoded family: Test Sans · Face: Regular · Style: normal · Weight: unavailable · Italic angle: 0",{exact:true}).waitFor();
-  await page.getByText("Glyphs: 2 · Character-map entries: 256 · Units per em: 1000",{exact:true}).waitFor();
+  await page.getByText(createLocalization().text('studioTools.fontGlyphs',{glyphs:2,entries:256,units:1000}),{exact:true}).waitFor();
   await page.getByText("Variable axes: none",{exact:true}).waitFor();
   await page.getByLabel("Glyph coverage sample for "+embeddedFontId,{exact:true}).fill("A🙂");
   await page.getByLabel("Glyph coverage sample for "+embeddedFontId,{exact:true}).press("Tab");
@@ -968,6 +973,36 @@ try {
   });
   assert.deepEqual(visualDisposal,{catalogCalls:1,policyCalls:0,children:0});
   checks.push("shared authoring/undo queue preserves rapid edits and fences queued work after disposal");
+  await page.evaluate(async bundle=>{
+    window.visual?.dispose();window.studio?.dispose();
+    const [{mountStudio},{importPackage},{createMemoryLibrary}]=await Promise.all([import('/src/presentation/studio.js'),import('/src/presentation/package.js'),import('/src/presentation/authoring-tools.js')]),
+      pkg=await importPackage(new Uint8Array(await(await fetch('/fixture.dcard')).arrayBuffer()));
+    const root=document.createElement('div'),other=document.createElement('div');root.id='localized-core';root.lang='de';root.dir='rtl';other.id='native-core';document.body.append(root,other);
+    window.localizedCore=mountStudio(root,{initialPackage:pkg,locale:bundle.locale,messages:bundle.messages,library:createMemoryLibrary()});
+    window.nativeCore=mountStudio(other,{initialPackage:pkg,library:createMemoryLibrary()});await Promise.all([window.localizedCore.ready,window.nativeCore.ready]);
+    window.nativeCoreBefore=window.nativeCore.getProject().serialize();
+  },localeBundle);
+  const localized=page.locator('#localized-core'),localeIdle=()=>page.waitForFunction(()=>document.querySelector('#localized-core').getAttribute('aria-busy')!=='true');
+  assert.equal(await localized.getAttribute('lang'),'es');assert.equal(await localized.getAttribute('dir'),'ltr');assert.equal(await page.locator('#native-core').getAttribute('lang'),'en');
+  await localized.getByLabel(t('studioCore.finish'),{exact:true}).selectOption('Chunky holo');await localeIdle();
+  assert.equal(await localized.getByLabel(t('studioCore.finish'),{exact:true}).locator('option[value="Chunky holo"]').innerText(),t('studioCore.presetChunkyholo'));
+  await localized.getByLabel(t('studioCore.flakeSize'),{exact:true}).fill('18');await localized.getByLabel(t('studioCore.flakeSize'),{exact:true}).press('Tab');await localeIdle();
+  assert.equal(await page.evaluate(()=>window.localizedCore.getProject().scenes.get('scenes/front.json').nodes.find(n=>n.id==='art').material.size),18);
+  await localized.getByRole('button',{name:t('studioCore.undo'),exact:true}).click();await localeIdle();assert.equal(await localized.getByLabel(t('studioCore.flakeSize'),{exact:true}).inputValue(),'12');
+  await localized.getByRole('button',{name:t('studioCore.redo'),exact:true}).click();await localeIdle();assert.equal(await localized.getByLabel(t('studioCore.flakeSize'),{exact:true}).inputValue(),'18');
+  await localized.getByRole('button',{name:t('studioCore.paintEffectArea'),exact:true}).click();await localized.getByRole('dialog',{name:t('studioCore.paintEffectArea')}).waitFor();
+  const localizedMask=await localized.locator('.dcs-mask').boundingBox();await page.mouse.move(localizedMask.x+localizedMask.width*.25,localizedMask.y+localizedMask.height*.5);await page.mouse.down();await page.mouse.move(localizedMask.x+localizedMask.width*.75,localizedMask.y+localizedMask.height*.5,{steps:5});await page.mouse.up();
+  await localized.getByRole('button',{name:t('studioCore.applyPaintedMask'),exact:true}).click();await localeIdle();await localized.locator('.dcs-paint-dialog').waitFor({state:'detached'});
+  await localized.getByRole('button',{name:t('studioTools.addText'),exact:true}).click();await localeIdle();const artistText='0007 <b>Artist text</b> é ₹';
+  await localized.getByLabel(t('studioTools.textContent'),{exact:true}).fill(artistText);await localized.getByLabel(t('studioTools.textContent'),{exact:true}).press('Tab');await localeIdle();
+  await localized.getByLabel(t('studioTools.fontStyle'),{exact:true}).selectOption('italic');await localeIdle();assert.equal(await localized.getByLabel(t('studioTools.fontStyle'),{exact:true}).inputValue(),'italic');
+  await localized.getByRole('button',{name:t('studioCore.saveDraft'),exact:true}).click();await localeIdle();await localized.getByText(t('studioCore.draftSavedOnThisDevice'),{exact:true}).waitFor();
+  await localized.getByRole('button',{name:t('studioCore.capturePosters'),exact:true}).click();await localeIdle();await localized.getByText(t('studioCore.bothFacePostersCapturedFromTheRenderer'),{exact:true}).waitFor();
+  const localeDownload=page.waitForEvent('download');await localized.getByRole('button',{name:t('studioCore.exportDcard'),exact:true}).click();const exportedLocale=await localeDownload,exportedPackage=await importPackage(new Uint8Array(await readFile(await exportedLocale.path())));
+  assert.equal(exportedLocale.suggestedFilename(),'synthetic.card.dcard');assert.equal(exportedPackage.scenes.get('scenes/front.json').nodes.find(n=>n.type==='text').text,artistText);assert.equal(exportedPackage.scenes.get('scenes/front.json').nodes.find(n=>n.type==='text').typography.style,'italic');assert.equal(exportedPackage.scenes.get('scenes/front.json').nodes.find(n=>n.id==='art').material.kind,'glitter');assert(exportedPackage.manifest.assets.some(asset=>asset.role==='mask'));
+  assert.deepEqual(await page.evaluate(()=>window.nativeCore.getProject().serialize()),await page.evaluate(()=>window.nativeCoreBefore));assert.equal(await page.locator('#native-core').getByRole('button',{name:'Add text',exact:true}).count(),1);
+  await page.evaluate(()=>{window.localizedCore.dispose();window.nativeCore.dispose();});assert.equal(await localized.getAttribute('lang'),'de');assert.equal(await localized.getAttribute('dir'),'rtl');assert.equal(await localized.locator('*').count(),0);assert.equal(await page.locator('#native-core').getAttribute('lang'),null);
+  checks.push('Python-authored Spanish core Studio edits native materials and text, paints masks, preserves enum values/Undo/Redo, saves drafts, captures and exports exact artwork with independent English instance and language cleanup');
   assert.equal(errors.length, 0, errors.join("\n"));
   await writeFile(
     resolve(output, "results.json"),

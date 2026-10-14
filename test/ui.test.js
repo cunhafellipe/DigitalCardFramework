@@ -7,9 +7,54 @@ import {renderCard,renderAlbum,renderInspector,renderTiltInspector,mountFramewor
 import {renderTrading} from '../src/trading-ui.js';
 import {renderAlbums,renderCollection} from '../src/collection-ui.js';
 import {renderStudio} from '../src/studio-ui.js';
+import {mountCardPolicyAdmin} from '../src/card-policy-ui.js';
+import {createLocalization,englishMessages} from '../src/localization.js';
 import {createCommandRunner,createRevealController} from '../src/client.js';
 
 const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setImmediate(r));};
+
+const studioMessages=()=>Object.fromEntries(Object.entries(englishMessages).filter(([key])=>key.startsWith('studioShell.')||key.startsWith('policyUI.')).map(([key,value])=>[key,typeof value==='string'?'['+value+']':Object.fromEntries(Object.entries(value).map(([category,text])=>[category,'['+text+']']))]));
+
+test('localized studio previews preserve import inputs, authored rows and reviewed publishing',async()=>{
+  const x=setup();let mounted;try{
+    const localization=createLocalization({locale:'ar',messages:studioMessages()}),t=localization.text,
+      base=x.core.previewImport({role:'admin'},{source:JSON.stringify({cards:[{...x.model.catalog.cards[0],description:'Authored description'}]}),expectedVersion:x.model.catalog.version});
+    let input;x.client.previewImport=async request=>{input=structuredClone(request);return base;};
+    mounted=renderStudio(x.model,{...x.context,localization});const view=x.mount(mounted);
+    assert.equal(view.lang,'ar');assert.equal(view.dir,'rtl');
+    assert(view.querySelector('[aria-label="'+t('studioShell.destinationCard')+'"]').textContent.includes(x.model.catalog.cards[0].name));
+    click(view,t('studioShell.loadStarterRow'));const source=field(view,t('studioShell.importContent'));
+    assert.equal(JSON.parse(source.value).cards[0].name,'Your first card');
+    const authored=source.value;click(view,t('studioShell.validatePreview'));await settle();
+    assert.equal(input.source,authored);assert.equal(input.format,'json');assert.equal(input.mode,'merge');
+    assert(view.textContent.includes(t('studioShell.changeCounts',{added:0,updated:1,removed:0})));
+    assert(view.textContent.includes(t('studioShell.validRevision',{version:base.manifest.version,digest:base.digest.slice(0,16)})));
+    const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));
+    click(view,t('studioShell.publishReviewedRevision'));await settle();
+    assert.equal(x.calls[0][0],'commitImport');assert.deepEqual(x.calls[0][1],{manifest:base.manifest,digest:base.digest,expectedVersion:x.model.catalog.version,policyRevision:base.policyRevision});
+    x.client.previewImport=async()=>{throw new Error('Provider-authored <failure>');};click(view,t('studioShell.validatePreview'));await settle();assert(view.textContent.includes('Provider-authored <failure>'));assert.equal(view.querySelector('failure'),null);
+  }finally{mounted?.dispose();x.close();}
+});
+
+test('localized policy administration preserves draft data and fences stale impact review',async()=>{
+  const x=setup();let mounted;try{
+    const localization=createLocalization({locale:'ar',messages:studioMessages()}),t=localization.text,root=document.createElement('div');root.lang='de';root.dir='ltr';document.body.append(root);
+    const registry={revision:1000,documents:[],assignments:[],resources:[],history:[{revision:1000,type:'card-policy.saved',at:'2026-10-14T01:02:03Z'}]},calls=[];
+    let finish;const client={cardPolicies:async()=>structuredClone(registry),saveCardPolicy:async input=>{calls.push(['save',structuredClone(input)]);registry.documents=[{document:input.document,state:'draft'}];},previewCardPolicy:input=>{calls.push(['preview',structuredClone(input)]);return new Promise(resolve=>finish=resolve);},activateCardPolicy:async input=>calls.push(['activate',structuredClone(input)])};
+    mounted=mountCardPolicyAdmin(root,{client,localization});await mounted.ready;
+    assert.equal(root.lang,'ar');assert(root.textContent.includes(t('policyUI.historyRevision',{revision:1000,type:t('policyUI.history.card-policy.saved'),date:localization.date(registry.history[0].at)})));
+    const editor=root.querySelector('textarea[aria-label="'+t('policyUI.policyDocument')+'"]'),draft=JSON.parse(editor.value);
+    assert.equal(draft.name,'Standard cards');assert.equal(draft.fields[0].label,'Value');
+    click(root,t('policyUI.savePolicyDraft'));await settle();assert.deepEqual(calls[0][1].document,draft);assert.equal(calls[0][1].expectedRevision,1000);
+    click(root,t('policyUI.previewPolicyImpact'));await settle();editor.dispatchEvent(new x.window.Event('input'));finish({affected:[]});await settle();
+    assert(!root.textContent.includes(t('policyUI.affectedVariants',{count:0})));
+    click(root,t('policyUI.previewPolicyImpact'));await settle();const preview={affected:[{cardId:'authored.card',variantId:'authored.variant',issues:[{path:'stats.authored',message:'Authored issue'}]}],digest:'review-digest'};finish(preview);await settle();
+    assert(root.textContent.includes(t('policyUI.affectedVariants',{count:1})));assert(root.textContent.includes('Authored issue'));
+    const review=root.querySelector('input[type="checkbox"]');review.checked=true;review.dispatchEvent(new x.window.Event('change'));click(root,t('policyUI.activateReviewedPolicy'));await settle();
+    assert.deepEqual(calls.at(-1)[1],{...preview,key:calls.at(-1)[1].key,reason:'Activated after impact review'});
+    mounted.dispose();assert.equal(root.lang,'de');assert.equal(root.dir,'ltr');mounted=undefined;
+  }finally{mounted?.dispose();x.close();}
+});
 
 test('both card inspectors explain pending and failed activation without displaying unusable data',()=>{
   const x=setup();try{const original=x.core.inventory(x.alice)[0],copy={...original,bindings:{pending:{state:'activation-pending',data:{secret:'UNUSABLE-PENDING'}},failed:{state:'activation-failed',data:{secret:'UNUSABLE-FAILED'}},active:{state:'active',data:{reward:'Available reward'}},used:{state:'used',data:{reward:'Used reward'}}}};

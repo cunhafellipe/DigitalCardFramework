@@ -1,3 +1,4 @@
+import {createLocalization} from "./localization.js";
 import { mountStudio } from "./presentation/studio.js";
 import { blankPackage } from "./presentation/project.js";
 import { importPackage } from "./presentation/package.js";
@@ -10,25 +11,28 @@ import {
 } from "./presentation/authoring-tools.js";
 import { mountCardPolicyAdmin } from "./card-policy-ui.js";
 
-export async function publishArtworkPackage(pkg,{principal,signal,active=()=>true}={}) {
+export async function publishArtworkPackage(pkg,{principal,signal,active=()=>true,locale,messages,localization}={}) {
+  const l=localization??createLocalization({locale,messages}),t=l.text;
   const request=async(url,options={})=>{
-    if(!active())throw new Error("Artwork editor closed");
+    if(!active())throw new Error(t("studioShell.artworkEditorClosed"));
     const response=await fetch(url,{credentials:"same-origin",signal,...options}),result=await response.json();
-    if(!response.ok)throw new Error(result.message??result.code??"Presentation request failed");return result;
+    if(!response.ok)throw new Error(result.message??result.code??t("studioShell.presentationRequestFailed"));return result;
   };
   let job=await request("/presentations/imports",{method:"POST",headers:{"X-DC-Principal":principal,"Content-Type":"application/zip","Idempotency-Key":pkg.digest},body:pkg.archive});
   for(let attempt=0;!["ready","published","rejected","cancelled"].includes(job.state)&&attempt<120;attempt++){
     await new Promise(resolve=>setTimeout(resolve,500));job=await request("/presentations/imports/"+job.id);
   }
-  if(!["ready","published"].includes(job.state))throw new Error(job.error?.message??"Presentation is not ready");
+  if(!["ready","published"].includes(job.state))throw new Error(job.error?.message??t("studioShell.presentationIsNotReady"));
   await request("/presentations/imports/"+job.id+"/publish",{method:"POST",headers:{"X-DC-Principal":principal}});
   return {contract:"digital-card@0.1",digest:pkg.digest,baseURL:location.origin+"/presentations/"+pkg.digest+"/files/"};
 }
 
 export function mountVisualStudio(
   root,
-  { client, model, onCatalogChange = () => {} },
+  { client, model, onCatalogChange = () => {},locale,messages,localization },
 ) {
+  const l=localization??createLocalization({locale,messages}),t=l.text;
+  const originalLang=root.getAttribute("lang"),originalDir=root.getAttribute("dir");root.lang=l.locale;root.dir=l.dir;
   let studio,
     disposed = false,
     destination = model.catalog.cards[0]?.id,
@@ -45,19 +49,19 @@ export function mountVisualStudio(
     fresh = document.createElement("button"),
     canvas = document.createElement("div");
   status.setAttribute("role", "status");
-  select.setAttribute("aria-label", "Destination card");
-  variants.setAttribute("aria-label", "Destination variant");
-  kind.setAttribute("aria-label","Design destination");
-  for(const [value,label] of [["card","Card or variant"],["pack","Pack artwork"]]){const option=document.createElement("option");option.value=value;option.textContent=label;kind.append(option);}
-  const legend=document.createElement("legend");legend.textContent="Pack artwork";
-  reveal.setAttribute("aria-label","Pack reveal artwork URL");reveal.placeholder="https://assets.example/reveal.webp";
-  artworkAlt.setAttribute("aria-label","Pack artwork description");artworkAlt.maxLength=200;
+  select.setAttribute("aria-label", t("studioShell.destinationCard"));
+  variants.setAttribute("aria-label", t("studioShell.destinationVariant"));
+  kind.setAttribute("aria-label",t("studioShell.designDestination"));
+  for(const [value,label] of [["card",t("studioShell.cardOrVariant")],["pack",t("studioShell.packArtwork")]]){const option=document.createElement("option");option.value=value;option.textContent=label;kind.append(option);}
+  const legend=document.createElement("legend");legend.textContent=t("studioShell.packArtwork");
+  reveal.setAttribute("aria-label",t("studioShell.packRevealArtworkURL"));reveal.placeholder="https://assets.example/reveal.webp";
+  artworkAlt.setAttribute("aria-label",t("studioShell.packArtworkDescription"));artworkAlt.maxLength=200;
   reveal.oninput=()=>{if(reveal.value)packArtworkDraft.reveal=reveal.value;else delete packArtworkDraft.reveal;};
   artworkAlt.oninput=()=>{if(artworkAlt.value)packArtworkDraft.alt=artworkAlt.value;else delete packArtworkDraft.alt;};
   packFields.append(legend,reveal,artworkAlt);packFields.hidden=true;
   function destinationOptions(){
   select.replaceChildren();
-  select.setAttribute("aria-label",kind.value==="pack"?"Destination pack":"Destination card");
+  select.setAttribute("aria-label",kind.value==="pack"?t("studioShell.destinationPack"):t("studioShell.destinationCard"));
   for (const card of kind.value==="pack"?model.catalog.products:model.catalog.cards) {
     const option = document.createElement("option");
     option.value = card.id;
@@ -71,7 +75,7 @@ export function mountVisualStudio(
     variants.replaceChildren();
     const all = document.createElement("option");
     all.value = "";
-    all.textContent = "Base card design";
+    all.textContent = t("studioShell.baseCardDesign");
     variants.append(all);
     for (const v of model.catalog.variants.filter(
       (v) => v.cardId === destination,
@@ -89,7 +93,7 @@ export function mountVisualStudio(
     editorGeneration++;cancelReview?.();studio?.dispose();studio=undefined;canvas.replaceChildren();
     launch.disabled=fresh.disabled=kind.disabled=select.disabled=variants.disabled=false;
     canvas.inert=false;canvas.removeAttribute("aria-busy");
-    status.textContent="Open the selected destination to edit its design.";
+    status.textContent=t("studioShell.openTheSelectedDestinationToEditItsDesign");
   }
   select.onchange = () => {
     if(disposed)return;
@@ -107,11 +111,11 @@ export function mountVisualStudio(
     resetEditor();
     destinationOptions();variantOptions();variants.hidden=kind.value==="pack";
     packFields.hidden=kind.value!=="pack";
-    launch.textContent=kind.value==="pack"?"Open visual pack editor":"Open visual card editor";
-    fresh.textContent=kind.value==="pack"?"Start a new pack design":"Start a new card design";
+    launch.textContent=kind.value==="pack"?t("studioShell.openVisualPackEditor"):t("studioShell.openVisualCardEditor");
+    fresh.textContent=kind.value==="pack"?t("studioShell.startANewPackDesign"):t("studioShell.startANewCardDesign");
   };
-  launch.textContent = "Open visual card editor";
-  fresh.textContent = "Start a new card design";
+  launch.textContent = t("studioShell.openVisualCardEditor");
+  fresh.textContent = t("studioShell.startANewCardDesign");
   launch.type = fresh.type = "button";
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";
@@ -133,12 +137,12 @@ export function mountVisualStudio(
     });
     if (!response.ok)
       throw new Error(
-        "Saved presentation is unavailable on this host. Import its .dcard file to edit it.",
+        t("studioShell.savedPresentationIsUnavailableOnThisHostImport"),
       );
     return new Uint8Array(await response.arrayBuffer());
   }
   async function upload(pkg) {
-    return publishArtworkPackage(pkg,{principal:model.me.userId,signal:abort.signal,active:()=>!disposed});
+    return publishArtworkPackage(pkg,{principal:model.me.userId,signal:abort.signal,active:()=>!disposed,localization:l});
   }
   const shared = createSharedLibrary({
     client: {
@@ -165,7 +169,7 @@ export function mountVisualStudio(
     const base = await client.operatorCatalog(),
       card = base.cards.find((c) => c.id === target);
     if(!current())return false;
-    if (targetKind==="card"&&!card) throw new Error("Choose a destination card");
+    if (targetKind==="card"&&!card) throw new Error(t("studioShell.chooseADestinationCard"));
     const values = publishingStudio.getProject().manifest.authoring?.values ?? {},
       presentation = {
         contract: "digital-card@0.1",
@@ -182,7 +186,7 @@ export function mountVisualStudio(
       ? base.variants.find((v) => v.id === targetVariant && v.cardId === target)
       : null;
     if (targetVariant && !variant)
-      throw new Error("Destination variant changed");
+      throw new Error(t("studioShell.destinationVariantChanged"));
     let source = {
       cards: [revised],
       ...(variant
@@ -195,7 +199,7 @@ export function mountVisualStudio(
     };
     let product;
     if(targetKind==="pack"){
-      product=base.products.find(p=>p.id===target);if(!product)throw new Error("Choose a destination pack");
+      product=base.products.find(p=>p.id===target);if(!product)throw new Error(t("studioShell.chooseADestinationPack"));
       const poster=face=>presentation.baseURL+pkg.manifest.assets.find(a=>a.id===pkg.manifest.faces[face].poster).path;
       source={products:[{...product,name:pkg.manifest.title,revision:product.revision+1,artwork:{...product.artwork,...draftArtwork,front:poster("front"),back:poster("back"),design:presentation}}]};
       if(!draftArtwork.reveal)delete source.products[0].artwork.reveal;
@@ -211,14 +215,10 @@ export function mountVisualStudio(
       commit = document.createElement("button"),
       cancel = document.createElement("button");
     message.textContent = targetKind==="pack"?
-      "Publish "+pkg.manifest.title+" as pack revision "+(product.revision+1)+"? Already allocated packs retain their prior artwork.":
-      "Publish " +
-      (revised?.name??pkg.manifest.title) +
-      " under policy revision " +
-      prepared.policyRevision +
-      "? Existing copies retain their recorded content.";
-    commit.textContent = targetKind==="pack"?"Publish reviewed pack artwork":"Publish reviewed card";
-    cancel.textContent = "Keep as draft";
+      t('studioShell.reviewPack',{name:pkg.manifest.title,revision:product.revision+1}):
+      t('studioShell.reviewCard',{name:revised?.name??pkg.manifest.title,revision:prepared.policyRevision});
+    commit.textContent = targetKind==="pack"?t("studioShell.publishReviewedPackArtwork"):t("studioShell.publishReviewedCard");
+    cancel.textContent = t("studioShell.keepAsDraft");
     review.append(message, commit, cancel);
     root.append(review);
     review.showModal();
@@ -250,7 +250,7 @@ export function mountVisualStudio(
           });
           cleanup();
           if(current()){
-            status.textContent = targetKind==="pack"?"Pack artwork published. Existing packs retain their artwork.":"Card published.";
+            status.textContent = targetKind==="pack"?t("studioShell.packArtworkPublishedExistingPacksRetainTheirArtwork"):t("studioShell.cardPublished");
             onCatalogChange();
           }
           resolve(true);
@@ -285,7 +285,7 @@ export function mountVisualStudio(
       else if (policy?.policy.defaults.template) {
         const entry = await library.get(policy.policy.defaults.template, true);
         if(!current())return;
-        if (!entry) throw new Error("Default template is unavailable");
+        if (!entry) throw new Error(t("studioShell.defaultTemplateIsUnavailable"));
         initialPackage = await loadTemplate(entry);
       } else initialPackage = await blankPackage();
       if (!current()) return;
@@ -294,6 +294,7 @@ export function mountVisualStudio(
       studio?.dispose();
       studio = mountStudio(canvas, {
         initialPackage,
+        localization:l,
         policyProvider: target.kind==="card"?()=>getDestinationPolicy(target):undefined,
         library,
         onPublish: pkg=>publish(pkg,target),
@@ -318,7 +319,7 @@ export function mountVisualStudio(
       await studio.refreshPolicy();
       if (!current()) return;
       status.textContent =
-        product?"Edit pack front and back, capture posters, then publish reviewed artwork. Reveal art is an optional image URL.":"Edit the card, capture its posters, then publish a reviewed revision.";
+        product?t("studioShell.editPackFrontAndBackCapturePostersThen"):t("studioShell.editTheCardCaptureItsPostersThenPublish");
     } catch (e) {
       if (current()) status.textContent = e.message;
     } finally {
@@ -337,10 +338,10 @@ export function mountVisualStudio(
     const panel = document.createElement("details"),
       summary = document.createElement("summary"),
       body = document.createElement("div");
-    summary.textContent = "Administrator card policies";
+    summary.textContent = t("studioShell.administratorCardPolicies");
     panel.append(summary, body);
     root.append(panel);
-    admin = mountCardPolicyAdmin(body, { client });
+    admin = mountCardPolicyAdmin(body, { client,localization:l });
   }
   return {
     dispose() {
@@ -350,6 +351,7 @@ export function mountVisualStudio(
       studio?.dispose();
       admin?.dispose();
       root.replaceChildren();
+      for(const [name,value] of [["lang",originalLang],["dir",originalDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);
     },
   };
 }

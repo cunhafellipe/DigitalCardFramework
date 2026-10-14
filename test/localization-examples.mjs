@@ -15,7 +15,7 @@ function run(executable,args,environment={}){
   child.stdout.setEncoding('utf8');child.stderr.setEncoding('utf8');
   const finish=(callback,value)=>{if(settled)return;settled=true;clearTimeout(timer);callback(value);};
   const timer=setTimeout(()=>{child.kill();finish(reject,Error('Localization generator timed out'));},60000);
-  const collect=(name,chunk)=>{if(name==='stdout')stdout+=chunk;else stderr+=chunk;if(Buffer.byteLength(stdout)+Buffer.byteLength(stderr)>65536){child.kill();finish(reject,Error('Localization generator output exceeded its bound'));}};
+  const collect=(name,chunk)=>{if(name==='stdout')stdout+=chunk;else stderr+=chunk;if(Buffer.byteLength(stdout)+Buffer.byteLength(stderr)>localizationSchema.maximumBytes+1){child.kill();finish(reject,Error('Localization generator output exceeded its bound'));}};
   child.stdout.on('data',chunk=>collect('stdout',chunk));child.stderr.on('data',chunk=>collect('stderr',chunk));child.once('error',error=>finish(reject,error));child.once('close',code=>code===0?finish(fulfill,{stdout,stderr}):finish(reject,Error('Localization generator failed: '+stderr)));
  });
 }

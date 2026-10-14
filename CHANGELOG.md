@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added per-instance Studio localization across editing tools, artwork publishing and card-policy controls.
+
 - Added per-instance administration localization for overview, pricing, people, website settings, activity and review/save workflows.
 
 - Added portable localization for account rewards, private code reveal/history and trading controls, with complete Python/Go Spanish examples.

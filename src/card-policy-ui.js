@@ -1,10 +1,13 @@
+import {createLocalization} from "./localization.js";
 import { validatePolicy } from "./card-policy.js";
 const el = (tag, text) => {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
   return node;
 };
-export function mountCardPolicyAdmin(root, { client }) {
+export function mountCardPolicyAdmin(root, { client,locale,messages,localization }) {
+  const l=localization??createLocalization({locale,messages}),t=l.text;
+  const originalLang=root.getAttribute("lang"),originalDir=root.getAttribute("dir");root.lang=l.locale;root.dir=l.dir;
   root.classList.add("dcs-policy-admin");
   let registry,
     preview,
@@ -21,16 +24,16 @@ export function mountCardPolicyAdmin(root, { client }) {
   status.setAttribute("role", "status");
   editor.rows = 20;
   assignments.rows = 5;
-  editor.setAttribute("aria-label", "Policy document");
-  assignments.setAttribute("aria-label", "Policy assignments");
-  selection.setAttribute("aria-label", "Saved policy revision");
+  editor.setAttribute("aria-label", t("policyUI.policyDocument"));
+  assignments.setAttribute("aria-label", t("policyUI.policyAssignments"));
+  selection.setAttribute("aria-label", t("policyUI.savedPolicyRevision"));
   review.type = "checkbox";
   const checkbox = el("label");
   checkbox.append(
     review,
-    el("span", "I reviewed the policy changes and affected cards."),
+    el("span", t("policyUI.iReviewedThePolicyChangesAndAffectedCards")),
   );
-  const activate = el("button", "Activate reviewed policy");
+  const activate = el("button", t("policyUI.activateReviewedPolicy"));
   activate.type = "button";
   activate.disabled = true;
   const draft = () => ({
@@ -66,7 +69,7 @@ export function mountCardPolicyAdmin(root, { client }) {
   function action(fn) {
     return async () => {
       try {
-        status.textContent = "Working…";
+        status.textContent = t("policyUI.working");
         await fn();
       } catch (e) {
         if (!disposed) status.textContent = e.message;
@@ -82,39 +85,32 @@ export function mountCardPolicyAdmin(root, { client }) {
   async function refresh() {
     registry = await client.cardPolicies();
     if (disposed) return;
-    selection.replaceChildren(el("option", "Choose saved policy"));
+    selection.replaceChildren(el("option", t("policyUI.chooseSavedPolicy")));
     for (const row of registry.documents) {
       const d = row.document,
         o = el(
           "option",
-          d.name + " · " + d.id + "@" + d.revision + " · " + row.state,
+          t('policyUI.savedRevision',{name:d.name,id:d.id,revision:d.revision,state:t('policyUI.state.'+row.state)}),
         );
       o.value = d.id + "@" + d.revision;
       selection.append(o);
     }
     assignments.value = JSON.stringify(registry.assignments, null, 2);
-    history.replaceChildren(el("h3", "Policy history"));
+    history.replaceChildren(el("h3", t("policyUI.policyHistory")));
     for (const row of registry.history.slice(-20).reverse())
       history.append(
-        el("p", "Revision " + row.revision + " · " + row.type + " · " + row.at),
+        el("p", t('policyUI.historyRevision',{revision:row.revision,type:t('policyUI.history.'+row.type),date:l.date(row.at)})),
       );
-    status.textContent = "Policy library revision " + registry.revision;
+    status.textContent = t('policyUI.libraryRevision',{revision:registry.revision});
     libraryRows.replaceChildren();
     for (const item of registry.resources) {
       const row = el(
         "p",
-        item.document.name +
-          " · " +
-          item.kind +
-          " · " +
-          item.document.id +
-          "@" +
-          item.document.revision +
-          " ",
+        t('policyUI.resourceRevision',{name:item.document.name,kind:t('policyUI.kind.'+item.kind),id:item.document.id,revision:item.document.revision})+' ',
       );
       row.append(
         button(
-          item.retired ? "Restore resource" : "Retire resource",
+          item.retired ? t("policyUI.restoreResource") : t("policyUI.retireResource"),
           async () => {
             await client[
               item.retired ? "restoreCardResource" : "retireCardResource"
@@ -133,17 +129,17 @@ export function mountCardPolicyAdmin(root, { client }) {
     }
   }
   root.append(
-    el("h2", "Administrator card policies"),
+    el("h2", t("policyUI.administratorCardPolicies")),
     el(
       "p",
-      "Defaults start a draft. Required rules and fixed values are enforced when cards are published.",
+      t("policyUI.defaultsStartADraftRequiredRulesAndFixed"),
     ),
     selection,
     editor,
-    el("h3", "Assignments"),
+    el("h3", t("policyUI.assignments")),
     el(
       "p",
-      "Assign an active revision to installation, line, cardType or variant scope. Use priority to resolve same-scope defaults.",
+      t("policyUI.assignAnActiveRevisionToInstallationLineCardType"),
     ),
     assignments,
   );
@@ -168,12 +164,12 @@ export function mountCardPolicyAdmin(root, { client }) {
     { signal: events.signal },
   );
   root.append(
-    button("New policy draft", () => {
+    button(t("policyUI.newPolicyDraft"), () => {
       editor.value = JSON.stringify(draft(), null, 2);
       invalidate();
-      status.textContent = "New draft. Choose a unique policy ID.";
+      status.textContent = t("policyUI.newDraftChooseAUniquePolicyID");
     }),
-    button("Create next revision", () => {
+    button(t("policyUI.createNextRevision"), () => {
       const d = parse();
       d.revision =
         Math.max(
@@ -184,14 +180,14 @@ export function mountCardPolicyAdmin(root, { client }) {
         ) + 1;
       editor.value = JSON.stringify(d, null, 2);
       invalidate();
-      status.textContent = "New revision prepared.";
+      status.textContent = t("policyUI.newRevisionPrepared");
     }),
-    button("Validate policy document", () => {
+    button(t("policyUI.validatePolicyDocument"), () => {
       parse();
       status.textContent =
-        "Document structure is valid. Impact preview checks assignments and inherited rules.";
+        t("policyUI.documentStructureIsValidImpactPreviewChecksAssignments");
     }),
-    button("Save policy draft", async () => {
+    button(t("policyUI.savePolicyDraft"), async () => {
       const d = parse();
       await client.saveCardPolicy({
         key: crypto.randomUUID(),
@@ -202,14 +198,14 @@ export function mountCardPolicyAdmin(root, { client }) {
       await refresh();
       selection.value = d.id + "@" + d.revision;
     }),
-    button("Preview policy impact", async () => {
+    button(t("policyUI.previewPolicyImpact"), async () => {
       const d = parse();
       const saved = registry.documents.find(
         (r) => r.document.id === d.id && r.document.revision === d.revision,
       );
       if (JSON.stringify(saved?.document) !== JSON.stringify(d))
         throw new Error(
-          "Save the current document before previewing its activation",
+          t("policyUI.saveTheCurrentDocumentBeforePreviewingItsActivation"),
         );
       const previous = registry.documents
         .filter(
@@ -227,12 +223,11 @@ export function mountCardPolicyAdmin(root, { client }) {
       impact.replaceChildren(
         el(
           "h3",
-          result.affected.length +
-            " existing card variants need changes for a future revision",
+          t('policyUI.affectedVariants',{count:result.affected.length}),
         ),
         el(
           "p",
-          "Existing published cards and owned copies retain their recorded content.",
+          t("policyUI.existingPublishedCardsAndOwnedCopiesRetainTheir"),
         ),
       );
       const diff = el(
@@ -241,10 +236,10 @@ export function mountCardPolicyAdmin(root, { client }) {
           .filter((k) => JSON.stringify(previous?.[k]) !== JSON.stringify(d[k]))
           .map(
             (k) =>
-              k +
-              "\nBefore: " +
+              t("policyUI.diff."+k) +
+              "\n" + t("policyUI.before") + ": " +
               JSON.stringify(previous?.[k] ?? null) +
-              "\nAfter: " +
+              "\n" + t("policyUI.after") + ": " +
               JSON.stringify(d[k] ?? null),
           )
           .join("\n\n"),
@@ -257,11 +252,11 @@ export function mountCardPolicyAdmin(root, { client }) {
           details.append(el("p", issue.path + ": " + issue.message));
         impact.append(details);
       }
-      status.textContent = "Review the impact before activation.";
+      status.textContent = t("policyUI.reviewTheImpactBeforeActivation");
     }),
     checkbox,
     activate,
-    button("Retire selected revision", async () => {
+    button(t("policyUI.retireSelectedRevision"), async () => {
       const d = parse();
       await client.retireCardPolicy({
         key: crypto.randomUUID(),
@@ -272,7 +267,7 @@ export function mountCardPolicyAdmin(root, { client }) {
       invalidate();
       await refresh();
     }),
-    button("Restore retired revision", async () => {
+    button(t("policyUI.restoreRetiredRevision"), async () => {
       const d = parse();
       await client.restoreCardPolicy({
         key: crypto.randomUUID(),
@@ -282,7 +277,7 @@ export function mountCardPolicyAdmin(root, { client }) {
       invalidate();
       await refresh();
     }),
-    button("Export policy document", () => {
+    button(t("policyUI.exportPolicyDocument"), () => {
       const d = parse(),
         url = URL.createObjectURL(
           new Blob([JSON.stringify(d, null, 2)], { type: "application/json" }),
@@ -293,23 +288,23 @@ export function mountCardPolicyAdmin(root, { client }) {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }),
-    button("Import policy as draft", () => {
+    button(t("policyUI.importPolicyAsDraft"), () => {
       const input = el("input");
       input.type = "file";
       input.accept = ".json";
       input.onchange = action(async () => {
         const file = input.files[0];
         if (!file || file.size > 262144)
-          throw new Error("Policy import must be below 256 KiB");
+          throw new Error(t('policyUI.importSize',{size:256}));
         const d = validatePolicy(JSON.parse(await file.text()));
         editor.value = JSON.stringify(d, null, 2);
         invalidate();
         status.textContent =
-          "Imported for review. Save the draft before activation.";
+          t("policyUI.importedForReviewSaveTheDraftBeforeActivation");
       });
       input.click();
     }),
-    button("Reload policies", refresh),
+    button(t("policyUI.reloadPolicies"), refresh),
     status,
     impact,
     history,
@@ -318,7 +313,7 @@ export function mountCardPolicyAdmin(root, { client }) {
     "click",
     action(async () => {
       if (!preview || !review.checked)
-        throw new Error("Review the current impact first");
+        throw new Error(t("policyUI.reviewTheCurrentImpactFirst"));
       await client.activateCardPolicy({
         ...preview,
         key: crypto.randomUUID(),
@@ -332,7 +327,7 @@ export function mountCardPolicyAdmin(root, { client }) {
   const libraryRows = el("div"),
     resourceEditor = el("textarea");
   resourceEditor.rows = 8;
-  resourceEditor.setAttribute("aria-label", "Shared library resource document");
+  resourceEditor.setAttribute("aria-label", t("policyUI.sharedLibraryResourceDocument"));
   resourceEditor.value = JSON.stringify(
     {
       kind: "template-set",
@@ -348,13 +343,13 @@ export function mountCardPolicyAdmin(root, { client }) {
     2,
   );
   root.append(
-    el("h3", "Shared template sets and resources"),
+    el("h3", t("policyUI.sharedTemplateSetsAndResources")),
     el(
       "p",
-      "Save templates, masks and styles from the editor, then group approved template revisions into a set. Retired resources retain their content.",
+      t("policyUI.saveTemplatesMasksAndStylesFromTheEditor"),
     ),
     resourceEditor,
-    button("Save shared resource revision", async () => {
+    button(t("policyUI.saveSharedResourceRevision"), async () => {
       await client.saveCardResource({
         key: crypto.randomUUID(),
         expectedRevision: registry.revision,
@@ -374,6 +369,7 @@ export function mountCardPolicyAdmin(root, { client }) {
       version++;
       events.abort();
       root.replaceChildren();
+      for(const [name,value] of [["lang",originalLang],["dir",originalDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);
     },
   };
 }

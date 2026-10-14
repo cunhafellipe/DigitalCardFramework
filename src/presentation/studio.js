@@ -1,3 +1,4 @@
+import {createLocalization} from '../localization.js';
 import { analyzePerformance, enforcePerformance } from "./performance.js";
 import {
   createProject,
@@ -23,6 +24,7 @@ const allNodes = (nodes) =>
 export function mountStudio(
   root,
   {
+    locale='en',messages={},localization=createLocalization({locale,messages}),
     initialPackage,
     onPublish,
     performance = {},
@@ -30,7 +32,13 @@ export function mountStudio(
     library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants, editorTransforms,
   } = {},
 ) {
+  const t=(key,values)=>localization.text(key,values),number=value=>localization.number(value);
+  const previousLanguage=root.getAttribute('lang'),previousDirection=root.getAttribute('dir');root.lang=localization.locale;root.dir=localization.dir;
   presets = { ...presets };
+  const optionKeys={"poster": "studioCore.optionPoster", "lite": "studioCore.optionLite", "standard": "studioCore.optionStandard", "ultra": "studioCore.optionUltra", "circle": "studioCore.optionCircle", "hexagon": "studioCore.optionHexagon", "shard": "studioCore.optionShard", "star": "studioCore.optionStar", "holo": "studioCore.optionHolo", "texture": "studioCore.optionTexture", "None": "studioCore.optionNone", "Custom": "studioCore.optionCustom"};
+  const propertyKeys={"x": "studioCore.propertyX", "y": "studioCore.propertyY", "width": "studioCore.propertyWidth", "height": "studioCore.propertyHeight", "rotation": "studioCore.propertyRotation", "radius": "studioCore.propertyRadius", "feather": "studioCore.propertyFeather"};
+  const presetKeys={"Fine silver": "studioCore.presetFinesilver", "Chunky holo": "studioCore.presetChunkyholo", "Gold stars": "studioCore.presetGoldstars", "Soft foil": "studioCore.presetSoftfoil", "Lake reflection": "studioCore.presetLakereflection", "Feathered bloom": "studioCore.presetFeatheredbloom"};
+  const optionLabel=value=>optionKeys[value]?t(optionKeys[value]):presetKeys[value]&&presets[value]===materialPresets[value]?t(presetKeys[value]):value;
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -78,15 +86,17 @@ export function mountStudio(
   center.append(region);
   layout.append(layers, center, properties);
   root.append(toolbar, layout, diagnostics, status);
+  const performanceKeys={"ADAPTER_COST_UNKNOWN": {"message": "studioCore.performanceAdapterCostUnknownMessage", "remedy": "studioCore.performanceAdapterCostUnknownRemedy"}, "LAYER_TEXTURE": {"message": "studioCore.performanceLayerTextureMessage", "remedy": "studioCore.performanceLayerTextureRemedy"}, "LAYER_DOWNLOAD": {"message": "studioCore.performanceLayerDownloadMessage", "remedy": "studioCore.performanceLayerDownloadRemedy"}, "ANIMATION_FRAMES": {"message": "studioCore.performanceAnimationFramesMessage", "remedy": "studioCore.performanceAnimationFramesRemedy"}, "ANIMATION_PIXELS": {"message": "studioCore.performanceAnimationPixelsMessage", "remedy": "studioCore.performanceAnimationPixelsRemedy"}, "FACE_TEXTURE": {"message": "studioCore.performanceFaceTextureMessage", "remedy": "studioCore.performanceFaceTextureRemedy"}, "FACE_LAYERS": {"message": "studioCore.performanceFaceLayersMessage", "remedy": "studioCore.performanceFaceLayersRemedy"}, "FACE_OVERDRAW": {"message": "studioCore.performanceFaceOverdrawMessage", "remedy": "studioCore.performanceFaceOverdrawRemedy"}, "FACE_DECODERS": {"message": "studioCore.performanceFaceDecodersMessage", "remedy": "studioCore.performanceFaceDecodersRemedy"}};
+  const performanceText=issue=>{const keys=performanceKeys[issue.code];return keys?{message:t(keys.message),remedy:t(keys.remedy)}:issue;};
   function showPerformance(pkg) {
     const result = analyzePerformance(pkg, performance);
     diagnostics.replaceChildren(
-      el("summary", `Mobile performance: ${result.issues.length} warnings`),
+      el("summary", t('studioCore.performanceWarnings',{count:result.issues.length})),
     );
-    diagnostics.append(el("p", result.caveat));
+    diagnostics.append(el('p',t('studioCore.performanceCaveat')));
     for (const issue of result.issues)
       button(
-        `${issue.face}${issue.path}: ${issue.message} ${issue.remedy}`,
+        `${issue.face}${issue.path}: ${performanceText(issue).message} ${performanceText(issue).remedy}`,
         async () => {
           side = issue.face;
           selected = issue.layerId;
@@ -177,7 +187,7 @@ export function mountStudio(
     renderProperties();
     showPerformance(pkg);
     report(
-      `${project.manifest.title} · ${project.manifest.assets.length} assets`,
+      t('studioCore.assetSummary',{title:project.manifest.title,count:project.manifest.assets.length}),
     );
   }
   async function open(pkg) {
@@ -188,22 +198,22 @@ export function mountStudio(
     await rebuild();
   }
   async function importArtwork(file) {
-    report("Reading the layered artwork…");
+    report(t('studioCore.readingTheLayeredArtwork'));
     const conversion = await importLayeredFile(file, { signal: events.signal });
     if (!conversion.report.issues.length) {
       await open(await conversion.build());
       report(
-        `Imported ${conversion.report.layerCount} layers in their original positions. ${conversion.report.notes.length ? "Stored raster appearances preserved; source-only text/vector editing is not retained." : ""}`,
+        t('studioCore.importedLayers',{count:conversion.report.layerCount,notice:conversion.report.notes.length?t('studioCore.rasterNotice'):''}),
       );
       return;
     }
     const dialog = el("dialog");
     dialog.className = "dcs-import-report";
     dialog.append(
-      el("h2", "Review this import"),
+      el("h2", t('studioCore.reviewThisImport')),
       el(
         "p",
-        `${conversion.report.layerCount} raster layers found. These source features need attention:`,
+        t('studioCore.rasterLayers',{count:conversion.report.layerCount}),
       ),
     );
     const list = el("ul");
@@ -212,45 +222,45 @@ export function mountStudio(
     dialog.append(list);
     root.append(dialog);
     button(
-      "Import supported layers",
+      t('studioCore.importSupportedLayers'),
       async () => {
         dialog.close();
         dialog.remove();
         await open(await conversion.build());
         report(
-          "Imported supported layers. Source features listed in the import report may look different.",
+          t('studioCore.importedSupportedLayersSourceFeaturesListedInThe'),
         );
       },
       dialog,
     );
     if (conversion.canFlatten)
       button(
-        "Keep original flattened appearance",
+        t('studioCore.keepOriginalFlattenedAppearance'),
         async () => {
           dialog.close();
           dialog.remove();
           await open(await conversion.build({ flatten: true }));
           report(
-            "Imported the source preview as one layer. Use a rasterized layered source to edit individual parts.",
+            t('studioCore.importedTheSourcePreviewAsOneLayerUse'),
           );
         },
         dialog,
       );
     button(
-      "Cancel import",
+      t('studioCore.cancelImport'),
       () => {
         dialog.close();
         dialog.remove();
-        report("Import cancelled. Your current card is intact.");
+        report(t('studioCore.importCancelledYourCurrentCardIsIntact'));
       },
       dialog,
     );
     dialog.showModal();
   }
-  button("Import layered artwork", () =>
+  button(t('studioCore.importLayeredArtwork'), () =>
     upload(".psd,.ora,.zip,.gif", importArtwork),
   );
-  button("Make card from image", () =>
+  button(t('studioCore.makeCardFromImage'), () =>
     upload("image/png,image/webp,image/jpeg", async (file) =>
       open(
         await imagePackage({
@@ -261,15 +271,15 @@ export function mountStudio(
       ),
     ),
   );
-  button("New card", async () => open(await blankPackage()));
-  button("Open card", () =>
+  button(t('studioCore.newCard'), async () => open(await blankPackage()));
+  button(t('studioCore.openCard'), () =>
     upload(".dcard,.dcproject", async (f) =>
       open(await importPackage(new Uint8Array(await f.arrayBuffer()))),
     ),
   );
-  button("Add image", () =>
+  button(t('studioCore.addImage'), () =>
     upload("image/png,image/webp,image/jpeg", async (f) => {
-      if (!project) throw new Error("Open a card first");
+      if (!project) throw new Error(t('studioCore.openACardFirst'));
       const a = await project.addImage(f);
       const scale = Math.min(1, 600 / a.width, 900 / a.height),
         node = {
@@ -287,9 +297,9 @@ export function mountStudio(
       await rebuild();
     }),
   );
-  button("Add animated GIF layer", () =>
+  button(t('studioCore.addAnimatedGIFLayer'), () =>
     upload(".gif,image/gif", async (file) => {
-      if (!project) throw new Error("Open a card first");
+      if (!project) throw new Error(t('studioCore.openACardFirst'));
       const conversion = await importLayeredFile(file),
         pkg = await conversion.build();
       const prefix = "gif-" + crypto.randomUUID().replaceAll("-", "") + "-";
@@ -316,7 +326,7 @@ export function mountStudio(
       await rebuild();
     }),
   );
-  button("Import layers", () => {
+  button(t('studioCore.importLayers'), () => {
     const file = el("input");
     file.type = "file";
     file.accept = "image/png,image/webp,image/jpeg";
@@ -345,7 +355,7 @@ export function mountStudio(
     };
     file.click();
   });
-  button("Add video", () =>
+  button(t('studioCore.addVideo'), () =>
     upload("video/mp4,video/webm", async (f) => {
       const video = document.createElement("video"),
         url = URL.createObjectURL(f);
@@ -355,7 +365,7 @@ export function mountStudio(
         await new Promise((resolve, reject) => {
           video.onloadedmetadata = resolve;
           video.onerror = () =>
-            reject(new Error("This browser cannot decode the video"));
+            reject(new Error(t('studioCore.thisBrowserCannotDecodeTheVideo')));
         });
         const a = await project.addMedia(f, {
           width: video.videoWidth,
@@ -389,7 +399,7 @@ export function mountStudio(
       }
     }),
   );
-  button("Save project", async () => {
+  button(t('studioCore.saveProject'), async () => {
     const pkg = await project.export({ retainSources: true }),
       url = URL.createObjectURL(new Blob([pkg.archive]));
     const a = el("a");
@@ -397,34 +407,34 @@ export function mountStudio(
     a.download = project.manifest.id + ".dcproject";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    report("Editable project saved, including unused imported assets.");
+    report(t('studioCore.editableProjectSavedIncludingUnusedImportedAssets'));
   });
-  button("Undo", async () => {
+  button(t('studioCore.undo'), async () => {
     if (project?.undoEdit()) await rebuild();
   });
-  button("Redo", async () => {
+  button(t('studioCore.redo'), async () => {
     if (project?.redoEdit()) await rebuild();
   });
-  button("Front / back", async () => {
+  button(t('studioCore.frontBack'), async () => {
     if (!project) return;
     side = side === "front" ? "back" : "front";
     selected = scene().nodes[0]?.id;
     await rebuild();
   });
-  button("Save draft", async () => {
+  button(t('studioCore.saveDraft'), async () => {
     await project.saveDraft();
-    report("Draft saved on this device.");
+    report(t('studioCore.draftSavedOnThisDevice'));
   });
-  button("Restore draft", async () => {
+  button(t('studioCore.restoreDraft'), async () => {
     const draft = await loadDraft();
     if (draft) {
       project = draft;
       selected = scene().nodes[0]?.id;
       await rebuild();
-    } else report("No saved draft on this device.");
+    } else report(t('studioCore.noSavedDraftOnThisDevice'));
   });
   async function capturePosters() {
-    if (!project || disposed) throw new Error("No active project");
+    if (!project || disposed) throw new Error(t('studioCore.noActiveProject'));
     const original = project,
       revision = project.getRevision(),
       captures = {};
@@ -435,21 +445,21 @@ export function mountStudio(
         view.setInputs({ tilt: { x: 0, y: 0 }, angle: 0.5 });
         if (stage.diagnostics().activeViews !== 1)
           throw new Error(
-            "This face needs a supplied poster because interactive rendering is unavailable",
+            t('studioCore.thisFaceNeedsASuppliedPosterBecauseInteractive'),
           );
         captures[face] = await view.snapshot();
       }
       if (project !== original || project.getRevision() !== revision)
-        throw new Error("Project changed during capture; capture again");
+        throw new Error(t('studioCore.projectChangedDuringCaptureCaptureAgain'));
       await project.setPosters(captures);
     } finally {
       if (!disposed) await view.setSide(side);
     }
     await rebuild();
-    report("Both face posters captured from the renderer.");
+    report(t('studioCore.bothFacePostersCapturedFromTheRenderer'));
   }
-  button("Capture posters", capturePosters);
-  button("Export .dcard", async () => {
+  button(t('studioCore.capturePosters'), capturePosters);
+  button(t('studioCore.exportDcard'), async () => {
     const pkg = await project.export();
     enforcePerformance(showPerformance(pkg));
     const url = URL.createObjectURL(
@@ -461,26 +471,26 @@ export function mountStudio(
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     report(
-      `Exported ${Math.round(pkg.archive.length / 1024)} KiB · ${pkg.digest.slice(0, 23)}…`,
+      t('studioCore.exportedArchive',{size:Math.round(pkg.archive.length/1024),digest:pkg.digest.slice(0,23)}),
     );
   });
   if (onPublish)
-    button("Publish", async () => {
+    button(t('studioCore.publish'), async () => {
       const pkg = await project.export();
       enforcePerformance(showPerformance(pkg));
       const result=await onPublish(pkg);
-      report(result===false?"Kept as draft.":"Published.");
+      report(result===false?t('studioCore.keptAsDraft'):t('studioCore.published'));
     });
   scrub.type = "range";
   scrub.min = "-100";
   scrub.max = "100";
   scrub.value = "0";
-  scrub.setAttribute("aria-label", "Preview card turn");
+  scrub.setAttribute("aria-label", t('studioCore.previewCardTurn'));
   scrub.oninput = () =>
     view?.setInputs({ tilt: { x: Number(scrub.value) / 100, y: 0 } });
   center.append(scrub);
   pick(
-    "Preview quality",
+    t('studioCore.previewQuality'),
     ["poster", "lite", "standard", "ultra"],
     "standard",
     (value) => view?.setQuality(value),
@@ -519,7 +529,7 @@ export function mountStudio(
       select = el("select");
     select.setAttribute("aria-label", label);
     for (const v of values) {
-      const option = el("option", v);
+      const option = el("option", optionLabel(v));
       option.value = v;
       select.append(option);
     }
@@ -537,7 +547,7 @@ export function mountStudio(
   }
   function renderLayers() {
     layers.replaceChildren(
-      el("h2", side === "front" ? "Front layers" : "Back layers"),
+      el("h2", side === "front" ? t('studioCore.frontLayers') : t('studioCore.backLayers')),
     );
     if (!project) return;
     for (const node of [...allNodes(scene().nodes)].reverse()) {
@@ -556,7 +566,7 @@ export function mountStudio(
   function setProp(key, value) {
     const n = current();
     if (!n) return;
-    if (n.locked) throw new Error("Unlock this layer to edit it");
+    if (n.locked) throw new Error(t('studioCore.unlockThisLayerToEditIt'));
     edit(() => {
       const previous = n[key] ?? 0;
       n[key] = value;
@@ -568,15 +578,15 @@ export function mountStudio(
   }
   function renderProperties() {
     authoring.render();
-    properties.replaceChildren(el("h2", "Selected layer"));
+    properties.replaceChildren(el("h2", t('studioCore.selectedLayer')));
     field(
-      "Card title",
+      t('studioCore.cardTitle'),
       project?.manifest.title ?? "",
       (value) => edit(() => (project.manifest.title = value)),
       { type: "text" },
     );
     field(
-      "Face description",
+      t('studioCore.faceDescription'),
       project?.manifest.faces[side].description ?? "",
       (value) => edit(() => (project.manifest.faces[side].description = value)),
       { type: "text" },
@@ -584,11 +594,11 @@ export function mountStudio(
     if (!project) return;
     const n = current();
     if (!n) {
-      properties.append(el("p", "Choose a layer."));
+      properties.append(el("p", t('studioCore.chooseALayer')));
       return;
     }
     field(
-      "Name",
+      t('studioCore.name'),
       n.name ?? n.id,
       (v) => {
         edit(() => (n.name = v));
@@ -599,7 +609,7 @@ export function mountStudio(
     position.className = "dcs-position";
     properties.append(position);
     for (const key of ["x", "y", "width", "height", "rotation"])
-      field(key, n[key] ?? 0, (v) => setProp(key, v), {
+      field(t(propertyKeys[key]), n[key] ?? 0, (v) => setProp(key, v), {
         step: 0.1,
         parent: position,
       });
@@ -607,8 +617,8 @@ export function mountStudio(
     row.className = "dcs-row";
     properties.append(row);
     for (const [label, delta] of [
-      ["Bring forward", 1],
-      ["Send back", -1],
+      [t('studioCore.bringForward'), 1],
+      [t('studioCore.sendBack'), -1],
     ])
       button(
         label,
@@ -629,7 +639,7 @@ export function mountStudio(
         row,
       );
     pick(
-      "Finish",
+      t('studioCore.finish'),
       ["None", "Custom", ...Object.keys(presets)],
       Object.keys(presets).find(
         (k) => JSON.stringify(presets[k]) === JSON.stringify(n.material),
@@ -659,20 +669,20 @@ export function mountStudio(
     if (n.material) {
       const m = n.material;
       field(
-        "Intensity",
+        t('studioCore.intensity'),
         m.intensity ?? 1,
         (v) => edit(() => (m.intensity = v)),
         { min: 0, max: 8, step: 0.1 },
       );
       if (m.kind === "glitter")
-        field("Flake size", m.size ?? 4, (v) => edit(() => (m.size = v)), {
+        field(t('studioCore.flakeSize'), m.size ?? 4, (v) => edit(() => (m.size = v)), {
           min: 0.5,
           max: 100,
           step: 0.5,
         });
-      button("Paint effect area", () => beginPaint(n), properties);
+      button(t('studioCore.paintEffectArea'), () => beginPaint(n), properties);
       button(
-        "Upload effect mask",
+        t('studioCore.uploadEffectMask'),
         () =>
           upload("image/png,image/webp", async (f) => {
             const a = await project.addImage(f, { role: "mask" });
@@ -682,15 +692,15 @@ export function mountStudio(
         properties,
       );
       const advanced = el("details"),
-        summary = el("summary", "Advanced material controls");
+        summary = el("summary", t('studioCore.advancedMaterialControls'));
       advanced.append(summary);
       properties.append(advanced);
       if (m.kind === "glitter") {
         for (const [key, label, min, max, step] of [
-          ["density", "Density", 0, 1, 0.05],
-          ["roughness", "Roughness", 0, 1, 0.05],
-          ["variation", "Size variation", 0, 1, 0.05],
-          ["seed", "Scatter seed", 0, 1000000, 1],
+          ["density", t('studioCore.density'), 0, 1, 0.05],
+          ["roughness", t('studioCore.roughness'), 0, 1, 0.05],
+          ["variation", t('studioCore.sizeVariation'), 0, 1, 0.05],
+          ["seed", t('studioCore.scatterSeed'), 0, 1000000, 1],
         ])
           field(label, m[key] ?? 0.3, (v) => edit(() => (m[key] = v)), {
             min,
@@ -699,21 +709,21 @@ export function mountStudio(
             parent: advanced,
           });
         pick(
-          "Flake shape",
+          t('studioCore.flakeShape'),
           ["circle", "hexagon", "shard", "star"],
           m.shape ?? "circle",
           (v) => edit(() => (m.shape = v)),
           advanced,
         );
         pick(
-          "Custom flake coloring",
+          t('studioCore.customFlakeColoring'),
           ["holo", "texture"],
           m.flakeColor ?? "holo",
           (v) => edit(() => (m.flakeColor = v)),
           advanced,
         );
         button(
-          "Use my flake design",
+          t('studioCore.useMyFlakeDesign'),
           () =>
             upload("image/png,image/webp", async (f) => {
               const a = await project.addImage(f);
@@ -723,25 +733,25 @@ export function mountStudio(
           advanced,
         );
         field(
-          "Flake color",
+          t('studioCore.flakeColor'),
           m.color ?? "#ffffff",
           (v) => edit(() => (m.color = v)),
           { type: "color", parent: advanced },
         );
-        button("Use rainbow holo", () => edit(() => delete m.color), advanced);
+        button(t('studioCore.useRainbowHolo'), () => edit(() => delete m.color), advanced);
       }
       for (const key of ["radius", "feather"])
         if (m[key] !== undefined)
-          field(key, m[key], (v) => edit(() => (m[key] = v)), {
+          field(t(propertyKeys[key]), m[key], (v) => edit(() => (m[key] = v)), {
             min: 0.001,
             max: 2,
             step: 0.01,
             parent: advanced,
           });
       button(
-        "Save finish preset",
+        t('studioCore.saveFinishPreset'),
         () => {
-          const name = prompt("Name this finish");
+          const name = prompt(t('studioCore.nameThisFinish'));
           if (name) {
             const saved = structuredClone(m);
             delete saved.maskAsset;
@@ -749,7 +759,7 @@ export function mountStudio(
             delete saved.flakeAsset;
             localStorage.setItem("dcard-finish:" + name, JSON.stringify(saved));
             presets[name] = saved;
-            report("Finish saved on this device.");
+            report(t('studioCore.finishSavedOnThisDevice'));
             renderProperties();
           }
         },
@@ -757,11 +767,11 @@ export function mountStudio(
       );
     }
     const motionPanel = el("details");
-    motionPanel.append(el("summary", "Motion and layers"));
+    motionPanel.append(el("summary", t('studioCore.motionAndLayers')));
     properties.append(motionPanel);
     for (const [index, label] of [
-      [0, "Horizontal parallax"],
-      [1, "Vertical parallax"],
+      [0, t('studioCore.horizontalParallax')],
+      [1, t('studioCore.verticalParallax')],
     ])
       field(
         label,
@@ -775,7 +785,7 @@ export function mountStudio(
       );
     if (n.type === "image")
       button(
-        "Add pose images",
+        t('studioCore.addPoseImages'),
         () => {
           const input = el("input");
           input.type = "file";
@@ -832,42 +842,42 @@ export function mountStudio(
         motionPanel,
       );
     const graph = el("textarea");
-    graph.setAttribute("aria-label", "Motion bindings JSON");
+    graph.setAttribute("aria-label", t('studioCore.motionBindingsJSON'));
     graph.value = JSON.stringify(n.bindings ?? {}, null, 2);
     motionPanel.append(graph);
     button(
-      "Apply motion graph",
+      t('studioCore.applyMotionGraph'),
       () => {
         const bindings = JSON.parse(graph.value);
         edit(() => (n.bindings = bindings));
-        report("Motion graph validated.");
+        report(t('studioCore.motionGraphValidated'));
       },
       motionPanel,
     );
     if (n.animation) {
       const panel = el("details");
-      panel.append(el("summary", "Animation frames"));
+      panel.append(el("summary", t('studioCore.animationFrames')));
       properties.append(panel);
       for (const [index, frame] of n.animation.frames.entries()) {
         const item = el("div");
-        item.append(el("h3", frame.name ?? `Frame ${index + 1}`));
+        item.append(el("h3", frame.name ?? t('studioCore.frame',{number:index+1})));
         panel.append(item);
         field(
-          "Duration",
+          t('studioCore.duration'),
           frame.duration,
           (v) => edit(() => (frame.duration = v)),
           { min: 1, max: 20000, parent: item },
         );
-        field("Ground X", frame.x, (v) => edit(() => (frame.x = v)), {
+        field(t('studioCore.groundX'), frame.x, (v) => edit(() => (frame.x = v)), {
           step: 0.1,
           parent: item,
         });
-        field("Ground Y", frame.y, (v) => edit(() => (frame.y = v)), {
+        field(t('studioCore.groundY'), frame.y, (v) => edit(() => (frame.y = v)), {
           step: 0.1,
           parent: item,
         });
         button(
-          "Preview this pose",
+          t('studioCore.previewThisPose'),
           () => {
             const copy = structuredClone(scene()),
               target = allNodes(copy.nodes).find((x) => x.id === n.id);
@@ -878,10 +888,10 @@ export function mountStudio(
           item,
         );
       }
-      button("Resume angle animation", sync, panel);
+      button(t('studioCore.resumeAngleAnimation'), sync, panel);
     }
     button(
-      "Remove layer",
+      t('studioCore.removeLayer'),
       () => {
         edit(() => {
           const index = scene().nodes.indexOf(n);
@@ -897,12 +907,12 @@ export function mountStudio(
     paintDialog?.remove();
     paintDialog = el("dialog");
     paintDialog.className = "dcs-paint-dialog";
-    paintDialog.setAttribute("aria-label", "Paint effect area");
+    paintDialog.setAttribute("aria-label", t('studioCore.paintEffectArea'));
     paintDialog.append(
-      el("h2", "Paint effect area"),
+      el("h2", t('studioCore.paintEffectArea')),
       el(
         "p",
-        "White marks where this finish appears. The art underneath stays intact.",
+        t('studioCore.whiteMarksWhereThisFinishAppearsTheArt'),
       ),
     );
     root.append(paintDialog);
@@ -971,22 +981,22 @@ export function mountStudio(
     };
     paintCanvas.onpointerup = () => (painting = false);
     button(
-      "Brush",
+      t('studioCore.brush'),
       () => (ctx.globalCompositeOperation = "source-over"),
       paintDialog,
     );
     button(
-      "Erase",
+      t('studioCore.erase'),
       () => (ctx.globalCompositeOperation = "destination-out"),
       paintDialog,
     );
-    field("Brush size", 38, (v) => (ctx.lineWidth = v), {
+    field(t('studioCore.brushSize'), 38, (v) => (ctx.lineWidth = v), {
       min: 2,
       max: 150,
       parent: paintDialog,
     });
     button(
-      "Apply painted mask",
+      t('studioCore.applyPaintedMask'),
       async () => {
         const blob = await new Promise((resolve) =>
             paintCanvas.toBlob(resolve, "image/png"),
@@ -1001,7 +1011,7 @@ export function mountStudio(
       paintDialog,
     );
     button(
-      "Cancel painting",
+      t('studioCore.cancelPainting'),
       () => {
         paintDialog.close();
         paintDialog.remove();
@@ -1038,11 +1048,11 @@ export function mountStudio(
     if (!destination) return;
     side = destination;
     selected = id;
-  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants,editorTransforms});
+  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants,editorTransforms,localization});
   root.append(authoring.root);
   const ready = initialPackage
     ? open(initialPackage)
-    : Promise.resolve(report("Open a .dcard file to begin."));
+    : Promise.resolve(report(t('studioCore.openADcardFileToBegin')));
   return {
     ready,
     getProject: () => project,
@@ -1060,6 +1070,8 @@ export function mountStudio(
       resolver?.dispose();
       root.replaceChildren();
       root.classList.remove("dcard-studio");
+      if(previousLanguage===null)root.removeAttribute('lang');else root.setAttribute('lang',previousLanguage);
+      if(previousDirection===null)root.removeAttribute('dir');else root.setAttribute('dir',previousDirection);
     },
   };
 }

@@ -110,6 +110,7 @@ jobs:
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/editor-contributions-browser.mjs test-results/editor-contributions
         env:
           HEADED: '1'

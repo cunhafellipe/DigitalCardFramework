@@ -61,13 +61,13 @@ test('per-form and total UTF-8 limits apply to portable bundles',()=>{
 });
 
 test('expanded collector catalog accepts bounded large bundles and retains old bundle compatibility',()=>{
-  assert.equal(localizationSchema.maximumBytes,65536);assert.equal(localizationSchema.maximumMessages,1024);assert(Object.keys(localizationKeys).length>512);
+  assert.equal(localizationSchema.maximumBytes,131072);assert.equal(localizationSchema.maximumMessages,2048);assert(Object.keys(localizationKeys).length>1024);
   const makeMessages=padding=>Object.fromEntries(Object.entries(localizationKeys).map(([key,metadata])=>{const text='x'.repeat(padding)+metadata.placeholders.map(name=>'{'+name+'}').join(' ');return [key,metadata.plural?{other:text}:text];})),large=bundle(makeMessages(40));
-  const bytes=new TextEncoder().encode(JSON.stringify(large)).length;assert(bytes>32768&&bytes<=65536);assert.equal(Object.keys(validateLocalizationBundle(large).messages).length,Object.keys(localizationKeys).length);
-  const oversized=bundle(makeMessages(150));assert(new TextEncoder().encode(JSON.stringify(oversized)).length>65536);invalid(oversized);
+  const bytes=new TextEncoder().encode(JSON.stringify(large)).length;assert(bytes>32768&&bytes<=131072);assert.equal(Object.keys(validateLocalizationBundle(large).messages).length,Object.keys(localizationKeys).length);
+  const oversized=bundle(makeMessages(150));assert(new TextEncoder().encode(JSON.stringify(oversized)).length>131072);invalid(oversized);
   const oldMessages=Object.fromEntries(Object.entries(englishMessages).slice(0,220));assert.equal(Object.keys(validateLocalizationBundle(bundle(oldMessages,'en')).messages).length,220);
   const previousMessages=Object.fromEntries(Object.entries(englishMessages).slice(0,490));assert.equal(Object.keys(validateLocalizationBundle(bundle(previousMessages,'en')).messages).length,490);
-  invalid(bundle(Object.fromEntries(Array.from({length:1025},(_,index)=>['extra.'+index,'text']))));
+  invalid(bundle(Object.fromEntries(Array.from({length:2049},(_,index)=>['extra.'+index,'text']))));
 });
 
 test('independent instances retain their locale and validated message snapshot',()=>{

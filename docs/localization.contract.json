@@ -1,7 +1,7 @@
 {
   "protocol": "digital-card-localization@1",
-  "maximumBytes": 65536,
-  "maximumMessages": 1024,
+  "maximumBytes": 131072,
+  "maximumMessages": 2048,
   "maximumTextLength": 2048,
   "pluralCategories": [
     "zero",
@@ -3571,6 +3571,2495 @@
         "count"
       ],
       "plural": true
+    },
+    "studioCore.performanceWarnings": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "studioCore.assetSummary": {
+      "placeholders": [
+        "count",
+        "title"
+      ],
+      "plural": true
+    },
+    "studioCore.importedLayers": {
+      "placeholders": [
+        "count",
+        "notice"
+      ],
+      "plural": true
+    },
+    "studioCore.rasterNotice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.rasterLayers": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "studioCore.exportedArchive": {
+      "placeholders": [
+        "digest",
+        "size"
+      ],
+      "plural": false
+    },
+    "studioCore.frame": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioCore.readingTheLayeredArtwork": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.reviewThisImport": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importSupportedLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importedSupportedLayersSourceFeaturesListedInThe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.keepOriginalFlattenedAppearance": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importedTheSourcePreviewAsOneLayerUse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.cancelImport": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importCancelledYourCurrentCardIsIntact": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importLayeredArtwork": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.makeCardFromImage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.newCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.openCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.addImage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.openACardFirst": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.addAnimatedGIFLayer": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.importLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.addVideo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.thisBrowserCannotDecodeTheVideo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.saveProject": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.editableProjectSavedIncludingUnusedImportedAssets": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.undo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.redo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.frontBack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.saveDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.draftSavedOnThisDevice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.restoreDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.noSavedDraftOnThisDevice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.noActiveProject": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.thisFaceNeedsASuppliedPosterBecauseInteractive": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.projectChangedDuringCaptureCaptureAgain": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.bothFacePostersCapturedFromTheRenderer": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.capturePosters": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.exportDcard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.publish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.keptAsDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.published": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.previewCardTurn": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.previewQuality": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.frontLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.backLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.unlockThisLayerToEditIt": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.selectedLayer": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.cardTitle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.faceDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.chooseALayer": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.name": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.bringForward": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.sendBack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.finish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.intensity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.flakeSize": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.paintEffectArea": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.uploadEffectMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.advancedMaterialControls": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.density": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.roughness": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.sizeVariation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.scatterSeed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.flakeShape": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.customFlakeColoring": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.useMyFlakeDesign": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.flakeColor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.useRainbowHolo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.saveFinishPreset": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.nameThisFinish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.finishSavedOnThisDevice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.motionAndLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.horizontalParallax": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.verticalParallax": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.addPoseImages": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.motionBindingsJSON": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.applyMotionGraph": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.motionGraphValidated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.animationFrames": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.duration": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.groundX": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.groundY": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.previewThisPose": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.resumeAngleAnimation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.removeLayer": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.whiteMarksWhereThisFinishAppearsTheArt": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.brush": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.erase": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.brushSize": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.applyPaintedMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.cancelPainting": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.openADcardFileToBegin": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionPoster": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionLite": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionStandard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionUltra": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionCircle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionHexagon": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionShard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionStar": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionHolo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionTexture": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionNone": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.optionCustom": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyX": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyY": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyWidth": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyHeight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyRotation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyRadius": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.propertyFeather": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetFinesilver": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetChunkyholo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetGoldstars": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetSoftfoil": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetLakereflection": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.presetFeatheredbloom": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.reviewedChanges": {
+      "placeholders": [
+        "assets",
+        "scenes"
+      ],
+      "plural": false
+    },
+    "studioTools.sceneReference": {
+      "placeholders": [
+        "path"
+      ],
+      "plural": false
+    },
+    "studioTools.assetReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.fileBytes": {
+      "placeholders": [
+        "name",
+        "size"
+      ],
+      "plural": false
+    },
+    "studioTools.fontAdded": {
+      "placeholders": [
+        "family",
+        "notice"
+      ],
+      "plural": false
+    },
+    "studioTools.selectLayer": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.spanText": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.spanWeight": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.spanStyle": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.spanColor": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.spanIcon": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.resetSpan": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.earlierSpan": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.laterSpan": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.removeSpan": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.span": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.fontAssetIdentity": {
+      "placeholders": [
+        "digest",
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.fontTerms": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.fontDecoded": {
+      "placeholders": [
+        "angle",
+        "face",
+        "family",
+        "style",
+        "weight"
+      ],
+      "plural": false
+    },
+    "studioTools.fontGlyphs": {
+      "placeholders": [
+        "entries",
+        "glyphs",
+        "units"
+      ],
+      "plural": false
+    },
+    "studioTools.fontAxis": {
+      "placeholders": [
+        "default",
+        "key",
+        "maximum",
+        "minimum",
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.fontSample": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.fontDiagnostic": {
+      "placeholders": [
+        "message"
+      ],
+      "plural": false
+    },
+    "studioTools.nullField": {
+      "placeholders": [
+        "label"
+      ],
+      "plural": false
+    },
+    "studioTools.clearField": {
+      "placeholders": [
+        "label"
+      ],
+      "plural": false
+    },
+    "studioTools.addField": {
+      "placeholders": [
+        "label"
+      ],
+      "plural": false
+    },
+    "studioTools.allowedChoice": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.removeChoice": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.imageAlpha": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.maskCrop": {
+      "placeholders": [
+        "mask",
+        "property"
+      ],
+      "plural": false
+    },
+    "studioTools.maskTransform": {
+      "placeholders": [
+        "mask",
+        "property"
+      ],
+      "plural": false
+    },
+    "studioTools.resetMaskTransform": {
+      "placeholders": [
+        "mask"
+      ],
+      "plural": false
+    },
+    "studioTools.resetMaskCrop": {
+      "placeholders": [
+        "mask"
+      ],
+      "plural": false
+    },
+    "studioTools.effectVertexAxis": {
+      "placeholders": [
+        "axis",
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.effectVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.insertEffectVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.removeEffectVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.maskVertexAxis": {
+      "placeholders": [
+        "axis",
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.maskVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.insertMaskVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.removeMaskVertex": {
+      "placeholders": [
+        "number"
+      ],
+      "plural": false
+    },
+    "studioTools.applyLibrary": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.shareLibrary": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.exportLibrary": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.inspectLayer": {
+      "placeholders": [
+        "face",
+        "name"
+      ],
+      "plural": false
+    },
+    "studioTools.issueRule": {
+      "placeholders": [
+        "message",
+        "rule"
+      ],
+      "plural": false
+    },
+    "studioTools.defaultTemplate": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "studioTools.policyRevision": {
+      "placeholders": [
+        "references",
+        "revision"
+      ],
+      "plural": false
+    },
+    "studioTools.rulePolicies": {
+      "placeholders": [
+        "policies",
+        "rule"
+      ],
+      "plural": false
+    },
+    "studioTools.libraryError": {
+      "placeholders": [
+        "message"
+      ],
+      "plural": false
+    },
+    "studioTools.changedScenes": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "studioTools.newRasters": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "studioTools.lockedFontNotice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.unavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.migrationLayers": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "studioTools.fontAxes": {
+      "placeholders": [
+        "axes"
+      ],
+      "plural": false
+    },
+    "studioTools.missingCodepoints": {
+      "placeholders": [
+        "points"
+      ],
+      "plural": false
+    },
+    "studioTools.fieldMetadata": {
+      "placeholders": [
+        "scope",
+        "source",
+        "visibility"
+      ],
+      "plural": false
+    },
+    "studioTools.unitMetadata": {
+      "placeholders": [
+        "unit"
+      ],
+      "plural": false
+    },
+    "studioTools.rangeMetadata": {
+      "placeholders": [
+        "maximum",
+        "minimum"
+      ],
+      "plural": false
+    },
+    "studioTools.precisionMetadata": {
+      "placeholders": [
+        "precision"
+      ],
+      "plural": false
+    },
+    "studioTools.lengthMetadata": {
+      "placeholders": [
+        "maximum",
+        "minimum"
+      ],
+      "plural": false
+    },
+    "studioTools.itemsMetadata": {
+      "placeholders": [
+        "maximum",
+        "minimum"
+      ],
+      "plural": false
+    },
+    "studioTools.anEditorContributionWasRejectedTheOrdinaryEditor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.openACardFirst": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.externalEditorTransforms": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.exportARequestRunTheInstalledToolOutside": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.exportTransformRequest": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.transformRequestExportedRunTheExternalToolThen": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.importTransformResult": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.transformResultExceedsItsBudget": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.transformResultReviewedInspectTheChangesBeforeApplying": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.applyReviewedTransform": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.reviewedTransformAppliedUseUndoToRestoreThe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.theTransformedSceneCouldNotBePreviewedNothing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.theTransformPreviewIsStaleOrUnavailableNothing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.discardTransformRequest": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addText": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addCustomFont": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.embedCustomFont": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.recordThePermittedUsageTermsOrLicenseIdentifier": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fontUsageTerms": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.embedFontWithDeclaredTerms": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.enterFontUsageTermsWithin2000Characters": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.theCardChangedDuringFontUpload": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.cancelFontUpload": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textStatsTemplates": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.openACardToEdit": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.arrangeLayers": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.duplicateSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.moveForward": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.moveBackward": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.groupSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.ungroupSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.alignLeft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.alignRight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.alignTop": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.alignBottom": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.centerOnCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.snapTo10UnitGrid": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.lockSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.unlockSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.deleteSelected": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.typography": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.unlockThisLayerToEditIt": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textContent": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fontFace": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.systemFont": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.systemFontFamily": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fontSize": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.minimumFontSize": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fontWeight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.lineHeight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.letterSpacing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.paragraphSpacing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.outlineWidth": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.shadowBlur": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.shadowHorizontalOffset": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.shadowVerticalOffset": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fontStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textAlignment": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.verticalAlignment": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textOverflow": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textDirection": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textColor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.outlineColor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.shadowColor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textLanguage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.accessibleReadingOrder": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.copyTextStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.styleCopied": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.pasteTextStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.copyAStyleFirst": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.saveReusableTextStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.styledTextSpans": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.boundTextComesFromItsStatFieldUse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.spansContainPlainTextAndOptionalOverridesInherited": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.inheritStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noIcon": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addTextSpan": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.aTextLayerSupportsAtMost128Spans": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.convertSpansToPlainText": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.advancedSpanJSON": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textSpansJSON": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.eachSpanCanIncludeTextColorWeightStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.statAppearance": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.boundField": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.chooseAPublicSnapshotField": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.statLabel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.statUnit": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.missingStatText": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.statNumberLocale": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.statDecimalPlaces": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.barMinimum": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.barMaximum": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.embeddedFontAssets": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addCustomFontToEmbedAReproducibleFace": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.variableAxesNone": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.allSampleCodePointsAreMappedThisDoes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.cardStats": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addAFieldOrLoadTheDestinationPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.requiredValueIsMissing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noValue": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.null": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.thisFieldIsPrivateAndCannotBeIncluded": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addAllPublicStatsAsATable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.exportStatsCSV": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.importStatsCSV": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.csvMustBeBelow256KiB": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.defineACustomField": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldKey": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldLabel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldHelp": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldUnit": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldScope": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldVisibility": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldType": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldRequirement": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.allowNull": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.valueBounds": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldMinimum": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldMaximum": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldDecimalPlaces": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.minimumTextLength": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.maximumTextLength": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.minimumListItems": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.maximumListItems": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.thisTypeHasNoSizeOrNumericBounds": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.blankBoundsUseTheFieldContractDefaultsList": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.allowedChoices": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.structuredEnumerationValuesRequireAPolicyOrAPI": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noChoicesMeansAnyValueAllowedByThe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.addAllowedChoice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.aFieldSupportsAtMost128Choices": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.createField": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.fieldKeyAlreadyExistsInThisScope": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.groupCompositing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.isolateRendersChildrenIntoTheGroupSExplicit": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.isolateGroup": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.chooseAnUnlockedGroup": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.chooseAnUnlockedLayerToEditItsMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.clippingMaskProperties": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.clippingMasksLimitArtworkAndTextPolygonCoordinates": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.clippingMaskSource": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noClippingMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.polygon": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.invertClippingMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.removeClippingMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.clipping": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.effect": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.maskTranslationsAndPivotsUseLayerFractionsRotation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.effectMaskProperties": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.effectMaskSource": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noEffectMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.invertEffectMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.aMaskSupportsAtMost64Vertices": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.aMaskNeedsAtLeast3Vertices": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.aPolygonHas3To64VerticesAdd": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.uploadClippingMaskImage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.theCardChangedDuringMaskUpload": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.reusableLibrary": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.libraryItemName": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.saveCardAsTemplate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.saveClippingMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.saveEffectMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.useRectangleClippingMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.applyReviewedTemplate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.cancelTemplateUpdate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.sharedLibraryRevisionSaved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.searchLibrary": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.importLibraryItem": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.libraryImportMustBeBelow32MiB": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.invalidLibraryItem": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.textOverflowsItsBox": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.thisLayerIDIsUsedOnMultipleFaces": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.cancelLayerSelection": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.cardPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.refreshDestinationPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.noDestinationPolicyLoadedServerValidationIsRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionNormal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionItalic": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionOblique": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionLeft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionCenter": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionRight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionStart": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionEnd": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionTop": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionMiddle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionBottom": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionWrap": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionShrink": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionEllipsis": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionClip": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionGrow": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionAuto": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionLtr": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionRtl": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionText": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionBadge": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionBar": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionFalse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionTrue": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionVariant": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionCopy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionPublic": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionOwner": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionOperator": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionAuthor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionInteger": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionNumber": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionString": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionBoolean": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionArray": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionObject": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionOptional": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionNo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionYes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionTemplate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionTemplateSet": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionMask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionStyle": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionAdded": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionRemoved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionFront": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.optionBack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyX": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyY": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyWidth": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyHeight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyRotation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyScaleX": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyScaleY": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyPivotX": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioTools.propertyPivotY": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.creatorStudio": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.importCardsStatsLayeredArtworkReferencesPackDefinitions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.thisWorkspaceIsAvailableToAuthorizedCatalogOperators": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.format": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.importMode": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.mergeRowsByID": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.replaceCompleteCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.chooseFile": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.importContent": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.pasteJSONOrYAMLHereRowsWithExisting": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.iReviewedThisCatalogRevisionAndItsAsset": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.contentChangedRunANewPreview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.publishReviewedRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.catalogRevisionPublishedAtomically": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.validatePreview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.validating": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.publishingRequiresCatalogPublishPermission": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.exportFullJSONCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.catalogDownloadedOperatorExportsCanContainBindingDefinitions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.loadStarterRow": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.assetFilesStayInYourStorageOrCDN": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.fileLoadedValidateItToPreviewTheRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.validRevision": {
+      "placeholders": [
+        "digest",
+        "version"
+      ],
+      "plural": false
+    },
+    "studioShell.changeCounts": {
+      "placeholders": [
+        "added",
+        "removed",
+        "updated"
+      ],
+      "plural": false
+    },
+    "studioShell.change.add": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.change.update": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.change.remove": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.cardPreviews": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": false
+    },
+    "studioShell.importSize": {
+      "placeholders": [
+        "size"
+      ],
+      "plural": false
+    },
+    "studioShell.artworkEditorClosed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.presentationRequestFailed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.presentationIsNotReady": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.destinationCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.destinationVariant": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.designDestination": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.cardOrVariant": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packArtwork": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packRevealArtworkURL": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packArtworkDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.destinationPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.baseCardDesign": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.openTheSelectedDestinationToEditItsDesign": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.openVisualPackEditor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.openVisualCardEditor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.startANewPackDesign": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.startANewCardDesign": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.savedPresentationIsUnavailableOnThisHostImport": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.chooseADestinationCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.destinationVariantChanged": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.chooseADestinationPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.publishReviewedPackArtwork": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.publishReviewedCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.keepAsDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packArtworkPublishedExistingPacksRetainTheirArtwork": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.cardPublished": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.defaultTemplateIsUnavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.editPackFrontAndBackCapturePostersThen": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.editTheCardCaptureItsPostersThenPublish": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.administratorCardPolicies": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.reviewPack": {
+      "placeholders": [
+        "name",
+        "revision"
+      ],
+      "plural": false
+    },
+    "studioShell.reviewCard": {
+      "placeholders": [
+        "name",
+        "revision"
+      ],
+      "plural": false
+    },
+    "policyUI.policyDocument": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.policyAssignments": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.savedPolicyRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.iReviewedThePolicyChangesAndAffectedCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.activateReviewedPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.working": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.chooseSavedPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.policyHistory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.restoreResource": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.retireResource": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.administratorCardPolicies": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.defaultsStartADraftRequiredRulesAndFixed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.assignments": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.assignAnActiveRevisionToInstallationLineCardType": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.newPolicyDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.newDraftChooseAUniquePolicyID": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.createNextRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.newRevisionPrepared": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.validatePolicyDocument": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.documentStructureIsValidImpactPreviewChecksAssignments": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.savePolicyDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.previewPolicyImpact": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.saveTheCurrentDocumentBeforePreviewingItsActivation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.existingPublishedCardsAndOwnedCopiesRetainTheir": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.reviewTheImpactBeforeActivation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.retireSelectedRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.restoreRetiredRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.exportPolicyDocument": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.importPolicyAsDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.importedForReviewSaveTheDraftBeforeActivation": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.reloadPolicies": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.reviewTheCurrentImpactFirst": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.sharedLibraryResourceDocument": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.sharedTemplateSetsAndResources": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.saveTemplatesMasksAndStylesFromTheEditor": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.saveSharedResourceRevision": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.savedRevision": {
+      "placeholders": [
+        "id",
+        "name",
+        "revision",
+        "state"
+      ],
+      "plural": false
+    },
+    "policyUI.state.draft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.state.active": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.state.retired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.historyRevision": {
+      "placeholders": [
+        "date",
+        "revision",
+        "type"
+      ],
+      "plural": false
+    },
+    "policyUI.libraryRevision": {
+      "placeholders": [
+        "revision"
+      ],
+      "plural": false
+    },
+    "policyUI.affectedVariants": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "policyUI.before": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.after": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.lines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.rarities": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.cards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.variants": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.products": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.currencies": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.conversions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.combinations": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.templates": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.bindings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.capabilities": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-policy.saved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-policy.activated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-policy.retired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-policy.restored": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-library.saved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-library.retired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.history.card-library.restored": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.resourceRevision": {
+      "placeholders": [
+        "id",
+        "kind",
+        "name",
+        "revision"
+      ],
+      "plural": false
+    },
+    "policyUI.kind.template": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.kind.mask": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.kind.style": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.kind.template-set": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.importSize": {
+      "placeholders": [
+        "size"
+      ],
+      "plural": false
+    },
+    "policyUI.diff.defaults": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.diff.fields": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.diff.requirements": {
+      "placeholders": [],
+      "plural": false
+    },
+    "policyUI.diff.inherits": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.recipes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.section.cardTypes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceCaveat": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAdapterCostUnknownMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAdapterCostUnknownRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceLayerTextureMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceLayerTextureRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceLayerDownloadMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceLayerDownloadRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAnimationFramesMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAnimationFramesRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAnimationPixelsMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceAnimationPixelsRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceTextureMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceTextureRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceLayersMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceLayersRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceOverdrawMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceOverdrawRemedy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceDecodersMessage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioCore.performanceFaceDecodersRemedy": {
+      "placeholders": [],
+      "plural": false
     }
   }
 }

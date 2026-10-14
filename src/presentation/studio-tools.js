@@ -1,3 +1,4 @@
+import {createLocalization} from '../localization.js';
 import {
   addText,
   configureAuthoring,
@@ -37,6 +38,7 @@ const el = (tag, text) => {
   return e;
 };
 export function mountAuthoringTools({
+  locale='en',messages={},localization=createLocalization({locale,messages}),
   toolbar,
   getProject,
   getSide,
@@ -54,9 +56,10 @@ export function mountAuthoringTools({
   editorContributionGrants,
   editorTransforms,
 }) {
+  const t=(key,values)=>localization.text(key,values),number=value=>localization.number(value);
   let portablePanels,portablePanelError=null;
   try{portablePanels=createEditorContributions(editorContributions,{grants:editorContributionGrants});}
-  catch{portablePanels=createEditorContributions();portablePanelError='An editor contribution was rejected. The ordinary editor remains available.';}
+  catch{portablePanels=createEditorContributions();portablePanelError=t('studioTools.anEditorContributionWasRejectedTheOrdinaryEditor');}
   let entries = [],
     effective = null,
     clipboard = null,
@@ -65,7 +68,7 @@ export function mountAuthoringTools({
     generation = 0;
   const root = el("section"),
     status = el("p");
-  root.className = "dcs-authoring";
+  root.className = "dcs-authoring";root.lang=localization.locale;root.dir=localization.dir;
   status.setAttribute("role", "status");
   const pending = new Set();
   let taskTail = Promise.resolve();
@@ -95,6 +98,10 @@ export function mountAuthoringTools({
     parent.append(b);
     return b;
   }
+  const optionKeys={"normal": "studioTools.optionNormal", "italic": "studioTools.optionItalic", "oblique": "studioTools.optionOblique", "left": "studioTools.optionLeft", "center": "studioTools.optionCenter", "right": "studioTools.optionRight", "start": "studioTools.optionStart", "end": "studioTools.optionEnd", "top": "studioTools.optionTop", "middle": "studioTools.optionMiddle", "bottom": "studioTools.optionBottom", "wrap": "studioTools.optionWrap", "shrink": "studioTools.optionShrink", "ellipsis": "studioTools.optionEllipsis", "clip": "studioTools.optionClip", "grow": "studioTools.optionGrow", "auto": "studioTools.optionAuto", "ltr": "studioTools.optionLtr", "rtl": "studioTools.optionRtl", "text": "studioTools.optionText", "badge": "studioTools.optionBadge", "bar": "studioTools.optionBar", "false": "studioTools.optionFalse", "true": "studioTools.optionTrue", "card": "studioTools.optionCard", "variant": "studioTools.optionVariant", "copy": "studioTools.optionCopy", "public": "studioTools.optionPublic", "owner": "studioTools.optionOwner", "operator": "studioTools.optionOperator", "author": "studioTools.optionAuthor", "integer": "studioTools.optionInteger", "number": "studioTools.optionNumber", "string": "studioTools.optionString", "boolean": "studioTools.optionBoolean", "array": "studioTools.optionArray", "object": "studioTools.optionObject", "optional": "studioTools.optionOptional", "required": "studioTools.optionRequired", "no": "studioTools.optionNo", "yes": "studioTools.optionYes", "template": "studioTools.optionTemplate", "template-set": "studioTools.optionTemplateSet", "mask": "studioTools.optionMask", "style": "studioTools.optionStyle", "updated": "studioTools.optionUpdated", "added": "studioTools.optionAdded", "removed": "studioTools.optionRemoved", "front": "studioTools.optionFront", "back": "studioTools.optionBack"};
+  const propertyKeys={"x": "studioTools.propertyX", "y": "studioTools.propertyY", "width": "studioTools.propertyWidth", "height": "studioTools.propertyHeight", "rotation": "studioTools.propertyRotation", "scaleX": "studioTools.propertyScaleX", "scaleY": "studioTools.propertyScaleY", "pivotX": "studioTools.propertyPivotX", "pivotY": "studioTools.propertyPivotY"};
+  const optionLabel=value=>optionKeys[value]?t(optionKeys[value]):value;
+  const propertyLabel=value=>propertyKeys[value]?t(propertyKeys[value]):value;
   function input(
     parent,
     label,
@@ -107,7 +114,7 @@ export function mountAuthoringTools({
     e.setAttribute("aria-label", label);
     if (choices)
       for (const choice of choices) {
-        const o = el("option", choice.name ?? String(choice));
+        const o = el("option", choice.name ?? optionLabel(String(choice)));
         o.value = choice.id ?? String(choice);
         e.append(o);
       }
@@ -125,7 +132,7 @@ export function mountAuthoringTools({
   async function edit(fn) {
     if (disposed) return;
     const p = getProject();
-    if (!p) throw new Error("Open a card first");
+    if (!p) throw new Error(t('studioTools.openACardFirst'));
     try {
       p.edit(fn);
     } catch (error) {
@@ -140,7 +147,7 @@ export function mountAuthoringTools({
   function renderTransforms(project){
     if(!editorTransforms)return;
     if(transformProject!==project){clearTransforms();transformProject=project;}
-    const section=el('section');section.className='dcs-editor-transforms';section.append(el('h3','External editor transforms'),el('p','Export a request, run the installed tool outside the browser, then import and review its result. Applying a reviewed result creates one undoable edit.'));root.append(section);
+    const section=el('section');section.className='dcs-editor-transforms';section.append(el('h3',t('studioTools.externalEditorTransforms')),el('p',t('studioTools.exportARequestRunTheInstalledToolOutside')));root.append(section);
     for(const tool of editorTransforms.tools){
       const state=transformStates.get(tool.id)??{parameters:Object.fromEntries(Object.entries(tool.parameters).map(([key,rule])=>[key,rule.default]))};transformStates.set(tool.id,state);
       const fieldset=el('fieldset');fieldset.append(el('legend',tool.title));section.append(fieldset);const cycle=authoringRenderGeneration,sameJob=()=>!disposed&&getProject()===project&&transformProject===project&&transformStates.get(tool.id)===state,current=()=>sameJob()&&cycle===authoringRenderGeneration;
@@ -149,24 +156,24 @@ export function mountAuthoringTools({
         if(rule.type==='boolean'){control.type='checkbox';control.checked=state.parameters[key];}else{control.type=rule.type==='number'?'number':'text';control.value=String(state.parameters[key]);if(rule.type==='number'){control.min=String(rule.minimum);control.max=String(rule.maximum);control.step=String(rule.step);}else control.maxLength=rule.maxLength;}
         control.disabled=!!state.busy;control.onchange=()=>{if(!current()||state.busy)return;state.parameters[key]=rule.type==='boolean'?control.checked:rule.type==='number'?control.valueAsNumber:control.value;if(state.requestId){editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;render();}};wrap.append(control);fieldset.append(wrap);
       }
-      const exportButton=button(fieldset,'Export transform request',async()=>{
+      const exportButton=button(fieldset,t('studioTools.exportTransformRequest'),async()=>{
         if(!sameJob()){state.busy=false;return;}const generation=transformGeneration;if(state.requestId)editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;
-        try{const prepared=await editorTransforms.prepare(project,{toolId:tool.id,parameters:{...state.parameters}});if(!sameJob()||generation!==transformGeneration){editorTransforms.discard(prepared.requestId);return;}state.requestId=prepared.requestId;const url=URL.createObjectURL(new Blob([prepared.archive],{type:'application/zip'})),link=el('a');link.href=url;link.download=tool.id+'.job';link.click();setTimeout(()=>URL.revokeObjectURL(url),0);report('Transform request exported. Run the external tool, then import its result.');}
+        try{const prepared=await editorTransforms.prepare(project,{toolId:tool.id,parameters:{...state.parameters}});if(!sameJob()||generation!==transformGeneration){editorTransforms.discard(prepared.requestId);return;}state.requestId=prepared.requestId;const url=URL.createObjectURL(new Blob([prepared.archive],{type:'application/zip'})),link=el('a');link.href=url;link.download=tool.id+'.job';link.click();setTimeout(()=>URL.revokeObjectURL(url),0);report(t('studioTools.transformRequestExportedRunTheExternalToolThen'));}
         finally{state.busy=false;if(sameJob())render();}
       });
       exportButton.disabled=!!state.busy;const queuedExport=exportButton.onclick;exportButton.onclick=()=>{if(!current()||state.busy)return;state.busy=true;exportButton.disabled=true;queuedExport();};
-      const upload=button(fieldset,'Import transform result',()=>{
+      const upload=button(fieldset,t('studioTools.importTransformResult'),()=>{
         if(!current()||!state.requestId||state.busy)return;const requestId=state.requestId,generation=transformGeneration,file=el('input');file.type='file';file.accept='.result,.zip';
         file.onchange=()=>{if(!current()||state.busy)return;const selected=file.files?.[0];if(!selected)return;state.busy=true;delete state.review;render();run(async()=>{
           if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId){state.busy=false;return;}
-          try{if(selected.size>80*1024*1024+65536+4096)throw new Error('Transform result exceeds its budget');const archive=new Uint8Array(await selected.arrayBuffer());if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;const review=await editorTransforms.review(project,requestId,archive);if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;state.review=review;report('Transform result reviewed. Inspect the changes before applying.');}
+          try{if(selected.size>80*1024*1024+65536+4096)throw new Error(t('studioTools.transformResultExceedsItsBudget'));const archive=new Uint8Array(await selected.arrayBuffer());if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;const review=await editorTransforms.review(project,requestId,archive);if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;state.review=review;report(t('studioTools.transformResultReviewedInspectTheChangesBeforeApplying'));}
           finally{state.busy=false;if(sameJob())render();}
         });};file.click();
       });upload.disabled=!state.requestId||!!state.busy;
-      if(state.review){fieldset.append(el('p','Reviewed changes: '+state.review.changes.scenes.length+' scene(s), '+state.review.changes.addedAssets.length+' new raster asset(s).'));const details=el('ul');for(const path of state.review.changes.scenes)details.append(el('li','Scene: '+path));for(const id of state.review.changes.addedAssets)details.append(el('li','New asset: '+id));fieldset.append(details);const reviewed=state.review,previewRoot=el('div');previewRoot.className='dcs-transform-preview';Object.assign(previewRoot.style,{width:'240px',height:'360px',position:'relative'});fieldset.append(previewRoot);const apply=button(fieldset,'Apply reviewed transform',async()=>{if(!current()||state.review!==reviewed)return;editorTransforms.apply(project,reviewed);delete state.requestId;delete state.review;await rebuild();if(sameJob())report('Reviewed transform applied. Use Undo to restore the previous content.');});apply.disabled=true;
-        try{const preview=editorTransforms.mountReview(project,reviewed,{root:previewRoot,side:tool.grants.faces[0]});mountedPanels.push(preview);preview.ready.then(result=>{if(!current()||state.review!==reviewed)return;if(result.mode==='interactive')apply.disabled=false;else report('The transformed scene could not be previewed. Nothing was applied.');}).catch(()=>{if(current())report('The transform preview is stale or unavailable. Nothing was applied.');});}catch{report('The transform preview is stale or unavailable. Nothing was applied.');}
+      if(state.review){fieldset.append(el('p',t('studioTools.reviewedChanges',{scenes:t('studioTools.changedScenes',{count:state.review.changes.scenes.length}),assets:t('studioTools.newRasters',{count:state.review.changes.addedAssets.length})})));const details=el('ul');for(const path of state.review.changes.scenes)details.append(el('li',t('studioTools.sceneReference',{path})));for(const id of state.review.changes.addedAssets)details.append(el('li',t('studioTools.assetReference',{id})));fieldset.append(details);const reviewed=state.review,previewRoot=el('div');previewRoot.className='dcs-transform-preview';Object.assign(previewRoot.style,{width:'240px',height:'360px',position:'relative'});fieldset.append(previewRoot);const apply=button(fieldset,t('studioTools.applyReviewedTransform'),async()=>{if(!current()||state.review!==reviewed)return;editorTransforms.apply(project,reviewed);delete state.requestId;delete state.review;await rebuild();if(sameJob())report(t('studioTools.reviewedTransformAppliedUseUndoToRestoreThe'));});apply.disabled=true;
+        try{const preview=editorTransforms.mountReview(project,reviewed,{root:previewRoot,side:tool.grants.faces[0]});mountedPanels.push(preview);preview.ready.then(result=>{if(!current()||state.review!==reviewed)return;if(result.mode==='interactive')apply.disabled=false;else report(t('studioTools.theTransformedSceneCouldNotBePreviewedNothing'));}).catch(()=>{if(current())report(t('studioTools.theTransformPreviewIsStaleOrUnavailableNothing'));});}catch{report(t('studioTools.theTransformPreviewIsStaleOrUnavailableNothing'));}
       }
-      if(state.requestId)button(fieldset,'Discard transform request',()=>{if(!current())return;editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;render();});
+      if(state.requestId)button(fieldset,t('studioTools.discardTransformRequest'),()=>{if(!current())return;editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;render();});
     }
   }
   async function loadEntries() {
@@ -193,7 +200,7 @@ export function mountAuthoringTools({
     }
     await rebuild();
   }
-  button(toolbar, "Add text", async () => {
+  button(toolbar, t('studioTools.addText'), async () => {
     select(
       addText(
         getProject(),
@@ -205,7 +212,7 @@ export function mountAuthoringTools({
     );
     await rebuild();
   });
-  button(toolbar, "Add custom font", async () => {
+  button(toolbar, t('studioTools.addCustomFont'), async () => {
     const f = el("input");
     f.type = "file";
     f.accept = ".woff2,.woff,.ttf,.otf";
@@ -214,17 +221,17 @@ export function mountAuthoringTools({
         const file = f.files[0];
         if (!file) return;
         const project = getProject(), face = getSide(), selected = getSelected(), dialog = el("dialog");
-        dialog.append(el("h3", "Embed custom font"), el("p", file.name + " · " + file.size + " bytes"),
-          el("p", "Record the permitted usage terms or license identifier supplied with this font. The editor stores this declaration; it does not verify rights."));
+        dialog.append(el("h3", t('studioTools.embedCustomFont')), el("p", t('studioTools.fileBytes',{name:file.name,size:file.size})),
+          el("p", t('studioTools.recordThePermittedUsageTermsOrLicenseIdentifier')));
         let license = "";
-        const terms = input(dialog, "Font usage terms", "", (v)=>{
+        const terms = input(dialog, t('studioTools.fontUsageTerms'), "", (v)=>{
           license = v.trim();
           save.disabled = !license;
         }, {type:"textarea"});
         terms.maxLength = 2000;
-        const save = button(dialog, "Embed font with declared terms", async()=>{
-          if (!license || license.length > 2000) throw new Error("Enter font usage terms within 2000 characters");
-          if (getProject() !== project) throw new Error("The card changed during font upload");
+        const save = button(dialog, t('studioTools.embedFontWithDeclaredTerms'), async()=>{
+          if (!license || license.length > 2000) throw new Error(t('studioTools.enterFontUsageTermsWithin2000Characters'));
+          if (getProject() !== project) throw new Error(t('studioTools.theCardChangedDuringFontUpload'));
           const asset = await project.addFont(file,{license});
           if (disposed || getProject() !== project) return;
           const node = flattenNodes(project.scenes.get(project.manifest.faces[face].scene).nodes).find(n=>n.id===selected);
@@ -234,17 +241,17 @@ export function mountAuthoringTools({
           });
           dialog.close(); dialog.remove();
           await rebuild();
-          report("Font added: " + asset.font.family + (node?.locked ? " · Locked layer kept its existing font." : ""));
+          report(t('studioTools.fontAdded',{family:asset.font.family,notice:node?.locked?t('studioTools.lockedFontNotice'):''}));
         });
         save.disabled = true;
-        button(dialog, "Cancel font upload", ()=>{dialog.close();dialog.remove();});
+        button(dialog, t('studioTools.cancelFontUpload'), ()=>{dialog.close();dialog.remove();});
         root.append(dialog);
         dialog.showModal();
         terms.focus();
       });
     f.click();
   });
-  button(toolbar, "Text, stats & templates", async () => {
+  button(toolbar, t('studioTools.textStatsTemplates'), async () => {
     root.hidden = !root.hidden;
     if (!root.hidden) {
       await loadEntries();
@@ -257,11 +264,11 @@ export function mountAuthoringTools({
     authoringRenderGeneration++;
     disposePanels();
     const p = getProject();
-    root.replaceChildren(el("h2", "Text, stats & templates"));
+    root.replaceChildren(el("h2", t('studioTools.textStatsTemplates')));
     if(portablePanelError)root.append(el('p',portablePanelError));
     if (!p) {
       if(transformProject){clearTransforms();transformProject=null;}
-      root.append(el("p", "Open a card to edit."));
+      root.append(el("p", t('studioTools.openACardToEdit')));
       return;
     }
     renderTransforms(p);
@@ -271,7 +278,7 @@ export function mountAuthoringTools({
       ),
       n = nodes.find((x) => x.id === getSelected());
     const layout = el("details");
-    layout.append(el("summary", "Arrange layers"));
+    layout.append(el("summary", t('studioTools.arrangeLayers')));
     root.append(layout);
     for (const node of nodes) {
       const label = el("label"),
@@ -279,7 +286,7 @@ export function mountAuthoringTools({
       check.type = "checkbox";
       check.setAttribute(
         "aria-label",
-        "Select " + (node.name ?? node.id) + " layer",
+        t('studioTools.selectLayer',{name:node.name??node.id}),
       );
       check.checked = selection.has(node.id);
       check.onchange = () =>
@@ -288,20 +295,20 @@ export function mountAuthoringTools({
       layout.append(label);
     }
     for (const [label, cmd] of [
-      ["Duplicate selected", "duplicate"],
-      ["Move forward", "forward"],
-      ["Move backward", "backward"],
-      ["Group selected", "group"],
-      ["Ungroup selected", "ungroup"],
-      ["Align left", "left"],
-      ["Align right", "right"],
-      ["Align top", "top"],
-      ["Align bottom", "bottom"],
-      ["Center on card", "center"],
-      ["Snap to 10-unit grid", "snap"],
-      ["Lock selected", "lock"],
-      ["Unlock selected", "unlock"],
-      ["Delete selected", "delete"],
+      [t('studioTools.duplicateSelected'), "duplicate"],
+      [t('studioTools.moveForward'), "forward"],
+      [t('studioTools.moveBackward'), "backward"],
+      [t('studioTools.groupSelected'), "group"],
+      [t('studioTools.ungroupSelected'), "ungroup"],
+      [t('studioTools.alignLeft'), "left"],
+      [t('studioTools.alignRight'), "right"],
+      [t('studioTools.alignTop'), "top"],
+      [t('studioTools.alignBottom'), "bottom"],
+      [t('studioTools.centerOnCard'), "center"],
+      [t('studioTools.snapTo10UnitGrid'), "snap"],
+      [t('studioTools.lockSelected'), "lock"],
+      [t('studioTools.unlockSelected'), "unlock"],
+      [t('studioTools.deleteSelected'), "delete"],
     ])
       button(layout, label, async () => {
         transformSelection(p, getSide(), chosen(), cmd);
@@ -310,11 +317,11 @@ export function mountAuthoringTools({
       });
     if (n?.type === "text") {
       const box = el("fieldset");
-      box.append(el("legend", "Typography"));
+      box.append(el("legend", t('studioTools.typography')));
       root.append(box);
       const disabled = !!n.locked;
       const editText = (fn) => edit(() => {
-        if (n.locked) throw new Error("Unlock this layer to edit it");
+        if (n.locked) throw new Error(t('studioTools.unlockThisLayerToEditIt'));
         fn();
       });
       const change = (key, value) =>
@@ -324,7 +331,7 @@ export function mountAuthoringTools({
         });
       input(
         box,
-        "Text content",
+        t('studioTools.textContent'),
         n.runs?.map(span=>span.text).join("") ?? n.text,
         (v) =>
           editText(() => {
@@ -335,7 +342,7 @@ export function mountAuthoringTools({
       );
       input(
         box,
-        "Font face",
+        t('studioTools.fontFace'),
         n.typography?.fontAsset ?? "",
         (v) =>
           editText(() => {
@@ -345,7 +352,7 @@ export function mountAuthoringTools({
           }),
         {
           choices: [
-            { id: "", name: "System font" },
+            { id: "", name: t('studioTools.systemFont') },
             ...p.manifest.assets
               .filter((a) => a.role === "font")
               .map((a) => ({
@@ -358,22 +365,22 @@ export function mountAuthoringTools({
       );
       input(
         box,
-        "System font family",
+        t('studioTools.systemFontFamily'),
         n.font ?? "Georgia",
         (v) => editText(() => (n.font = v)),
         { disabled },
       );
       for (const [key, label, defaultValue] of [
-        ["size", "Font size", 48],
-        ["minSize", "Minimum font size", 8],
-        ["weight", "Font weight", 400],
-        ["lineHeight", "Line height", 1.2],
-        ["letterSpacing", "Letter spacing", 0],
-        ["paragraphSpacing", "Paragraph spacing", 0],
-        ["outlineWidth", "Outline width", 0],
-        ["shadowBlur", "Shadow blur", 0],
-        ["shadowX", "Shadow horizontal offset", 0],
-        ["shadowY", "Shadow vertical offset", 0],
+        ["size", t('studioTools.fontSize'), 48],
+        ["minSize", t('studioTools.minimumFontSize'), 8],
+        ["weight", t('studioTools.fontWeight'), 400],
+        ["lineHeight", t('studioTools.lineHeight'), 1.2],
+        ["letterSpacing", t('studioTools.letterSpacing'), 0],
+        ["paragraphSpacing", t('studioTools.paragraphSpacing'), 0],
+        ["outlineWidth", t('studioTools.outlineWidth'), 0],
+        ["shadowBlur", t('studioTools.shadowBlur'), 0],
+        ["shadowX", t('studioTools.shadowHorizontalOffset'), 0],
+        ["shadowY", t('studioTools.shadowVerticalOffset'), 0],
       ])
         input(
           box,
@@ -383,19 +390,19 @@ export function mountAuthoringTools({
           { type: "number", disabled },
         );
       for (const [key, label, choices] of [
-        ["style", "Font style", ["normal", "italic", "oblique"]],
+        ["style", t('studioTools.fontStyle'), ["normal", "italic", "oblique"]],
         [
           "align",
-          "Text alignment",
+          t('studioTools.textAlignment'),
           ["left", "center", "right", "start", "end"],
         ],
-        ["verticalAlign", "Vertical alignment", ["top", "middle", "bottom"]],
+        ["verticalAlign", t('studioTools.verticalAlignment'), ["top", "middle", "bottom"]],
         [
           "overflow",
-          "Text overflow",
+          t('studioTools.textOverflow'),
           ["wrap", "shrink", "ellipsis", "clip", "grow"],
         ],
-        ["direction", "Text direction", ["auto", "ltr", "rtl"]],
+        ["direction", t('studioTools.textDirection'), ["auto", "ltr", "rtl"]],
       ])
         input(
           box,
@@ -405,9 +412,9 @@ export function mountAuthoringTools({
           { choices, disabled },
         );
       for (const [key, label, defaultValue] of [
-        ["color", "Text color", "#ffffff"],
-        ["outlineColor", "Outline color", "#000000"],
-        ["shadowColor", "Shadow color", "#000000"],
+        ["color", t('studioTools.textColor'), "#ffffff"],
+        ["outlineColor", t('studioTools.outlineColor'), "#000000"],
+        ["shadowColor", t('studioTools.shadowColor'), "#000000"],
       ])
         input(
           box,
@@ -418,14 +425,14 @@ export function mountAuthoringTools({
         );
       input(
         box,
-        "Text language",
+        t('studioTools.textLanguage'),
         n.typography?.language ?? "en",
         (v) => change("language", v),
         { disabled },
       );
       input(
         box,
-        "Accessible reading order",
+        t('studioTools.accessibleReadingOrder'),
         n.readingOrder ?? 0,
         (v) => editText(() => (n.readingOrder = Number(v))),
         { type: "number", disabled },
@@ -441,27 +448,27 @@ export function mountAuthoringTools({
           (v) => change("axes", { ...n.typography?.axes, [axis]: Number(v) }),
           { type: "number", disabled },
         );
-      button(box, "Copy text style", () => {
+      button(box, t('studioTools.copyTextStyle'), () => {
         clipboard = structuredClone(n.typography ?? {});
-        report("Style copied.");
+        report(t('studioTools.styleCopied'));
       });
-      button(box, "Paste text style", () => {
-        if (!clipboard) throw new Error("Copy a style first");
+      button(box, t('studioTools.pasteTextStyle'), () => {
+        if (!clipboard) throw new Error(t('studioTools.copyAStyleFirst'));
         return editText(() => (n.typography = structuredClone(clipboard)));
       });
-      button(box, "Save reusable text style", async () => {
+      button(box, t('studioTools.saveReusableTextStyle'), async () => {
         await saveTextStyle(p, n, library, { name: n.name ?? "Text style" });
         await loadEntries();
         render();
       });
       const rich = el("details");
-      rich.append(el("summary", "Styled text spans"));
+      rich.append(el("summary", t('studioTools.styledTextSpans')));
       const spanPanelKey = getSide() + ":" + n.id;
       rich.open = expandedSpans.has(spanPanelKey);
       rich.ontoggle = () => rich.open ? expandedSpans.add(spanPanelKey) : expandedSpans.delete(spanPanelKey);
       box.append(rich);
       if (n.stat) {
-        rich.append(el("p", "Bound text comes from its stat field. Use the stat formatting controls to change its display."));
+        rich.append(el("p", t('studioTools.boundTextComesFromItsStatFieldUse')));
       } else {
         const spans = n.runs ?? [{ text: n.text ?? "" }],
           changeSpan = (index, key, value) => editText(() => {
@@ -469,53 +476,53 @@ export function mountAuthoringTools({
             if (value === undefined) delete n.runs[index][key];
             else n.runs[index][key] = value;
           });
-        rich.append(el("p", "Spans contain plain text and optional overrides. Inherited properties follow the layer's typography. Image icons use embedded card assets."));
+        rich.append(el("p", t('studioTools.spansContainPlainTextAndOptionalOverridesInherited')));
         for (const [index, span] of spans.entries()) {
           const row = el("fieldset"), number = index + 1;
-          row.append(el("legend", "Span " + number));
+          row.append(el("legend", t('studioTools.span',{number})));
           rich.append(row);
-          input(row, "Span " + number + " text", span.text, v=>changeSpan(index, "text", v), { type: "textarea", disabled });
-          input(row, "Span " + number + " weight", span.weight ?? "", v=>changeSpan(index, "weight", v === "" ? undefined : Number(v)), { type: "number", disabled });
-          input(row, "Span " + number + " style", span.style ?? "", v=>changeSpan(index, "style", v || undefined), {
-            choices: [{id:"",name:"Inherit style"}, "normal", "italic", "oblique"], disabled,
+          input(row, t('studioTools.spanText',{number}), span.text, v=>changeSpan(index, "text", v), { type: "textarea", disabled });
+          input(row, t('studioTools.spanWeight',{number}), span.weight ?? "", v=>changeSpan(index, "weight", v === "" ? undefined : Number(v)), { type: "number", disabled });
+          input(row, t('studioTools.spanStyle',{number}), span.style ?? "", v=>changeSpan(index, "style", v || undefined), {
+            choices: [{id:"",name:t('studioTools.inheritStyle')}, "normal", "italic", "oblique"], disabled,
           });
-          input(row, "Span " + number + " color", span.color ?? n.typography?.color ?? n.color ?? "#ffffff",
+          input(row, t('studioTools.spanColor',{number}), span.color ?? n.typography?.color ?? n.color ?? "#ffffff",
             v=>changeSpan(index, "color", v), { type: "color", disabled });
-          input(row, "Span " + number + " icon", span.icon ?? "", v=>changeSpan(index, "icon", v || undefined), {
-            choices: [{id:"",name:"No icon"}, ...p.manifest.assets.filter(a=>a.mediaType.startsWith("image/")).map(a=>({id:a.id,name:a.id}))], disabled,
+          input(row, t('studioTools.spanIcon',{number}), span.icon ?? "", v=>changeSpan(index, "icon", v || undefined), {
+            choices: [{id:"",name:t('studioTools.noIcon')}, ...p.manifest.assets.filter(a=>a.mediaType.startsWith("image/")).map(a=>({id:a.id,name:a.id}))], disabled,
           });
-          button(row, "Reset span " + number + " formatting", () => editText(() => {
+          button(row, t('studioTools.resetSpan',{number}), () => editText(() => {
             n.runs ??= [{ text: n.text ?? "" }];
             for (const key of ["weight", "style", "color"]) delete n.runs[index][key];
           })).disabled = disabled;
-          for (const [label, offset] of [["Move span " + number + " earlier", -1], ["Move span " + number + " later", 1]]) {
+          for (const [label, offset] of [[t('studioTools.earlierSpan',{number}), -1], [t('studioTools.laterSpan',{number}), 1]]) {
             button(row, label, () => editText(() => {
               n.runs ??= [{ text: n.text ?? "" }];
               const other = index + offset;
               [n.runs[index], n.runs[other]] = [n.runs[other], n.runs[index]];
             })).disabled = disabled || index + offset < 0 || index + offset >= spans.length;
           }
-          button(row, "Remove span " + number, () => editText(() => {
+          button(row, t('studioTools.removeSpan',{number}), () => editText(() => {
             n.runs ??= [{ text: n.text ?? "" }];
             n.runs.splice(index, 1);
             if (!n.runs.length) { n.text = ""; delete n.runs; }
           })).disabled = disabled;
         }
-        button(rich, "Add text span", () => editText(() => {
+        button(rich, t('studioTools.addTextSpan'), () => editText(() => {
           n.runs ??= [{ text: n.text ?? "" }];
-          if (n.runs.length >= 128) throw new Error("A text layer supports at most 128 spans");
+          if (n.runs.length >= 128) throw new Error(t('studioTools.aTextLayerSupportsAtMost128Spans'));
           n.runs.push({ text: "" });
         })).disabled = disabled || spans.length >= 128;
-        button(rich, "Convert spans to plain text", () => editText(() => {
+        button(rich, t('studioTools.convertSpansToPlainText'), () => editText(() => {
           n.text = (n.runs ?? [{text:n.text ?? ""}]).map(span=>span.text).join("");
           delete n.runs;
         })).disabled = disabled || !n.runs;
         const advanced = el("details");
-        advanced.append(el("summary", "Advanced span JSON"));
+        advanced.append(el("summary", t('studioTools.advancedSpanJSON')));
         rich.append(advanced);
         input(
         advanced,
-        "Text spans (JSON)",
+        t('studioTools.textSpansJSON'),
         JSON.stringify(n.runs ?? [{ text: n.text }], null, 2),
         (v) => editText(() => (n.runs = JSON.parse(v))),
         { type: "textarea", disabled },
@@ -523,14 +530,14 @@ export function mountAuthoringTools({
       rich.append(
         el(
           "p",
-          "Each span can include text, color, weight, style and an image asset ID as icon.",
+          t('studioTools.eachSpanCanIncludeTextColorWeightStyle'),
         ),
       );
       }
       if (n.stat) {
         input(
           box,
-          "Stat appearance",
+          t('studioTools.statAppearance'),
           n.stat.view ?? "text",
           (v) => editText(() => (n.stat.view = v)),
           { choices: ["text", "badge", "bar"], disabled },
@@ -538,80 +545,79 @@ export function mountAuthoringTools({
         const publicFields = (p.manifest.authoring?.fields ?? []).filter(
           (f) => (f.visibility ?? "public") === "public" && (f.scope ?? "card") !== "copy",
         );
-        input(box, "Bound field", JSON.stringify([n.stat.scope ?? "card", n.stat.key]), (v) => {
+        input(box, t('studioTools.boundField'), JSON.stringify([n.stat.scope ?? "card", n.stat.key]), (v) => {
           const [scope, key] = JSON.parse(v),
             field = publicFields.find((f) => f.key === key && (f.scope ?? "card") === scope);
-          if (!field) throw new Error("Choose a public snapshot field");
+          if (!field) throw new Error(t('studioTools.chooseAPublicSnapshotField'));
           return editText(() => {
             n.stat.key = key;
             n.stat.scope = scope;
           });
         }, {
-          choices: publicFields.map((f) => ({ id: JSON.stringify([f.scope ?? "card", f.key]), name: f.label + " · " + (f.scope ?? "card") + " / " + f.key })),
+          choices: publicFields.map((f) => ({ id: JSON.stringify([f.scope ?? "card", f.key]), name: f.label + " · " + optionLabel(f.scope ?? "card") + " / " + f.key })),
           disabled,
         });
         for (const [key, label, fallback] of [
-          ["label", "Stat label", ""],
-          ["unit", "Stat unit", ""],
-          ["missing", "Missing stat text", "—"],
-          ["locale", "Stat number locale", "en"],
-          ["precision", "Stat decimal places", 8],
-          ...(n.stat.view === "bar" ? [["minimum", "Bar minimum", 0], ["maximum", "Bar maximum", 100]] : []),
+          ["label", t('studioTools.statLabel'), ""],
+          ["unit", t('studioTools.statUnit'), ""],
+          ["missing", t('studioTools.missingStatText'), "—"],
+          ["locale", t('studioTools.statNumberLocale'), "en"],
+          ["precision", t('studioTools.statDecimalPlaces'), 8],
+          ...(n.stat.view === "bar" ? [["minimum", t('studioTools.barMinimum'), 0], ["maximum", t('studioTools.barMaximum'), 100]] : []),
         ]) input(box, label, n.stat[key] ?? fallback, (v) => editText(() => {
           n.stat[key] = typeof fallback === "number" ? Number(v) : v;
         }), { type: typeof fallback === "number" ? "number" : "text", disabled });
       }
     }
     const fonts = el("details");
-    fonts.append(el("summary", "Embedded font assets"));
+    fonts.append(el("summary", t('studioTools.embeddedFontAssets')));
     fonts.open = fontsExpanded;
     fonts.ontoggle = ()=>{fontsExpanded=fonts.open;};
     root.append(fonts);
     const fontAssets = p.manifest.assets.filter(asset=>asset.role === "font");
-    if (!fontAssets.length) fonts.append(el("p", "Add custom font to embed a reproducible face."));
+    if (!fontAssets.length) fonts.append(el("p", t('studioTools.addCustomFontToEmbedAReproducibleFace')));
     for (const asset of fontAssets) {
       const row = el("fieldset");
       row.append(el("legend", asset.font.family + " · " + asset.font.face));
       fonts.append(row);
-      row.append(el("p", "Asset: " + asset.id + " · Digest: sha256:" + asset.sha256));
-      input(row, "Usage terms for " + asset.id, asset.font.license, (v)=>edit(()=>{
+      row.append(el("p", t('studioTools.fontAssetIdentity',{id:asset.id,digest:asset.sha256})));
+      input(row, t('studioTools.fontTerms',{id:asset.id}), asset.font.license, (v)=>edit(()=>{
         const current = getProject().manifest.assets.find(a=>a.id===asset.id);
-        if (!v.trim() || v.length > 2000) throw new Error("Enter font usage terms within 2000 characters");
+        if (!v.trim() || v.length > 2000) throw new Error(t('studioTools.enterFontUsageTermsWithin2000Characters'));
         current.font.license = v.trim();
       }), {type:"textarea"}).maxLength = 2000;
       try {
         const {font,info} = inspectFont(p.assets.get(asset.path),asset.mediaType);
         fontCache.set(asset.id,font);
-        row.append(el("p", "Decoded family: " + info.family + " · Face: " + info.face + " · Style: " + info.style +
-          " · Weight: " + (info.weight ?? "unavailable") + " · Italic angle: " + info.italicAngle));
-        row.append(el("p", "Glyphs: " + info.glyphs + " · Character-map entries: " + info.codepoints.length + " · Units per em: " + info.unitsPerEm));
+        row.append(el("p", t('studioTools.fontDecoded',{family:info.family,face:info.face,style:info.style,weight:info.weight??t('studioTools.unavailable'),angle:info.italicAngle})));
+        row.append(el("p", t('studioTools.fontGlyphs',{glyphs:info.glyphs,entries:info.codepoints.length,units:info.unitsPerEm})));
         const axes = Object.entries(info.axes);
-        row.append(el("p", axes.length ? "Variable axes: " + axes.map(([key,range])=>key+" ("+range.name+"): "+range.min+"–"+range.max+", default "+range.default).join("; ") : "Variable axes: none"));
+        row.append(el("p", axes.length ? t('studioTools.fontAxes',{axes:axes.map(([key,range])=>t('studioTools.fontAxis',{key,name:range.name,minimum:range.min,maximum:range.max,default:range.default})).join('; ')}) : t('studioTools.variableAxesNone')));
         let sample = fontSamples.get(asset.sha256) ?? (n?.type === "text" ? textValue(n,p.manifest) : p.manifest.title);
         const updateCoverage = (v)=>{
           sample = v;
           fontSamples.set(asset.sha256,sample);
           const missing = [...new Set(Array.from(sample).filter(character=>!/[\r\n]/.test(character) && !font.hasGlyphForCodePoint(character.codePointAt(0))))];
-          coverage.textContent = missing.length ? "Missing code points: " + missing.slice(0,32).map(character=>"U+"+character.codePointAt(0).toString(16).toUpperCase()).join(", ") + (missing.length>32?" …":"") : "All sample code points are mapped. This does not prove shaping quality.";
+          coverage.textContent = missing.length ? t('studioTools.missingCodepoints',{points:missing.slice(0,32).map(character=>'U+'+character.codePointAt(0).toString(16).toUpperCase()).join(', ')+(missing.length>32?' …':'')}) : t('studioTools.allSampleCodePointsAreMappedThisDoes');
         };
-        input(row, "Glyph coverage sample for " + asset.id, sample, updateCoverage).maxLength = 10000;
+        input(row, t('studioTools.fontSample',{id:asset.id}), sample, updateCoverage).maxLength = 10000;
         const coverage = el("p");
         coverage.setAttribute("role","status");
         row.append(coverage);
         updateCoverage(sample);
       } catch (error) {
-        row.append(el("p", "Font diagnostic: " + error.message));
+        row.append(el("p", t('studioTools.fontDiagnostic',{message:error.message})));
       }
     }
     const stats = el("details");
     stats.open = true;
-    stats.append(el("summary", "Card stats"));
+    stats.append(el("summary", t('studioTools.cardStats')));
     root.append(stats);
     const fields = p.manifest.authoring?.fields ?? [];
     const fieldControls = new Map();
     if (!fields.length)
       stats.append(
-        el("p", "Add a field or load the destination policy to begin."),
+        el("p", t('studioTools.addAFieldOrLoadTheDestinationPolicy')),
       );
     for (const f of fields.filter((f) => (f.scope ?? "card") !== "copy")) {
       const scope = f.scope ?? "card",
@@ -621,7 +627,7 @@ export function mountAuthoringTools({
       const error =
         value === undefined
           ? f.required
-            ? "Required value is missing"
+            ? t('studioTools.requiredValueIsMissing')
             : null
           : valueError(f, value);
       const choices = f.enum?.map((v) => ({
@@ -655,21 +661,15 @@ export function mountAuthoringTools({
               : "text",
           choices:
             choices || f.type === "boolean"
-              ? [{ id: "", name: "No value" },
-                  ...(f.nullable && !f.enum?.includes(null) ? [{ id: "null", name: "Null" }] : []),
+              ? [{ id: "", name: t('studioTools.noValue') },
+                  ...(f.nullable && !f.enum?.includes(null) ? [{ id: "null", name: t('studioTools.null') }] : []),
                   ...(choices ?? ["false", "true"])]
               : undefined,
           disabled,
         },
       );
       fieldControls.set(scope + ".stats." + f.key, control);
-      const help = el("p", "Scope: " + scope + " · Source: " + (f.source ?? "author") +
-        " · Visibility: " + (f.visibility ?? "public") +
-        (f.unit ? " · Unit: " + f.unit : "") + (f.description ? " · " + f.description : "") +
-        (["integer", "number"].includes(f.type) ? " · Range: " + (f.minimum ?? -1e12) + " to " + (f.maximum ?? 1e12) : "") +
-        (f.precision !== undefined ? " · Decimal places: " + f.precision : "") +
-        (f.type === "string" ? " · Text length: " + (f.minLength ?? 0) + " to " + (f.maxLength ?? 10000) : "") +
-        (f.type === "array" ? " · List items: " + (f.minItems ?? 0) + " to " + (f.maxItems ?? 256) : ""));
+      const help = el("p", t('studioTools.fieldMetadata',{scope:optionLabel(scope),source:optionLabel(f.source??'author'),visibility:optionLabel(f.visibility??'public')})+(f.unit?t('studioTools.unitMetadata',{unit:f.unit}):'')+(f.description?' · '+f.description:'')+(['integer','number'].includes(f.type)?t('studioTools.rangeMetadata',{minimum:f.minimum??-1e12,maximum:f.maximum??1e12}):'')+(f.precision!==undefined?t('studioTools.precisionMetadata',{precision:f.precision}):'')+(f.type==='string'?t('studioTools.lengthMetadata',{minimum:f.minLength??0,maximum:f.maxLength??10000}):'')+(f.type==='array'?t('studioTools.itemsMetadata',{minimum:f.minItems??0,maximum:f.maxItems??256}):''));
       help.id = "dcs-field-help-" + crypto.randomUUID();
       control.setAttribute("aria-describedby", help.id);
       stats.append(help);
@@ -687,17 +687,17 @@ export function mountAuthoringTools({
       }
       if (value === null) stats.append(el("p", f.label + ": null"));
       if (!disabled && f.nullable)
-        button(stats, "Set " + f.label + " to null", async () => {
+        button(stats, t('studioTools.nullField',{label:f.label}), async () => {
           setStat(p, f.key, null, scope);
           await rebuild();
         });
       if (!disabled)
-        button(stats, "Clear " + f.label, async () => {
+        button(stats, t('studioTools.clearField',{label:f.label}), async () => {
           setStat(p, f.key, undefined, scope);
           await rebuild();
         });
       if ((f.visibility ?? "public") === "public")
-        button(stats, "Add " + f.label + " to card", async () => {
+        button(stats, t('studioTools.addField',{label:f.label}), async () => {
           const ids = addStatBlock(p, getSide(), [{ key: f.key, scope }]);
           select(ids[0]);
           await rebuild();
@@ -706,11 +706,11 @@ export function mountAuthoringTools({
         stats.append(
           el(
             "p",
-            "This field is private and cannot be included in public card art.",
+            t('studioTools.thisFieldIsPrivateAndCannotBeIncluded'),
           ),
         );
     }
-    button(stats, "Add all public stats as a table", async () => {
+    button(stats, t('studioTools.addAllPublicStatsAsATable'), async () => {
       addStatBlock(
         p,
         getSide(),
@@ -725,7 +725,7 @@ export function mountAuthoringTools({
       );
       await rebuild();
     });
-    button(stats, "Export stats CSV", () => {
+    button(stats, t('studioTools.exportStatsCSV'), () => {
       const url = URL.createObjectURL(
           new Blob([exportStatsCSV(p)], { type: "text/csv" }),
         ),
@@ -735,7 +735,7 @@ export function mountAuthoringTools({
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
-    button(stats, "Import stats CSV", () => {
+    button(stats, t('studioTools.importStatsCSV'), () => {
       const file = el("input");
       file.type = "file";
       file.accept = ".csv";
@@ -743,14 +743,14 @@ export function mountAuthoringTools({
         run(async () => {
           const f = file.files[0];
           if (!f || f.size > 262144)
-            throw new Error("CSV must be below 256 KiB");
+            throw new Error(t('studioTools.csvMustBeBelow256KiB'));
           importStatsCSV(p, await f.text());
           await rebuild();
         });
       file.click();
     });
     const fieldForm = el("details");
-    fieldForm.append(el("summary", "Define a custom field"));
+    fieldForm.append(el("summary", t('studioTools.defineACustomField')));
     stats.append(fieldForm);
     const draft = {
       key: "custom.value",
@@ -761,19 +761,19 @@ export function mountAuthoringTools({
       visibility: "public",
       source: "author",
     };
-    input(fieldForm, "Field key", draft.key, (v) => (draft.key = v));
-    input(fieldForm, "Field label", draft.label, (v) => (draft.label = v));
-    input(fieldForm, "Field help", "", (v) => {
+    input(fieldForm, t('studioTools.fieldKey'), draft.key, (v) => (draft.key = v));
+    input(fieldForm, t('studioTools.fieldLabel'), draft.label, (v) => (draft.label = v));
+    input(fieldForm, t('studioTools.fieldHelp'), "", (v) => {
       if (v) draft.description = v;
       else delete draft.description;
     }, { type: "textarea" });
-    input(fieldForm, "Field unit", "", (v) => {
+    input(fieldForm, t('studioTools.fieldUnit'), "", (v) => {
       if (v) draft.unit = v;
       else delete draft.unit;
     });
-    input(fieldForm, "Field scope", draft.scope, (v) => (draft.scope = v), { choices: ["card", "variant"] });
-    input(fieldForm, "Field visibility", draft.visibility, (v) => (draft.visibility = v), { choices: ["public", "owner", "operator"] });
-    input(fieldForm, "Field type", draft.type, (v) => {
+    input(fieldForm, t('studioTools.fieldScope'), draft.scope, (v) => (draft.scope = v), { choices: ["card", "variant"] });
+    input(fieldForm, t('studioTools.fieldVisibility'), draft.visibility, (v) => (draft.visibility = v), { choices: ["public", "owner", "operator"] });
+    input(fieldForm, t('studioTools.fieldType'), draft.type, (v) => {
       draft.type = v;
       for (const key of ["minimum", "maximum", "precision", "minLength", "maxLength", "minItems", "maxItems", "enum"]) delete draft[key];
       paintConstraints();
@@ -783,69 +783,69 @@ export function mountAuthoringTools({
     });
     input(
       fieldForm,
-      "Field requirement",
+      t('studioTools.fieldRequirement'),
       "optional",
       (v) => (draft.required = v === "required"),
       { choices: ["optional", "required"] },
     );
-    input(fieldForm, "Allow null", "no", (v) => (draft.nullable = v === "yes"), { choices: ["no", "yes"] });
+    input(fieldForm, t('studioTools.allowNull'), "no", (v) => (draft.nullable = v === "yes"), { choices: ["no", "yes"] });
     const constraints = el("fieldset"), enumForm = el("fieldset");
     fieldForm.append(constraints, enumForm);
     function paintConstraints() {
-      constraints.replaceChildren(el("legend", "Value bounds"));
+      constraints.replaceChildren(el("legend", t('studioTools.valueBounds')));
       const bounds = ["integer", "number"].includes(draft.type)
-        ? [["minimum", "Field minimum"], ["maximum", "Field maximum"], ...(draft.type === "number" ? [["precision", "Field decimal places"]] : [])]
-        : draft.type === "string" ? [["minLength", "Minimum text length"], ["maxLength", "Maximum text length"]]
-        : draft.type === "array" ? [["minItems", "Minimum list items"], ["maxItems", "Maximum list items"]] : [];
-      if (!bounds.length) constraints.append(el("p", "This type has no size or numeric bounds in this form."));
+        ? [["minimum", t('studioTools.fieldMinimum')], ["maximum", t('studioTools.fieldMaximum')], ...(draft.type === "number" ? [["precision", t('studioTools.fieldDecimalPlaces')]] : [])]
+        : draft.type === "string" ? [["minLength", t('studioTools.minimumTextLength')], ["maxLength", t('studioTools.maximumTextLength')]]
+        : draft.type === "array" ? [["minItems", t('studioTools.minimumListItems')], ["maxItems", t('studioTools.maximumListItems')]] : [];
+      if (!bounds.length) constraints.append(el("p", t('studioTools.thisTypeHasNoSizeOrNumericBounds')));
       for (const [key, label] of bounds) input(constraints, label, draft[key] ?? "", (v) => {
         if (v === "") delete draft[key];
         else draft[key] = Number(v);
       }, { type: "number" });
-      constraints.append(el("p", "Blank bounds use the field contract defaults. List item and nested object schemas require a policy or API definition."));
+      constraints.append(el("p", t('studioTools.blankBoundsUseTheFieldContractDefaultsList')));
     }
     function paintChoices() {
-      enumForm.replaceChildren(el("legend", "Allowed choices"));
+      enumForm.replaceChildren(el("legend", t('studioTools.allowedChoices')));
       if (["array", "object"].includes(draft.type)) {
-        enumForm.append(el("p", "Structured enumeration values require a policy or API definition."));
+        enumForm.append(el("p", t('studioTools.structuredEnumerationValuesRequireAPolicyOrAPI')));
         return;
       }
-      enumForm.append(el("p", "No choices means any value allowed by the bounds. Changing type resets choices and bounds."));
+      enumForm.append(el("p", t('studioTools.noChoicesMeansAnyValueAllowedByThe')));
       for (const [index, value] of (draft.enum ?? []).entries()) {
-        input(enumForm, "Allowed choice " + (index + 1), value, (v) => {
+        input(enumForm, t('studioTools.allowedChoice',{number:index+1}), value, (v) => {
           draft.enum[index] = draft.type === "boolean" ? v === "true" : ["integer", "number"].includes(draft.type) ? Number(v) : v;
         }, { type: ["integer", "number"].includes(draft.type) ? "number" : "text", choices: draft.type === "boolean" ? ["false", "true"] : undefined });
-        button(enumForm, "Remove allowed choice " + (index + 1), () => {
+        button(enumForm, t('studioTools.removeChoice',{number:index+1}), () => {
           draft.enum.splice(index, 1);
           if (!draft.enum.length) delete draft.enum;
           paintChoices();
         });
       }
-      button(enumForm, "Add allowed choice", () => {
+      button(enumForm, t('studioTools.addAllowedChoice'), () => {
         draft.enum ??= [];
-        if (draft.enum.length >= 128) throw new Error("A field supports at most 128 choices");
+        if (draft.enum.length >= 128) throw new Error(t('studioTools.aFieldSupportsAtMost128Choices'));
         draft.enum.push(draft.type === "boolean" ? false : ["integer", "number"].includes(draft.type) ? 0 : "");
         paintChoices();
       }).disabled = (draft.enum?.length ?? 0) >= 128;
     }
     paintConstraints();
     paintChoices();
-    button(fieldForm, "Create field", async () => {
+    button(fieldForm, t('studioTools.createField'), async () => {
       validateField(draft);
       await edit(() => {
         p.manifest.authoring ??= { values: { card: {}, variant: {} } };
         p.manifest.authoring.fields ??= [];
         if (p.manifest.authoring.fields.some((f) => f.key === draft.key && (f.scope ?? "card") === draft.scope))
-          throw new Error("Field key already exists in this scope");
+          throw new Error(t('studioTools.fieldKeyAlreadyExistsInThisScope'));
         p.manifest.authoring.fields.push(structuredClone(draft));
       });
     });
     if (n?.type === "group") {
-      const group = el("fieldset");group.append(el("legend","Group compositing"));root.append(group);
-      group.append(el("p","Isolate renders children into the group's explicit width and height, then applies opacity, masks and material once. Children outside these local bounds are clipped. Existing groups use inherited layer effects."));
-      input(group,"Isolate group",n.isolate?"yes":"no",value=>edit(()=>{
+      const group = el("fieldset");group.append(el("legend",t('studioTools.groupCompositing')));root.append(group);
+      group.append(el("p",t('studioTools.isolateRendersChildrenIntoTheGroupSExplicit')));
+      input(group,t('studioTools.isolateGroup'),n.isolate?"yes":"no",value=>edit(()=>{
         const target=flattenNodes(p.scenes.get(p.manifest.faces[getSide()].scene).nodes).find(node=>node.id===n.id);
-        if(target.locked)throw new Error("Choose an unlocked group");
+        if(target.locked)throw new Error(t('studioTools.chooseAnUnlockedGroup'));
         if(value==="yes"){
           target.isolate=true;target.width??=p.manifest.canvas.width;target.height??=p.manifest.canvas.height;
           if(!p.manifest.capabilities.required.includes("dc.group-isolation@0.2"))p.manifest.capabilities.required.push("dc.group-isolation@0.2");
@@ -857,30 +857,30 @@ export function mountAuthoringTools({
         masks = el("details"), disabled = !!n.locked,
         editMask = (fn) => edit(() => {
           const project = getProject(), target = flattenNodes(project.scenes.get(project.manifest.faces[maskSide].scene).nodes).find(node=>node.id===n.id);
-          if (!target || target.locked) throw new Error("Choose an unlocked layer to edit its mask");
+          if (!target || target.locked) throw new Error(t('studioTools.chooseAnUnlockedLayerToEditItsMask'));
           fn(target);
           if (target.mask?.rect || target.mask?.transform || target.material?.mask) {
             if (!project.manifest.capabilities.required.includes("dc.mask-layout@0.2")) project.manifest.capabilities.required.push("dc.mask-layout@0.2");
           }
           if (project.manifest.authoring?.masks) delete project.manifest.authoring.masks[panelKey];
         });
-      masks.append(el("summary", "Clipping mask properties"));
+      masks.append(el("summary", t('studioTools.clippingMaskProperties')));
       masks.open = expandedMasks.has(panelKey);
       masks.ontoggle = () => masks.open ? expandedMasks.add(panelKey) : expandedMasks.delete(panelKey);
       root.append(masks);
-      masks.append(el("p", "Clipping masks limit artwork and text. Polygon coordinates run from 0 to 1 within the layer and follow its transforms. Image masks use alpha coverage. Editing creates a local mask and clears its library reference; saved versions remain unchanged."));
-      input(masks, "Clipping mask source", n.mask?.asset ? "image:" + n.mask.asset : n.mask?.polygon ? "polygon" : "none", (v)=>editMask(target=>{
+      masks.append(el("p", t('studioTools.clippingMasksLimitArtworkAndTextPolygonCoordinates')));
+      input(masks, t('studioTools.clippingMaskSource'), n.mask?.asset ? "image:" + n.mask.asset : n.mask?.polygon ? "polygon" : "none", (v)=>editMask(target=>{
         if (v === "none") delete target.mask;
         else target.mask = v === "polygon" ? {polygon:[[0,0],[1,0],[1,1],[0,1]]} : {asset:v.slice(6)};
-      }), { choices: [{id:"none",name:"No clipping mask"}, {id:"polygon",name:"Polygon"},
-        ...p.manifest.assets.filter(asset=>asset.mediaType.startsWith("image/")).map(asset=>({id:"image:"+asset.id,name:"Image alpha: "+asset.id}))], disabled });
+      }), { choices: [{id:"none",name:t('studioTools.noClippingMask')}, {id:"polygon",name:t('studioTools.polygon')},
+        ...p.manifest.assets.filter(asset=>asset.mediaType.startsWith("image/")).map(asset=>({id:"image:"+asset.id,name:t('studioTools.imageAlpha',{id:asset.id})}))], disabled });
       if (n.mask) {
-        input(masks, "Invert clipping mask", n.mask.invert ? "yes" : "no", (v)=>editMask(target=>{target.mask.invert = v === "yes";}), {choices:["no","yes"],disabled});
-        button(masks, "Remove clipping mask", ()=>editMask(target=>{delete target.mask;})).disabled = disabled;
+        input(masks, t('studioTools.invertClippingMask'), n.mask.invert ? "yes" : "no", (v)=>editMask(target=>{target.mask.invert = v === "yes";}), {choices:["no","yes"],disabled});
+        button(masks, t('studioTools.removeClippingMask'), ()=>editMask(target=>{delete target.mask;})).disabled = disabled;
       }
       const layoutControls = (container, mask, use) => {
         if (!mask) return;
-        const label = use === "clip" ? "Clipping" : "Effect",
+        const label = use === "clip" ? t('studioTools.clipping') : t('studioTools.effect'),
           update = fn => editMask(target => {
             if (use === "effect" && !target.material.mask) {
               target.material.mask = {asset:target.material.maskAsset};
@@ -888,92 +888,92 @@ export function mountAuthoringTools({
             }
             fn(use === "clip" ? target.mask : target.material.mask);
           });
-        container.append(el("p", "Mask translations and pivots use layer fractions; rotation uses degrees and preserves the layer's pixel aspect ratio. Negative scales mirror coverage."));
+        container.append(el("p", t('studioTools.maskTranslationsAndPivotsUseLayerFractionsRotation')));
         for (const [key, fallback] of [["x",0],["y",0],["scaleX",1],["scaleY",1],["rotation",0],["pivotX",0.5],["pivotY",0.5]]) {
-          const control = input(container,label + " mask " + key,mask.transform?.[key] ?? fallback,v=>update(current=>{
+          const control = input(container,t('studioTools.maskTransform',{mask:label,property:propertyLabel(key)}),mask.transform?.[key] ?? fallback,v=>update(current=>{
             current.transform ??= {}; current.transform[key] = Number(v);
           }),{type:"number",disabled});
           control.min = key === "rotation" ? "-360000" : "-100";
           control.max = key === "rotation" ? "360000" : "100"; control.step = "any";
         }
-        button(container,"Reset " + label.toLowerCase() + " mask transform",()=>update(current=>{delete current.transform;})).disabled = disabled;
+        button(container,t('studioTools.resetMaskTransform',{mask:label.toLowerCase()}),()=>update(current=>{delete current.transform;})).disabled = disabled;
         if (mask.asset) {
           const asset = p.manifest.assets.find(a=>a.id===mask.asset), crop = mask.rect ?? [0,0,asset.width,asset.height];
           for (const [index,key] of ["x","y","width","height"].entries()) {
-            const control = input(container,label + " mask crop " + key,crop[index],v=>update(current=>{
+            const control = input(container,t('studioTools.maskCrop',{mask:label,property:propertyLabel(key)}),crop[index],v=>update(current=>{
               current.rect ??= [...crop]; current.rect[index] = Number(v);
             }),{type:"number",disabled});
             control.min = index < 2 ? "0" : "0.001"; control.max = String(index%2 ? asset.height : asset.width); control.step = "any";
           }
-          button(container,"Reset " + label.toLowerCase() + " mask crop",()=>update(current=>{delete current.rect;})).disabled = disabled;
+          button(container,t('studioTools.resetMaskCrop',{mask:label.toLowerCase()}),()=>update(current=>{delete current.rect;})).disabled = disabled;
         }
       };
       layoutControls(masks,n.mask,"clip");
       if (n.material) {
         const effects = el("fieldset"), effectMask = n.material.mask ?? (n.material.maskAsset ? {asset:n.material.maskAsset} : undefined);
-        effects.append(el("legend","Effect mask properties")); masks.append(effects);
-        input(effects,"Effect mask source",effectMask?.asset ? "image:"+effectMask.asset : effectMask?.polygon ? "polygon" : "none",v=>editMask(target=>{
+        effects.append(el("legend",t('studioTools.effectMaskProperties'))); masks.append(effects);
+        input(effects,t('studioTools.effectMaskSource'),effectMask?.asset ? "image:"+effectMask.asset : effectMask?.polygon ? "polygon" : "none",v=>editMask(target=>{
           delete target.material.maskAsset;
           if (v === "none") delete target.material.mask;
           else target.material.mask = v === "polygon" ? {polygon:[[0,0],[1,0],[1,1],[0,1]]} : {asset:v.slice(6)};
-        }),{choices:[{id:"none",name:"No effect mask"},{id:"polygon",name:"Polygon"},...p.manifest.assets.filter(a=>a.mediaType.startsWith("image/")).map(a=>({id:"image:"+a.id,name:"Image alpha: "+a.id}))],disabled});
+        }),{choices:[{id:"none",name:t('studioTools.noEffectMask')},{id:"polygon",name:t('studioTools.polygon')},...p.manifest.assets.filter(a=>a.mediaType.startsWith("image/")).map(a=>({id:"image:"+a.id,name:t('studioTools.imageAlpha',{id:a.id})}))],disabled});
         if (effectMask) {
-          input(effects,"Invert effect mask",effectMask.invert ? "yes" : "no",v=>editMask(target=>{
+          input(effects,t('studioTools.invertEffectMask'),effectMask.invert ? "yes" : "no",v=>editMask(target=>{
             target.material.mask ??= {asset:target.material.maskAsset}; delete target.material.maskAsset;
             target.material.mask.invert = v === "yes";
           }),{choices:["no","yes"],disabled});
           layoutControls(effects,effectMask,"effect");
           for (const [index,point] of (effectMask.polygon ?? []).entries()) {
-            const row=el("fieldset");row.append(el("legend","Effect mask vertex "+(index+1)));effects.append(row);
+            const row=el("fieldset");row.append(el("legend",t('studioTools.effectVertex',{number:index+1})));effects.append(row);
             for (const [component,axis] of ["x","y"].entries()) {
-              const control=input(row,"Effect mask vertex "+(index+1)+" "+axis,point[component],v=>editMask(target=>{target.material.mask.polygon[index][component]=Number(v);}),{type:"number",disabled});
+              const control=input(row,t('studioTools.effectVertexAxis',{number:index+1,axis:propertyLabel(axis)}),point[component],v=>editMask(target=>{target.material.mask.polygon[index][component]=Number(v);}),{type:"number",disabled});
               control.min="0";control.max="1";control.step="any";
             }
-            button(row,"Insert effect mask vertex after "+(index+1),()=>editMask(target=>{
+            button(row,t('studioTools.insertEffectVertex',{number:index+1}),()=>editMask(target=>{
               const points=target.material.mask.polygon;
-              if(points.length>=64)throw new Error("A mask supports at most 64 vertices");
+              if(points.length>=64)throw new Error(t('studioTools.aMaskSupportsAtMost64Vertices'));
               const next=points[(index+1)%points.length];points.splice(index+1,0,[(point[0]+next[0])/2,(point[1]+next[1])/2]);
             })).disabled=disabled || effectMask.polygon.length>=64;
-            button(row,"Remove effect mask vertex "+(index+1),()=>editMask(target=>{
-              if(target.material.mask.polygon.length<=3)throw new Error("A mask needs at least 3 vertices");
+            button(row,t('studioTools.removeEffectVertex',{number:index+1}),()=>editMask(target=>{
+              if(target.material.mask.polygon.length<=3)throw new Error(t('studioTools.aMaskNeedsAtLeast3Vertices'));
               target.material.mask.polygon.splice(index,1);
             })).disabled=disabled || effectMask.polygon.length<=3;
           }
         }
       }
       if (n.mask?.polygon) {
-        masks.append(el("p", "A polygon has 3 to 64 vertices. Add inserts a midpoint after the selected vertex; remove preserves the minimum vertex count."));
+        masks.append(el("p", t('studioTools.aPolygonHas3To64VerticesAdd')));
         for (const [index, point] of n.mask.polygon.entries()) {
           const row = el("fieldset");
-          row.append(el("legend", "Mask vertex " + (index+1)));
+          row.append(el("legend", t('studioTools.maskVertex',{number:index+1})));
           masks.append(row);
           for (const [axis, component] of [["x",0],["y",1]]) {
-            const control = input(row, "Mask vertex " + (index+1) + " " + axis, point[component], v=>editMask(target=>{
+            const control = input(row, t('studioTools.maskVertexAxis',{number:index+1,axis:propertyLabel(axis)}), point[component], v=>editMask(target=>{
               target.mask.polygon[index][component] = Number(v);
             }), {type:"number",disabled});
             control.min = "0"; control.max = "1"; control.step = "any";
           }
-          button(row, "Insert mask vertex after " + (index+1), ()=>editMask(target=>{
+          button(row, t('studioTools.insertMaskVertex',{number:index+1}), ()=>editMask(target=>{
             const points = target.mask.polygon;
-            if (points.length >= 64) throw new Error("A mask supports at most 64 vertices");
+            if (points.length >= 64) throw new Error(t('studioTools.aMaskSupportsAtMost64Vertices'));
             const current = points[index], next = points[(index+1)%points.length];
             points.splice(index+1,0,[(current[0]+next[0])/2,(current[1]+next[1])/2]);
           })).disabled = disabled || n.mask.polygon.length >= 64;
-          button(row, "Remove mask vertex " + (index+1), ()=>editMask(target=>{
-            if (target.mask.polygon.length <= 3) throw new Error("A mask needs at least 3 vertices");
+          button(row, t('studioTools.removeMaskVertex',{number:index+1}), ()=>editMask(target=>{
+            if (target.mask.polygon.length <= 3) throw new Error(t('studioTools.aMaskNeedsAtLeast3Vertices'));
             target.mask.polygon.splice(index,1);
           })).disabled = disabled || n.mask.polygon.length <= 3;
         }
       }
-      button(masks, "Upload clipping mask image", ()=>{
+      button(masks, t('studioTools.uploadClippingMaskImage'), ()=>{
         const file = el("input");
         file.type = "file"; file.accept = ".png,.jpg,.jpeg,.webp";
         file.onchange = ()=>run(async()=>{
           const source = file.files[0];
           if (!source) return;
-          if (n.locked) throw new Error("Choose an unlocked layer to edit its mask");
+          if (n.locked) throw new Error(t('studioTools.chooseAnUnlockedLayerToEditItsMask'));
           const project = getProject(), asset = await project.addImage(source,{role:"mask"});
-          if (getProject() !== project) throw new Error("The card changed during mask upload");
+          if (getProject() !== project) throw new Error(t('studioTools.theCardChangedDuringMaskUpload'));
           await editMask(target=>{target.mask={asset:asset.id};});
         });
         file.click();
@@ -981,21 +981,21 @@ export function mountAuthoringTools({
     }
     const libraries = el("details");
     libraries.open = true;
-    libraries.append(el("summary", "Reusable library"));
+    libraries.append(el("summary", t('studioTools.reusableLibrary')));
     root.append(libraries);
     let libraryName = n?.name ?? p.manifest.title;
     input(
       libraries,
-      "Library item name",
+      t('studioTools.libraryItemName'),
       libraryName,
       (v) => (libraryName = v),
     );
-    button(libraries, "Save card as template", async () => {
+    button(libraries, t('studioTools.saveCardAsTemplate'), async () => {
       await saveTemplate(p, library, { name: libraryName });
       await loadEntries();
       render();
     });
-    button(libraries, "Save clipping mask", async () => {
+    button(libraries, t('studioTools.saveClippingMask'), async () => {
       await saveMask(p, getSide(), getSelected(), library, {
         name: libraryName,
         use: "clip",
@@ -1003,7 +1003,7 @@ export function mountAuthoringTools({
       await loadEntries();
       render();
     });
-    button(libraries, "Save effect mask", async () => {
+    button(libraries, t('studioTools.saveEffectMask'), async () => {
       await saveMask(p, getSide(), getSelected(), library, {
         name: libraryName,
         use: "effect",
@@ -1012,9 +1012,9 @@ export function mountAuthoringTools({
       render();
     });
     if (n)
-      button(libraries, "Use rectangle clipping mask", () =>
+      button(libraries, t('studioTools.useRectangleClippingMask'), () =>
         edit(() => {
-          if (n.locked) throw new Error("Choose an unlocked layer to edit its mask");
+          if (n.locked) throw new Error(t('studioTools.chooseAnUnlockedLayerToEditItsMask'));
           n.mask = {
               polygon: [
                 [0, 0],
@@ -1036,9 +1036,9 @@ export function mountAuthoringTools({
           .includes(filter.toLowerCase()),
       )) {
         const row = el("div");
-        row.append(el("strong", entry.document.name + " · " + entry.kind));
+        row.append(el("strong", entry.document.name + " · " + optionLabel(entry.kind)));
         if (entry.kind !== "template-set")
-          button(row, "Apply " + entry.document.name, async () => {
+          button(row, t('studioTools.applyLibrary',{name:entry.document.name}), async () => {
             const item = entry.shared
               ? await library.get(entry.key, true)
               : entry;
@@ -1047,23 +1047,22 @@ export function mountAuthoringTools({
                 dialog = el("dialog"),
                 summary = el(
                   "p",
-                  preview.changes.length +
-                    " layers will be migrated. Review changes before applying.",
+                  t('studioTools.migrationLayers',{count:preview.changes.length}),
                 ),
                 details = el(
                   "pre",
                   preview.changes
-                    .map((c) => c.face + " / " + c.nodeId + ": " + c.change)
+                    .map((c) => c.face + " / " + c.nodeId + ": " + optionLabel(c.change))
                     .join("\n"),
                 );
               dialog.append(summary, details);
-              button(dialog, "Apply reviewed template", async () => {
+              button(dialog, t('studioTools.applyReviewedTemplate'), async () => {
                 await applyTemplateMigration(p, preview);
                 dialog.close();
                 dialog.remove();
                 await refreshPolicy();
               });
-              button(dialog, "Cancel template update", () => {
+              button(dialog, t('studioTools.cancelTemplateUpdate'), () => {
                 dialog.close();
                 dialog.remove();
               });
@@ -1078,13 +1077,13 @@ export function mountAuthoringTools({
             await rebuild();
           });
         if (!entry.shared && library.share)
-          button(row, "Share " + entry.document.name, async () => {
+          button(row, t('studioTools.shareLibrary',{name:entry.document.name}), async () => {
             await library.share(entry);
             await loadEntries();
             render();
-            report("Shared library revision saved.");
+            report(t('studioTools.sharedLibraryRevisionSaved'));
           });
-        button(row, "Export " + entry.document.name, async () => {
+        button(row, t('studioTools.exportLibrary',{name:entry.document.name}), async () => {
           const item = entry.shared
             ? await library.get(entry.key, true)
             : entry;
@@ -1104,13 +1103,13 @@ export function mountAuthoringTools({
         list.append(row);
       }
     };
-    input(libraries, "Search library", "", (v) => {
+    input(libraries, t('studioTools.searchLibrary'), "", (v) => {
       filter = v;
       paintList();
     });
     libraries.append(list);
     paintList();
-    button(libraries, "Import library item", () => {
+    button(libraries, t('studioTools.importLibraryItem'), () => {
       const file = el("input");
       file.type = "file";
       file.accept = ".json";
@@ -1118,7 +1117,7 @@ export function mountAuthoringTools({
         run(async () => {
           const f = file.files[0];
           if (!f || f.size > 32 * 1024 * 1024)
-            throw new Error("Library import must be below 32 MiB");
+            throw new Error(t('studioTools.libraryImportMustBeBelow32MiB'));
           const value = JSON.parse(await f.text());
           if (value.archive) {
             value.archive = new Uint8Array(value.archive);
@@ -1129,7 +1128,7 @@ export function mountAuthoringTools({
             typeof value.key !== "string" ||
             !value.document?.name
           )
-            throw new Error("Invalid library item");
+            throw new Error(t('studioTools.invalidLibraryItem'));
           await library.put(value);
           await loadEntries();
           render();
@@ -1147,7 +1146,7 @@ export function mountAuthoringTools({
             layout = layoutText(node, text, fontMeasure(font, node));
           layouts[face + ":" + node.id] = { ...layout, nodeId: node.id, face };
           for (const issue of fontDiagnostics(font, node, text)) textDiagnostics.push({ face, node, message: issue.message });
-          if (layout.overflow) textDiagnostics.push({ face, node, message: "Text overflows its box." });
+          if (layout.overflow) textDiagnostics.push({ face, node, message: t('studioTools.textOverflowsItsBox') });
         } catch (error) {
           textDiagnostics.push({ face, node, message: error.message });
         }
@@ -1176,38 +1175,35 @@ export function mountAuthoringTools({
       };
       if (!issue.face && chosen && matches.filter(candidate=>candidate.node.id===chosen.node.id).length > 1) {
         const dialog = el("dialog");
-        dialog.append(el("p", "This layer ID is used on multiple faces. Choose the layer to inspect."));
+        dialog.append(el("p", t('studioTools.thisLayerIDIsUsedOnMultipleFaces')));
         for (const candidate of matches.filter(candidate=>candidate.node.id===chosen.node.id))
-          button(dialog, "Inspect " + candidate.face + " / " + (candidate.node.name ?? candidate.node.id), async () => {
+          button(dialog, t('studioTools.inspectLayer',{face:optionLabel(candidate.face),name:candidate.node.name??candidate.node.id}), async () => {
             dialog.close();
             dialog.remove();
             await navigate(candidate);
           });
-        button(dialog, "Cancel layer selection", () => { dialog.close(); dialog.remove(); });
+        button(dialog, t('studioTools.cancelLayerSelection'), () => { dialog.close(); dialog.remove(); });
         root.append(dialog);
         dialog.showModal();
         return;
       }
       if (chosen) return navigate(chosen);
-      report(issue.message + " · Rule: " + (issue.rule ?? issue.code));
+      report(t('studioTools.issueRule',{message:issue.message,rule:issue.rule??issue.code}));
     };
     const rules = el("details");
-    rules.append(el("summary", "Card policy"));
+    rules.append(el("summary", t('studioTools.cardPolicy')));
     root.append(rules);
     if (policyProvider)
-      button(rules, "Refresh destination policy", refreshPolicy);
+      button(rules, t('studioTools.refreshDestinationPolicy'), refreshPolicy);
     if (effective) {
       if (effective.policy.defaults.template)
         rules.append(
-          el("p", "Default template: " + effective.policy.defaults.template),
+          el("p", t('studioTools.defaultTemplate',{id:effective.policy.defaults.template})),
         );
       rules.append(
         el(
           "p",
-          "Policy revision " +
-            effective.revision +
-            " · " +
-            effective.policy.references.join(", "),
+          t('studioTools.policyRevision',{revision:effective.revision,references:effective.policy.references.join(', ')}),
         ),
       );
       const issues = inspectCardPolicy(effective.policy, {
@@ -1229,13 +1225,13 @@ export function mountAuthoringTools({
         shown.add(key);
         const b = button(rules, (issue.face ? issue.face + " / " : "") + issue.path + ": " + issue.message, () => navigateIssue(issue));
         b.className = "dcs-issue";
-        rules.append(el("p", "Rule: " + issue.rule + " · Policies: " + issue.policies.join(", ")));
+        rules.append(el("p", t('studioTools.rulePolicies',{rule:issue.rule,policies:issue.policies.join(', ')})));
       }
     } else
       rules.append(
         el(
           "p",
-          "No destination policy loaded. Server validation is required before publication.",
+          t('studioTools.noDestinationPolicyLoadedServerValidationIsRequired'),
         ),
       );
     const diagnostics = el("div");
@@ -1257,6 +1253,7 @@ export function mountAuthoringTools({
         side: getSide(),
         edit,
         rebuild,
+        localization,
       });
       if (contribution instanceof HTMLElement) root.append(contribution);
       else if (contribution?.element instanceof HTMLElement) {
@@ -1267,7 +1264,7 @@ export function mountAuthoringTools({
   }
   const ready = loadEntries()
     .then(() => render())
-    .catch((e) => report("Personal library: " + e.message));
+    .catch((e) => report(t('studioTools.libraryError',{message:e.message})));
   return {
     root,
     ready,

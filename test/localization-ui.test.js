@@ -10,6 +10,10 @@ import {renderMarketplace,renderFulfillments,renderTradingControls} from '../src
 import {renderCodeReveal,renderCodeHistory} from '../src/code-ui.js';
 import {createRevealController,ApiError} from '../src/client.js';
 import {createLocalization,englishMessages} from '../src/localization.js';
+import {mountAuthoringTools} from '../src/presentation/studio-tools.js';
+import {createProject} from '../src/presentation/project.js';
+import {addText,createMemoryLibrary} from '../src/presentation/authoring-tools.js';
+import {fixture as artFixture,build as buildArtwork} from './presentation-fixtures.mjs';
 
 const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
 const find=(root,label)=>[...root.querySelectorAll('button')].find(button=>button.textContent.startsWith(label));
@@ -253,4 +257,20 @@ test('localized trading controls preserve policy revisions and exact authored lo
     view=renderTradingControls({}, {client,localization:x.localization});x.root.append(view.node);await view.ready;assert.equal(view.node.lang,'fr');assert.equal(inputField(view.node,t('tradingControls.policyJSON')).value,JSON.stringify(policy,null,2));assert.equal(inputField(view.node,t('tradingControls.reason')).value,t('tradingControls.defaultReason'));click(view.node,t('tradingControls.apply'));await settle();assert.deepEqual(calls.policy[0],{key:'control-1',expectedRevision:7,policy});assert(view.node.textContent.includes(t('tradingControls.saved')));click(view.node,t('tradingControls.apply'));await settle();assert.equal(calls.policy[1].expectedRevision,9);
     const reason='Authored <reason> 0007',until='2026-12-01T02:03:04.000Z';inputField(view.node,t('tradingControls.copyId')).value='copy-0007';inputField(view.node,t('tradingControls.reason')).value=reason;inputField(view.node,t('tradingControls.expiry')).value=until;click(view.node,t('tradingControls.lock'));await settle();assert.deepEqual(calls.locks[0],{key:'control-3',copyId:'copy-0007',locked:true,reason,until});assert(view.node.textContent.includes(t('tradingControls.locked')));click(view.node,t('tradingControls.unlock'));await settle();assert.deepEqual(calls.locks[1],{key:'control-4',copyId:'copy-0007',locked:false,reason,until});assert(view.node.textContent.includes(t('tradingControls.unlocked')));assert.equal(view.node.querySelector('policy,reason'),null);
   }finally{view?.dispose();x.close();}
+});
+
+const studioField=(root,label)=>[...root.querySelectorAll('input,textarea,select')].find(node=>node.getAttribute('aria-label')===label);
+test('standalone authoring tools keep locale per instance and preserve text, field values, enums and undo',async()=>{
+  const window=new Window();globalThis.document=window.document;globalThis.HTMLElement=window.HTMLElement;
+  const pkg=await buildArtwork(artFixture()),first=createProject(pkg),second=createProject(pkg),locale=createLocalization({locale:'fr',messages:markedMessages()}),t=locale.text;
+  const selected=addText(first,'front',{text:'0007 <b>Artist text</b> é ₹'});first.edit(p=>{p.manifest.authoring={fields:[{key:'score',label:'Authored <field>',scope:'card',type:'integer',minimum:0,maximum:1000}],values:{card:{score:7},variant:{}}};});
+  const root=document.createElement('main'),toolbar=document.createElement('nav'),other=document.createElement('main'),otherToolbar=document.createElement('nav');document.body.append(root,other);let tools,english,context;
+  tools=mountAuthoringTools({toolbar,getProject:()=>first,getSide:()=> 'front',getSelected:()=>selected,select:()=>{},rebuild:async()=>tools.render(),report:()=>{},library:createMemoryLibrary(),localization:locale,panels:[options=>{context=options.localization;const node=document.createElement('p');node.textContent='<Host authored panel>';return node;}]});root.append(toolbar,tools.root);
+  english=mountAuthoringTools({toolbar:otherToolbar,getProject:()=>second,getSide:()=> 'front',getSelected:()=> 'art',select:()=>{},rebuild:async()=>english.render(),report:()=>{},library:createMemoryLibrary(),locale:'en'});other.append(otherToolbar,english.root);
+  try{
+    await Promise.all([tools.ready,english.ready]);assert.equal(tools.root.lang,'fr');assert.equal(english.root.lang,'en');assert.equal(context,locale);assert.equal(tools.root.querySelector('b,field'),null);assert.equal(studioField(tools.root,t('studioTools.textContent')).value,'0007 <b>Artist text</b> é ₹');assert(tools.root.textContent.includes(locale.number(1000)));assert(tools.root.textContent.includes('<Host authored panel>'));
+    const style=studioField(tools.root,t('studioTools.fontStyle'));assert.equal(style.querySelector('[value="italic"]').textContent,t('studioTools.optionItalic'));style.value='italic';style.dispatchEvent(new window.Event('change'));await settle();assert.equal(first.scenes.get('scenes/front.json').nodes.find(n=>n.id===selected).typography.style,'italic');
+    const amount=studioField(tools.root,'Authored <field>');assert.equal(amount.value,'7');amount.value='1000';amount.dispatchEvent(new window.Event('change'));await settle();assert.equal(first.manifest.authoring.values.card.score,1000);assert.equal(studioField(tools.root,'Authored <field>').value,'1000');assert(first.undoEdit());tools.render();assert.equal(first.manifest.authoring.values.card.score,7);assert(first.redoEdit());tools.render();assert.equal(first.manifest.authoring.values.card.score,1000);
+    assert.equal(second.scenes.get('scenes/front.json').nodes[0].id,'art');assert(other.textContent.includes('Text, stats & templates'));assert(!other.textContent.includes('‹'));assert.equal(first.scenes.get('scenes/front.json').nodes.find(n=>n.id===selected).text,'0007 <b>Artist text</b> é ₹');
+  }finally{tools.dispose();english.dispose();await window.happyDOM.abort();delete globalThis.document;delete globalThis.HTMLElement;}
 });

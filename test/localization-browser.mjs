@@ -7,11 +7,11 @@ import {resolve,join} from 'node:path';
 import * as pw from 'playwright';
 import {serveReference} from '../src/static.js';
 import {fixture} from './helpers.js';
-import {validateLocalizationBundle,createLocalization} from '../src/localization.js';
+import {localizationSchema,validateLocalizationBundle,createLocalization} from '../src/localization.js';
 
 // This browser boundary uses the supported client interface with deterministic
 // responses. Backend allocation, payment and transport have separate tests.
-const bundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:65536})));
+const bundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:localizationSchema.maximumBytes+1})));
 const output=resolve(process.argv[2]??'test-results/localization'),engine=process.env.BROWSER_ENGINE??'chromium',errors=[];
 const source=fixture();let catalog;
 try{catalog=structuredClone(source.core.catalog());}finally{source.core.close();}

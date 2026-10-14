@@ -32,3 +32,16 @@ cardTypeDefaults.collectible.tradable=false;
 // @ts-expect-error only the built-in names index the defaults table
 void cardTypeDefaults.custom;
 void [canTrade,albumEligible];
+
+import {PERMISSIONS,hasPermission,publicPermissions,authorizePresentation} from '@digital-card/framework/access';
+import type {Permission} from '@digital-card/framework/access';
+const grants:Permission[]=publicPermissions({userId:'user',permissions:['art.import']});
+const allowed:boolean=hasPermission(null,'unknown.permission');
+const ownImport:boolean=authorizePresentation({id:'artist',permissions:['art.import']},'read-import',{actor:'artist'});
+// @ts-expect-error public permissions have a finite known vocabulary
+const unknownPermission:Permission='unknown.permission';
+// @ts-expect-error principal disabled flag is boolean
+hasPermission({disabled:'false'},'art.import');
+// @ts-expect-error the published permission vocabulary is immutable
+PERMISSIONS.push('art.import');
+void [grants,allowed,ownImport,unknownPermission];

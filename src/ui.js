@@ -3,6 +3,7 @@ import {createCardRenderer} from './presentation/card-view.js';
 const portableRenderers=new Map();
 import {createRevealController,createCommandRunner} from './client.js';
 import {defaultCSS} from './styles.js';
+import {createApplicationShell} from './application-shell.js';
 import {createLocalization} from './localization.js';
 import {albumAppearance,applyAlbumAppearance,albumArtwork,validateAlbumPageSize} from './album-appearance.js';
 export {albumAppearance,validateAlbumAppearance} from './album-appearance.js';
@@ -225,15 +226,14 @@ export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSele
 }
 export function mountFramework(root,{client,theme={},css='',cardRenderer=renderCard,packRenderer=renderPack,albumRenderer=renderAlbum,inspectorRenderer=render3DInspector,comparisonRenderer=renderComparison,codeRevealRenderer,listingRenderer,views:customViews={},viewLabels={},
   backRenderer,metadataRenderer,openerView,layouts={},participants=[],navigation='sections',
-  sections=['wallet','shop','packs','collection','marketplace','rewards','codes','albums','trades'],locale='en',messages={}}={}) {
+  sections=['wallet','shop','packs','collection','marketplace','rewards','codes','albums','trades'],shell=null,locale='en',messages={}}={}) {
   const localization=createLocalization({locale,messages}),t=localization.text,num=localization.number,date=localization.date,rate=new Intl.NumberFormat(localization.locale,{minimumFractionDigits:1,maximumFractionDigits:1}).format,oldLang=root.getAttribute('lang'),oldDir=root.getAttribute('dir');
   root.setAttribute('lang',localization.locale);root.setAttribute('dir',localization.dir);
   const removeStyles=installStyles(root,{theme,css});
-  const dashboard=element('div','dc-dashboard'),nav=element('nav','dc-nav'),content=element('div','dc-content');
-  const status=element('div','dc-status'),inspector=element('dialog','dc-inspector-dialog');
-  status.setAttribute('role','status');nav.setAttribute('aria-label',t('nav.features'));inspector.setAttribute('aria-label',t('inspector.dialog'));
-  root.append(dashboard,nav,status,content,inspector);
-  let disposed=false,model=null,openerDispose=null,viewDisposers=[],refreshGeneration=0,mutate=null,commandPrincipal=null,busy=false;
+  const applicationShell=createApplicationShell({root,navigation,navigate,localization});
+  const {status,content,recovery,overlays}=applicationShell.regions,inspector=element('dialog','dc-inspector-dialog');
+  inspector.setAttribute('aria-label',t('inspector.dialog'));overlays.append(inspector);
+  let disposed=false,model=null,openerDispose=null,viewDisposers=[],refreshGeneration=0,mutate=null,commandPrincipal=null,busy=false,shellGeneration=0,shellPrincipal=null;
   let active=sections.includes('shop')?'shop':sections[0],viewLeave=null;
   let effectiveSections=sections;
   const renderer=(copy,options={})=>cardRenderer(copy,{backRenderer,localization,...options});
@@ -241,13 +241,16 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const lineName=id=>model.catalog.lines.find(l=>l.id===id)?.name??id;
   const userName=id=>participants.find(u=>u.id===id)?.name??(id===model.me.userId?t('account.you'):id);
   const closeInspector=()=>inspector.close();
+  let inspectorInvoker=null;
+  inspector.addEventListener('close',()=>{if(inspector.open)return;const invoker=inspectorInvoker;inspectorInvoker=null;const focused=document.activeElement;if(!disposed&&invoker?.isConnected&&([document.body,document.documentElement,invoker].includes(focused)||inspector.contains(focused)))invoker.focus();});
   function inspect(copy) {
     if(disposed)return;
+    if(!inspector.open)inspectorInvoker=document.activeElement;
     inspector.replaceChildren(inspectorRenderer(copy,{cardRenderer:renderer,metadataRenderer,backRenderer,onClose:closeInspector,catalog:model.catalog,localization,
       labels:{line:lineName(copy.lineId),rarity:model.catalog.rarities.find(r=>r.id===copy.rarityId)?.name}}));
     if(!inspector.open)inspector.showModal();
   }
-  function inspectTogether(copies){if(disposed||!copies.length)return;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector,localization}));if(!inspector.open)inspector.showModal();}
+  function inspectTogether(copies){if(disposed||!copies.length)return;if(!inspector.open)inspectorInvoker=document.activeElement;inspector.replaceChildren(comparisonRenderer(copies,{cardRenderer:renderer,catalog:model.catalog,onClose:closeInspector,localization}));if(!inspector.open)inspector.showModal();}
   inspector.addEventListener('click',event=>{if(event.target===inspector)inspector.close();});
   const controller=createRevealController({open:input=>mutate('openPack',{packId:input.packId}),key:client.requestKey});
   async function action(fn,{refreshAfter=true,message=t('status.saved')}={}) {
@@ -327,18 +330,13 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
   const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:t('nav.tradingControls'),admin:t('nav.admin'),marketplace:t('nav.marketplace'),rewards:t('nav.rewards'),codes:t('nav.codes'),albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};
   function renderView() {
-    if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();nav.replaceChildren();dashboard.replaceChildren();
+    if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();recovery.replaceChildren();
     root.classList.toggle('dc-with-nav',navigation==='tabs');
-    if(navigation==='tabs'){
-      const heading=element('div','dc-dashboard-heading');heading.append(element('span','dc-eyebrow',t('account.heading')),element('strong','',model.me.displayName??userName(model.me.userId)));dashboard.append(heading);
-      if(effectiveSections.includes('wallet')){const balances=element('div','dc-wallet-strip');for(const c of model.catalog.currencies){const balance=element('div');balance.append(element('strong','',num(model.wallet[c.id]??0)),element('span','dc-muted',c.name));balances.append(balance);}dashboard.append(balances);}
-      const stats=element('div','dc-account-stats');stats.append(element('span','',t('account.cards',{count:model.inventory.length})));if(effectiveSections.includes('packs'))stats.append(element('span','',t('account.sealedPacks',{count:model.packs.filter(p=>!p.openedAt).length})));dashboard.append(stats);
-      for(const name of effectiveSections){if(typeof name!=='string'||!views[name])continue;const item=button(labels[name]??name,()=>navigate(name));item.className='dc-nav-item';item.dataset.view=name;item.setAttribute('aria-current',active===name?'page':'false');if(name==='packs'){const count=model.packs.filter(p=>!p.openedAt).length;if(count)item.append(element('span','dc-nav-count',num(count)));}nav.append(item);}
-    }
+    applicationShell.update({model,sections:effectiveSections,views,labels,active,userName});
     if(model.recoverable?.length){
-      const recovery=element('section','dc-panel');recovery.setAttribute('aria-label',t('recovery.title'));recovery.append(element('h2','',t('recovery.title')),element('p','',t('recovery.description')));
+      const panel=element('section','dc-panel');panel.setAttribute('aria-label',t('recovery.title'));panel.append(element('h2','',t('recovery.title')),element('p','',t('recovery.description')));
       const names={purchase:'pack purchase',openPack:'pack opening',buyListing:'marketplace purchase',configureAdmin:'settings change',administerCards:'card administration',convert:'currency conversion',tradeUp:'trade-up',saveAlbum:'album change',proposeTrade:'trade offer',acceptTrade:'trade acceptance',cancelTrade:'trade cancellation',counterTrade:'counteroffer',preferences:'preferences',readNotifications:'notification update',commitImport:'catalog import',reportCodeUsage:'code usage report',createShop:'shop creation',createListing:'listing creation',cancelListing:'listing cancellation',enterRaffle:'raffle entry',openCard:'card opening',consumeBinding:'attached action'};
-      for(const intent of model.recoverable){const label=['purchase','openPack','convert','preferences','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','counterTrade','buyListing','createShop','createListing','cancelListing','enterRaffle'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));recovery.append(row);}content.append(recovery);
+      for(const intent of model.recoverable){const label=['purchase','openPack','convert','preferences','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','counterTrade','buyListing','createShop','createListing','cancelListing','enterRaffle'].includes(intent.command)?t('recovery.'+intent.command):names[intent.command]??'saved change',row=element('div');row.append(element('strong','',label));if(intent.input.productId)row.append(element('p','',t('recovery.product',{count:intent.input.quantity??1,product:model.catalog.products.find(product=>product.id===intent.input.productId)?.name??intent.input.productId})));row.append(button(t('recovery.action',{change:label}),()=>action(()=>mutate.resume(intent),{message:t('recovery.success')})));panel.append(row);}recovery.append(panel);
     }
     for(const name of (navigation==='tabs'?[active]:effectiveSections)){const view=typeof name==='function'?()=>name(model,{client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,localization}):views[name];if(view){const result=view();content.append(result.node??result);if(result.dispose)viewDisposers.push(result.dispose);if(result.requestLeave)viewLeave=result.requestLeave;}}
   }
@@ -347,6 +345,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     const generation=++refreshGeneration;
     const [catalog,me,capabilities]=await Promise.all([client.catalog(),client.me(),client.capabilities?.()??null]);
     if(disposed||generation!==refreshGeneration)return;
+    if(shellPrincipal!==me.userId){if(shellPrincipal!==null)shellGeneration++;shellPrincipal=me.userId;}
     const enabled=name=>!capabilities||capabilities.available[name]||capabilities.draining.includes(name);
     const commerce=enabled('directSales')||enabled('resale')||enabled('packs'),packsEnabled=enabled('packs'),trading=enabled('trading');
     const sectionEnabled={shop:!capabilities||capabilities.available.packs,packs:packsEnabled,marketplace:commerce,rewards:commerce||capabilities?.history?.rewards,codes:commerce||packsEnabled||capabilities?.history?.codes,trades:trading,tradingControls:trading,wallet:commerce||packsEnabled||trading,albums:!capabilities||catalog.features.publicAlbums};
@@ -361,6 +360,12 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     const recoverable=recovery.items.filter(intent=>!(mutate.pending(intent.command)?._confirmed&&mutate.pending(intent.command)?.key===intent.input.key));
     model={catalog,me,capabilities,wallet:walletData,packs:packData,inventory,albums:albumData,trades:tradeData,availability,pity,recoverable};renderView();
   }
+  async function setShell(value){
+    const generation=++shellGeneration;
+    try{const manifest=await value;await ready;if(disposed||generation!==shellGeneration)return false;return applicationShell.install(manifest??null);}
+    catch{if(disposed||generation!==shellGeneration)return false;applicationShell.install(null);return false;}
+  }
+  const shellReady=setShell(shell);
   const ready=refresh().catch(error=>{if(disposed)return;status.className='dc-status dc-error';status.textContent=error.message;throw error;});
-  return {ready,refresh,inspect,inspectTogether,dispose(){disposed=true;mutate?.dispose();openerDispose?.();viewDisposers.forEach(fn=>fn());controller.dispose();inspector.close();removeStyles();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);}};
+  return {ready,shellReady,setShell,refresh,inspect,inspectTogether,dispose(){if(disposed)return;disposed=true;shellGeneration++;mutate?.dispose();openerDispose?.();viewDisposers.forEach(fn=>fn());controller.dispose();inspector.close();applicationShell.dispose();removeStyles();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);}};
 }

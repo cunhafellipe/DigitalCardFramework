@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.dev/schemas/application-shell.schema.json",
+  "title": "Portable application shell",
+  "description": "At most 32 KiB UTF-8 JSON, 64 tree nodes and depth 8. Exactly one content, status, recovery and overlays region. Overlays is the final direct child of the root container. Regions are unique. Static strings must be well-formed Unicode.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "tree"
+  ],
+  "properties": {
+    "profile": {
+      "const": "dc.application-shell@1"
+    },
+    "tree": {
+      "$ref": "#/$defs/container"
+    }
+  },
+  "$defs": {
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "justify": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "space-between"
+          ]
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "grow": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "color": {
+          "enum": [
+            "bg",
+            "panel",
+            "text",
+            "muted",
+            "accent",
+            "border",
+            "button-text",
+            "card-text"
+          ]
+        },
+        "background": {
+          "enum": [
+            "bg",
+            "panel",
+            "text",
+            "muted",
+            "accent",
+            "border",
+            "button-text",
+            "card-text"
+          ]
+        }
+      }
+    },
+    "responsive": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "justify": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "space-between"
+          ]
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "grow": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "color": {
+          "enum": [
+            "bg",
+            "panel",
+            "text",
+            "muted",
+            "accent",
+            "border",
+            "button-text",
+            "card-text"
+          ]
+        },
+        "background": {
+          "enum": [
+            "bg",
+            "panel",
+            "text",
+            "muted",
+            "accent",
+            "border",
+            "button-text",
+            "card-text"
+          ]
+        },
+        "flow": {
+          "enum": [
+            "row",
+            "column",
+            "grid"
+          ]
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section"
+      ],
+      "properties": {
+        "section": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entries"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
+        }
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "children"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "row",
+            "column",
+            "grid"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "layout": {
+          "$ref": "#/$defs/layout"
+        },
+        "narrow": {
+          "$ref": "#/$defs/responsive"
+        },
+        "wide": {
+          "$ref": "#/$defs/responsive"
+        }
+      }
+    },
+    "static": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "narrow": {
+              "$ref": "#/$defs/responsive"
+            },
+            "wide": {
+              "$ref": "#/$defs/responsive"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "heading"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 6
+            },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "narrow": {
+              "$ref": "#/$defs/responsive"
+            },
+            "wide": {
+              "$ref": "#/$defs/responsive"
+            }
+          }
+        }
+      ]
+    },
+    "region": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "region"
+            },
+            "name": {
+              "enum": [
+                "account",
+                "balances",
+                "statistics",
+                "status",
+                "recovery",
+                "content"
+              ]
+            },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "narrow": {
+              "$ref": "#/$defs/responsive"
+            },
+            "wide": {
+              "$ref": "#/$defs/responsive"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "region"
+            },
+            "name": {
+              "const": "navigation"
+            },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "narrow": {
+              "$ref": "#/$defs/responsive"
+            },
+            "wide": {
+              "$ref": "#/$defs/responsive"
+            },
+            "arrangement": {
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            "groups": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/group"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "region"
+            },
+            "name": {
+              "const": "overlays"
+            }
+          }
+        }
+      ]
+    },
+    "node": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/container"
+        },
+        {
+          "$ref": "#/$defs/static"
+        },
+        {
+          "$ref": "#/$defs/region"
+        }
+      ]
+    }
+  }
+}

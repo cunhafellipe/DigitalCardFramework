@@ -690,3 +690,40 @@ The [marketplace display schema](marketplace-display.schema.json) describes list
 Editing a seller draft invalidates its stock review. Ticket-based mint-pack stock retains the existing allocation quote, status and reconciliation controls. An uncertain purchase or listing creation must recover its original command before a new attempt. The portable interface cannot acknowledge an allocation failure or submit a financial command directly.
 
 Disabling the adapter restores native controls. Dispose the application and adapter together to release sessions and rendering resources. Fulfillment administration and trading-policy controls are separate views.
+
+## Compose the application shell
+
+An application shell places native account information, navigation, status, recovery and feature content inside an authored layout. Generate a rail or header layout with either example:
+
+```sh
+python examples/application-shell/generate.py rail > shell.json
+go run examples/application-shell/generate.go header > shell.json
+```
+
+Serve the generated JSON as a static asset, then load it when mounting the application:
+
+```js
+import {loadApplicationShell} from '@digital-card/framework/application-shell';
+import {mountFramework} from '@digital-card/framework/ui';
+
+const app = mountFramework(root, {
+  client,
+  navigation: 'tabs',
+  shell: loadApplicationShell('/shell.json'),
+});
+await app.shellReady;
+// Restore the default layout:
+await app.setShell(null);
+// When removing the application:
+app.dispose();
+```
+
+The [application shell schema](application-shell.schema.json) defines nested rows, columns and grids, literal headings and text, native regions and responsive layout properties. A manifest contains at most 64 nodes, reaches at most eight levels and occupies at most 32 KiB of JSON. Static strings are limited to 500 characters. Colors use approved theme tokens; arbitrary HTML, executable code and asset URLs are not accepted.
+
+Content, status, recovery and overlays are required regions. Account, balances and statistics can be placed separately or omitted. Native navigation remains filtered by the authenticated account's available sections. Navigation still observes administrator leave checks, and recovery still uses the original host-owned command. The layout cannot authorize a transaction or suppress its native confirmation.
+
+Include navigation when using tabs with two or more available sections; otherwise the framework restores the default layout. Navigation groups may reorder and label available sections. Available sections omitted from the groups are appended automatically.
+
+Use `layout` for base properties, `narrow` for viewport widths up to 760 pixels, and `wide` for widths from 761 pixels. Gap and padding accept integers from 0 to 64 pixels; grids accept one to twelve columns. Responsive properties can also change a container's flow between row, column and grid.
+
+Keep the overlays region as the final direct child of the root container. The framework places native overlays outside authored layout containers so dialogs are not clipped by the layout. Invalid or failed shell loads restore the default layout. Replacing the shell preserves the application's active section and native regions; disposing the application prevents late loads from installing a layout.

@@ -15,6 +15,7 @@
     "./sqlite": "./src/sqlite.js",
     "./worker": "./src/framework-worker-service.js",
     "./ui": "./src/ui.js",
+    "./application-shell": {"types":"./src/application-shell.d.ts","default":"./src/application-shell.js"},
     "./client": {
       "types": "./src/client.d.ts",
       "default": "./src/client.js"

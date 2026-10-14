@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added portable application-shell layouts with bounded responsive composition, native navigation and recovery regions, and Python/Go rail and header examples.
+- Restored focus to portable collection and shop controls after closing native inspection and purchase-review dialogs.
+
 - Added portable marketplace views with shared native purchase and seller review, stock recovery, order history and Python/Go layouts.
 - Preserved typed shop searches across delayed page updates and kept standalone marketplace purchase completion inline so order history remains accessible.
 - Kept marketplace controls valid when the portable view first connects and when a hidden page becomes visible again.

@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/shop-display/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile": {
+      "const": "dc.shop-display@1"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 8,
+      "items": {
+        "enum": [
+          "productName",
+          "line",
+          "price",
+          "availability",
+          "pity",
+          "allocation",
+          "rates",
+          "preview"
+        ]
+      }
+    },
+    "locale": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "dir": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "search": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "more": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "previous": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "select": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "quantity": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "review": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "retry": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "rates": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "close": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "empty": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "working": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "available": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "unavailable": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "search",
+        "more",
+        "previous",
+        "select",
+        "quantity",
+        "review",
+        "retry",
+        "rates",
+        "close",
+        "empty",
+        "working",
+        "available",
+        "unavailable"
+      ]
+    },
+    "search": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "hasMore": {
+      "type": "boolean"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "busy": {
+      "type": "boolean"
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "maxQuantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "reviewable": {
+            "type": "boolean"
+          },
+          "recoverable": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "line": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "price": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "unitAmount": {
+                "type": "number",
+                "minimum": 0
+              },
+              "totalAmount": {
+                "type": "number",
+                "minimum": 0
+              },
+              "currency": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "unitAmount",
+              "totalAmount",
+              "currency"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "pity": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "allocation": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "handle",
+          "position",
+          "quantity",
+          "maxQuantity",
+          "selected",
+          "reviewable",
+          "recoverable"
+        ]
+      }
+    },
+    "details": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "handle": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasMore": {
+              "type": "boolean"
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "explanation": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "rows": {
+              "type": "array",
+              "maxItems": 48,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "slot": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "draws": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "weight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "totalWeight": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "remaining": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "value": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "position",
+                  "slot",
+                  "draws",
+                  "weight",
+                  "totalWeight",
+                  "remaining",
+                  "label",
+                  "value"
+                ]
+              }
+            }
+          },
+          "required": [
+            "handle",
+            "page",
+            "total",
+            "hasMore",
+            "summary",
+            "explanation",
+            "rows"
+          ]
+        }
+      ]
+    },
+    "previews": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+          },
+          "mediaType": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "bytes": {
+            "description": "Native Uint8Array; raster budgets are separately validated."
+          }
+        },
+        "required": [
+          "handle",
+          "mediaType",
+          "bytes"
+        ]
+      }
+    }
+  },
+  "required": [
+    "profile",
+    "snapshotId",
+    "fields",
+    "locale",
+    "dir",
+    "labels",
+    "search",
+    "page",
+    "hasMore",
+    "total",
+    "busy",
+    "items",
+    "details",
+    "previews"
+  ]
+}

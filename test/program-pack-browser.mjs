@@ -25,7 +25,7 @@ const programServer=createServer(async(request,response)=>{
     const path=new URL(request.url,'http://localhost').pathname;
     if(path==='/'||path==='/index.html'){response.setHeader('content-type','text/html');response.end(await readFile(resolve(temp,'index.html')));return;}
     if(path==='/card.css'){response.setHeader('content-type','text/css');response.end(await readFile(resolve(temp,'card.css')));return;}
-    if(['/program-bootstrap.js','/program.js','/editor-display.js','/collection-display.js','/data.js','/album-display.js','/opener-display.js','/media.js'].includes(path)){response.setHeader('content-type','text/javascript');response.end(await readFile(new URL('../src/presentation'+path,import.meta.url)));return;}
+    if(['/program-bootstrap.js','/program.js','/editor-display.js','/collection-display.js','/shop-display.js','/data.js','/album-display.js','/opener-display.js','/media.js'].includes(path)){response.setHeader('content-type','text/javascript');response.end(await readFile(new URL('../src/presentation'+path,import.meta.url)));return;}
     response.writeHead(404);response.end();
   }catch(error){response.writeHead(500);response.end(error.message);}
 });

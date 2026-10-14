@@ -16,6 +16,7 @@ export const englishMessages=freeze({
   'wallet.converted':'Converted {amount} {from} into {received} {to}.','wallet.wholeUnits':'Choose an amount that converts to a whole unit. Fractional results are rejected.',
   'artwork.back':'Show pack back','artwork.front':'Show pack front','artwork.subtitle':'COLLECTIBLE CARDS','artwork.reveal':'Pack reveal artwork',
   'shop.title':'Find your next discovery','shop.description':'Choose a pack, check its contents and price, then open it in My packs.',
+  'shop.search':'Search packs','shop.more':'More packs','shop.previous':'Previous packs','shop.select':'Pack details','shop.closeReview':'Close purchase review','shop.reviewAction':'Review purchase','shop.retryAction':'Recover original purchase','shop.empty':'No packs match this search.','shop.available':'Available for review',
   'shop.stepBuy':'Buy a pack','shop.stepBuyDescription':'Spend your account’s currency','shop.stepReveal':'Reveal your cards','shop.stepRevealDescription':'Open the pack in My packs','shop.stepCollect':'Make it yours','shop.stepCollectDescription':'Inspect cards and build an album',
   'shop.cardsPerPack':{one:'{count} card per pack',other:'{count} cards per pack'},'shop.duplicateProtection':' · Duplicate protection',
   'shop.pityPersonal':'Personal pity targets {rarity} or better by pack {after} since your last qualifying ordinary card · {progress}/{after} packs. A qualifying ordinary card resets pity; special inserts do not. When due, pity applies to the first draw in the first ordinary-card slot. Sealed packs count.',

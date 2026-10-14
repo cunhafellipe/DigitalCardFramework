@@ -1,3 +1,4 @@
+import type {ShopDisplayGrant,ShopDisplaySnapshot,ShopIntentEvent} from './shop-display.js';
 import type {AlbumDisplayGrant, AlbumDisplaySnapshot} from './album-display.js';
 import type {OpenerDisplayGrant, OpenerDisplaySnapshot, OpenerIntent, OpenerIntentEvent} from './opener-display.js';
 import type {EditorDisplayGrant,EditorDisplaySnapshot,EditorProposal} from './editor-display.js';
@@ -16,6 +17,7 @@ export interface ProgramRegistryEntry {
   openerDisplay?: OpenerDisplayGrant;
   editorDisplay?: EditorDisplayGrant;
   collectionDisplay?:CollectionDisplayGrant;
+  shopDisplay?:ShopDisplayGrant;
 }
 export type ProgramRegistry = ReadonlyMap<string, ProgramRegistryEntry>;
 export interface ProgramMountOptions {
@@ -36,9 +38,12 @@ export interface ProgramMountOptions {
   onSessionEnd?():void;
   collectionDisplay?:CollectionDisplaySnapshot;
   onCollectionIntent?(event:CollectionIntentEvent):void;
+  shopDisplay?:ShopDisplaySnapshot;
+  onShopIntent?(event:ShopIntentEvent):void;
 }
 export interface MountedProgram {
   setCollectionDisplay(snapshot:CollectionDisplaySnapshot):void;
+  setShopDisplay(snapshot:ShopDisplaySnapshot):void;
   setInputs(inputs: ProgramInputs): void;
   setAlbumDisplay(snapshot: AlbumDisplaySnapshot): void;
   setOpenerDisplay(snapshot: OpenerDisplaySnapshot): void;
@@ -48,8 +53,9 @@ export interface MountedProgram {
 }
 export declare function programHeaders(assetOrigin: string): Record<string, string>;
 export declare function mountProgram(root: HTMLElement, options: ProgramMountOptions): MountedProgram;
-export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void}): Promise<{
+export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void;onShopDisplay?(snapshot:ShopDisplaySnapshot):void}): Promise<{
   collectionIntent(event:CollectionIntentEvent):void;
+  shopIntent(event:ShopIntentEvent):void;
   editorProposal(snapshotId:string,revision:number,patch:EditorProposal['patch']):void;
   intent(name: string): void;
   selectItem(snapshotId: string, handle: string): void;

@@ -156,6 +156,42 @@
       "placeholders": [],
       "plural": false
     },
+    "shop.search": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.more": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.previous": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.select": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.closeReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.reviewAction": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.retryAction": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.empty": {
+      "placeholders": [],
+      "plural": false
+    },
+    "shop.available": {
+      "placeholders": [],
+      "plural": false
+    },
     "shop.stepBuy": {
       "placeholders": [],
       "plural": false

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added portable complete shop views with scoped product and rate displays, native purchase review and recovery, and independent Python/Go layouts.
+
 - Added host-approved procedural WASM pixel effects with bounded workers, program revocation and snapshot capture tied to the requested inputs.
 
 - Added verified offline recovery bundles for the database, published artwork, moderation policies and durable imports, with restoration into a new installation directory.

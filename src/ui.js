@@ -1,3 +1,4 @@
+import {renderShop} from './shop-ui.js';
 import {createCardRenderer} from './presentation/card-view.js';
 const portableRenderers=new Map();
 import {createRevealController,createCommandRunner} from './client.js';
@@ -293,98 +294,14 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
       form.append(row,preview,button(t('wallet.convert'),()=>action(()=>mutate('convert',{from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version}),{message:r=>t('wallet.converted',{amount:r.amount,from:currencyName(r.from),received:r.received,to:currencyName(r.to)})})),element('p','dc-muted',t('wallet.wholeUnits')));node.append(form);
     }return node;
   }
-  function packArt(product,small=false,onSelect,onRendered) {
+  function packArt(product,small=false,onSelect,onRendered,ownDispose) {
     const previewCards=[],pool=product.slots?.flatMap(s=>s.pool)??[];for(const entry of [...pool.slice(0,2),pool[0]].filter(Boolean)){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),definition=model.catalog.cards.find(c=>c.id===variant?.cardId);if(!definition)continue;const card=renderer({id:'preview',definition,variant,rarityId:variant.rarityId,serialNumber:null,bindings:{}},{interactive:false});card.tabIndex=-1;previewCards.push(card);}
     let rendered;try{rendered=packRenderer(product,{small,lineName:lineName(product.lineId),previewCards,localization,onSelect});}catch{rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});}
     if(!rendered?.node&&!rendered?.nodeType)rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});
     onRendered?.(rendered);
-    if(rendered?.node){if(rendered.dispose)viewDisposers.push(()=>rendered.dispose());return rendered.node;}return rendered;
+    if(rendered?.node){if(rendered.dispose)(ownDispose??(fn=>viewDisposers.push(fn)))(()=>rendered.dispose());return rendered.node;}return rendered;
   }
-  function shop() {
-    let shopDisposed=false;const principal=commandPrincipal,commands=mutate;
-    viewDisposers.push(()=>{shopDisposed=true;});
-    const fence=()=>{if(disposed||shopDisposed||commandPrincipal!==principal||typeof client.principal==='function'&&client.principal()!==principal)throw new Error(t('shop.changedView'));};
-    const node=section(t('shop.title'),t('shop.description'));
-    const guide=element('div','dc-steps');
-    for(const [n,title,description]of [['01','shop.stepBuy','shop.stepBuyDescription'],['02','shop.stepReveal','shop.stepRevealDescription'],['03','shop.stepCollect','shop.stepCollectDescription']]){const step=element('div');step.append(element('span','dc-step-number',n),element('strong','',t(title)),element('small','dc-muted',t(description)));guide.append(step);}node.append(guide);
-    const grid=element('div','dc-shop-grid');
-    for(const product of model.catalog.products.filter(p=>p.enabled!==false)) {
-      const box=element('article','dc-product');box.append(packArt(product,false,()=>{if(!disposed&&!shopDisposed&&commandPrincipal===principal&&buy.isConnected)buy.focus();}));
-      const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0),strategy=product.allocationStrategy,
-        deckVersion=strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3)||(strategy.algorithm==='weighted-deck@4'&&strategy.version===4))?strategy.version:0,ticketDeck=deckVersion>0;
-    info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',t('shop.cardsPerPack',{count})+((!ticketDeck||deckVersion>=2)&&product.duplicatePolicy.scope!=='none'?t('shop.duplicateProtection'):'')));
-    if(product.pity){const progress=model.pity[product.id]??0,rarity=model.catalog.rarities.find(r=>r.id===product.pity.rarityId)?.name??product.pity.rarityId;info.append(element('p','dc-pity-note',t(deckVersion>=2?'shop.pityPersonal':'shop.pityLegacy',{rarity,after:product.pity.after,progress})));}
-    if(deckVersion>=2&&product.duplicatePolicy.scope!=='none'){
-      const protection=t(product.duplicatePolicy.scope==='inventory'?'shop.duplicatesInventory':'shop.duplicatesPack');
-      const fallback=t(product.duplicatePolicy.fallback==='allow'?'shop.fallbackAllow':'shop.fallbackReject');
-      info.append(element('p','dc-muted',protection+' '+t('shop.inserts')+' '+fallback));
-    }
-    if(product.availableFrom||product.availableUntil)info.append(element('small','dc-muted',(product.availableFrom?t('shop.availableFrom',{date:date(product.availableFrom)}):'')+(product.availableUntil?t('shop.availableUntil',{date:date(product.availableUntil)}):'')));
-      const details=element('details','dc-rates');details.append(element('summary','',t(ticketDeck?'shop.ticketsSummary':'shop.ratesSummary')));
-      for(const slot of product.slots) {
-        const total=slot.pool.reduce((n,e)=>n+e.weight,0);details.append(element('p','dc-muted',t('shop.draws',{count:slot.count})+(ticketDeck?t('shop.poolTickets',{count:total}):':')));
-        for(const entry of slot.pool){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),card=model.catalog.cards.find(c=>c.id===variant.cardId),row=element('div','dc-rate-row'),remaining=model.availability?.variants.find(v=>v.id===variant.id)?.remaining;row.append(element('span','',card.name+' · '+variant.rarityId+(remaining!==undefined&&remaining!==null?t('shop.remaining',{count:remaining}):'')),element('strong','',ticketDeck?t('shop.tickets',{count:entry.weight}):rate(entry.weight/total*100)+'%'));details.append(row);}
-      }
-      details.append(element('p','dc-muted',ticketDeck?[t('shop.deckExplanation'),...(deckVersion>=2?[t('shop.conditionalTickets')]:[]),...(deckVersion>=3?[t('shop.codeSupply')]:[]),...(deckVersion>=4?[t('shop.feasibleTickets')]:[]),t('shop.quoteSupply')].join(' '):t('shop.baseRates')));info.append(details);
-      const purchase=element('div','dc-purchase-row'),quantity=field(purchase,t('shop.quantity'),'number','1');quantity.min='1';quantity.max=String(product.maxQuantity);quantity.step='1';
-      let pendingPurchase=commands.pending('purchase'),recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id,reviewedQuote=null,quoteGeneration=0,allocationState=null,allocationBlocked=false;
-      const allocationNote=element('p','dc-muted');allocationNote.setAttribute('role','status');
-      const activationNote=element('p','dc-binding-activation-note');activationNote.setAttribute('role','status');info.append(activationNote);
-      function showActivation(quote){activationNote.textContent=quote?.bindingActivation?t('shop.activation',{count:quote.bindingActivation.maximum}):'';}
-      if(recover){quantity.value=String(pendingPurchase.quantity);quantity.disabled=true;}
-      const buy=button('',async()=>{
-        await action(async()=>{
-          fence();const current=++quoteGeneration,requestedQuantity=Number(quantity.value);
-          try{
-            const quote=recover?pendingPurchase:reviewedQuote??await client.quote({productId:product.id,quantity:requestedQuantity});fence();
-            if(current!==quoteGeneration||requestedQuantity!==Number(quantity.value))throw new Error(t('shop.changedQuantity'));
-            if((ticketDeck||quote.bindingActivation)&&!recover&&!reviewedQuote){reviewedQuote=structuredClone(quote);showActivation(reviewedQuote);allocationNote.textContent=[t('shop.review',{count:quote.quantity,amount:quote.price.amount,currency:currencyName(quote.price.currencyId)}),...(deckVersion>=3?[t('shop.reviewCodeSupply')]:[]),...(deckVersion>=4?[t('shop.feasibleTickets')]:[]),t('shop.reviewAllocation')].join(' ');return {review:true,activation:!!reviewedQuote.bindingActivation};}
-            if(!ticketDeck&&!recover&&(quote.price.currencyId!==product.price.currencyId||quote.price.amount!==product.price.amount*requestedQuantity)){await refresh();throw new Error(t('shop.changedPrice'));}
-            const original=commands.pending('purchase');const receipt=await (!recover&&original?._confirmed?commands.beginNew('purchase',quote):recover?commands.recover('purchase',quote):commands('purchase',quote));fence();active='packs';if(ticketDeck)await refresh();return receipt;
-          }catch(error){if(!disposed&&!shopDisposed){reviewedQuote=null;if(ticketDeck&&['ALLOCATION_STALE','ALLOCATION_PENDING'].includes(error.code)){allocationBlocked=true;allocationNote.textContent=t('allocation.needsReview');}}throw error;}
-        },{refreshAfter:!ticketDeck,message:r=>r.review?t(r.activation?'shop.reviewActivationReady':'shop.reviewReady'):t('shop.purchased',{count:r.packs.length})+(r.bindingActivation?' '+t('shop.activationDelivered',{count:r.bindingActivation.count}):'')});
-        if(!disposed&&!shopDisposed)update();
-      });
-      function update(){
-        pendingPurchase=commands.pending('purchase');recover=pendingPurchase&&!pendingPurchase._confirmed&&pendingPurchase.productId===product.id;
-        quantity.disabled=!!recover;
-        const total=recover?pendingPurchase.price.amount:reviewedQuote?.price.amount??product.price.amount*Number(quantity.value),currency=recover?pendingPurchase.price.currencyId:reviewedQuote?.price.currencyId??product.price.currencyId,available=model.availability?.products.find(p=>p.id===product.id)?.available!==false;
-        buy.textContent=available||recover?t(recover?'shop.retry':ticketDeck||reviewedQuote?(reviewedQuote?'shop.buyReviewed':'shop.reviewButton'):'shop.buy',{amount:Number.isFinite(total)?total:'—',currency:currencyName(currency)}):t('shop.unavailable');
-        showActivation(recover?pendingPurchase:reviewedQuote);
-        buy.disabled=!recover&&(!available||allocationBlocked||!!pendingPurchase&&!pendingPurchase._confirmed||!Number.isInteger(Number(quantity.value))||Number(quantity.value)<1||Number(quantity.value)>product.maxQuantity||total>(model.wallet[currency]??0));
-      }
-      quantity.addEventListener('input',()=>{quoteGeneration++;reviewedQuote=null;allocationNote.textContent='';update();});update();purchase.append(buy);info.append(purchase);
-      if(ticketDeck){
-        info.append(allocationNote);
-        if(typeof client.allocationStatus==='function'&&typeof client.acknowledgeAllocation==='function'){
-          const recovery=element('div','dc-allocation-recovery'),attemptNote=element('p','dc-muted');attemptNote.setAttribute('role','status');
-          const inspectAttempt=button(t('allocation.check'),async()=>{
-            await action(async()=>{fence();const result=await client.allocationStatus({productId:product.id});fence();
-              if(result.productId!==product.id||!['idle','prepared','stale','completed','acknowledged'].includes(result.state)||['prepared','stale','completed'].includes(result.state)&&typeof result.attemptId!=='string')throw new Error(t('allocation.invalidStatus'));
-              allocationState=result;allocationBlocked=['prepared','stale'].includes(result.state);if(allocationBlocked){reviewedQuote=null;quoteGeneration++;}if(result.state==='acknowledged')await confirmOriginalFailure();showAttempt();return result;
-            },{refreshAfter:false,message:t('allocation.checked')});if(!disposed&&!shopDisposed)update();
-          });
-          const acknowledge=button(t('allocation.acknowledge'),async()=>{
-            await action(async()=>{fence();if(!allocationState||!['prepared','stale'].includes(allocationState.state))throw new Error(t('allocation.checkFirst'));
-              const attemptId=allocationState.attemptId,result=await client.acknowledgeAllocation({attemptId});fence();if(result.attemptId!==attemptId||result.state!=='acknowledged')throw new Error(t('allocation.invalidAcknowledgement'));
-              allocationState={...allocationState,state:'acknowledged',errorCode:null};allocationBlocked=false;reviewedQuote=null;quoteGeneration++;
-              await confirmOriginalFailure();
-              const original=commands.pending('purchase');showAttempt();return {...result,unresolved:!!original&&!original._confirmed};
-            },{refreshAfter:false,message:result=>t(result.unresolved?'allocation.acknowledgedUnresolved':'allocation.acknowledged')});if(!disposed&&!shopDisposed)update();
-          });
-          async function confirmOriginalFailure(){const pending=commands.pending('purchase');if(pending&&pending.productId===product.id&&!pending._confirmed&&typeof commands.confirmFailed==='function'){await commands.confirmFailed('purchase',pending);fence();}}
-          function showAttempt(){
-            const state=allocationState?.state;acknowledge.hidden=!['prepared','stale'].includes(state);
-            if(state==='completed')attemptNote.textContent=t('allocation.completed');
-            else if(state==='prepared'||state==='stale')attemptNote.textContent=t(state==='stale'?'allocation.stale':'allocation.pending')+' '+t('allocation.abandon');
-            else{const pending=commands.pending('purchase');attemptNote.textContent=t(pending&&!pending._confirmed?'allocation.retryOriginal':'allocation.freshReview');}
-          }
-          acknowledge.hidden=true;recovery.append(inspectAttempt,attemptNote,acknowledge);info.append(recovery);
-        }
-      }
-      box.append(info);grid.append(box);
-    }node.append(grid);return node;
-  }
+  function shop(){return renderShop(model,context());}
   function packs() {
     const node=section(t('packs.title'),t('packs.description'));
     const appearances=new Map(),principal=commandPrincipal;let packsDisposed=false;
@@ -405,7 +322,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     node.append(list);const opener=element('div');node.append(opener);openerDispose=mountOpener(opener,{controller,cardRenderer:renderer,view:openerView,onSelect:inspect,localization,packArtwork:id=>model.packs.find(pack=>pack.id===id)?.product.artwork});return node;
   }
   const viewState={};
-  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,isActionBusy:()=>busy,getPrincipal:()=>commandPrincipal,isCurrentModel:captured=>!disposed&&model===captured,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
+  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,isActionBusy:()=>busy,getPrincipal:()=>commandPrincipal,isCurrentModel:captured=>!disposed&&model===captured,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,packArt,onPurchased:()=>{active='packs';},layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
   const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:t('nav.tradingControls'),admin:t('nav.admin'),marketplace:t('nav.marketplace'),rewards:t('nav.rewards'),codes:t('nav.codes'),albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};

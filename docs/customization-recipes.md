@@ -558,3 +558,45 @@ The replacement owns the collection layout and controls. It supports owned-card 
 Inspection and comparison use the host's configured renderers. Favorite and wishlist requests use the existing authenticated command path. A trade-up request opens native review; only confirmation of the selected recipe and copies submits the command. The program receives opaque handles and current snapshots, never the client, account credentials, private bindings or arbitrary mutation access. The host rejects stale or busy actions and clears collection state when the account changes.
 
 The [collection display schema](collection-display.schema.json) defines the versioned projection. Display fields are explicit grants; `tags`, `stats` and `metadata` are optional additional disclosures. Previews use bounded raster bytes resolved by the parent. `setEnabled(false)` restores the native collection, and `dispose()` releases the adapter. Invalid or unavailable programs retain native fallback. This adapter replaces the collection section; other application sections and shell navigation retain their existing contracts.
+
+## Replace the complete shop view with a portable program
+
+A portable shop controls product browsing and layout while the parent application owns purchase review and recovery. Generate either complete example layout:
+
+```sh
+python examples/plugins/python-shop-view.py shop-output
+go run examples/plugins/go-shop-view/main.go shop-output
+```
+
+Each generator writes `index.html` and `shop.css`. Serve those files from the program origin, with the public bootstrap at `/program-shop-bootstrap.js` and its module dependencies available at the corresponding relative paths. Install the view through `views.shop`:
+
+```js
+import {createProgramShopView} from '@digital-card/framework/presentation/program-shop-view';
+import {shopIntents} from '@digital-card/framework/presentation/shop-display';
+import {mountFramework} from '@digital-card/framework/ui';
+
+const fields = ['productName', 'line', 'price', 'availability', 'pity', 'allocation', 'rates', 'preview'];
+const shop = createProgramShopView({
+  registry: new Map([['shop.example', {
+    approved: true,
+    version: '1.0.0',
+    url: 'https://programs.example/shop/index.html',
+    intents: [...shopIntents],
+    shopDisplay: {profile: 'dc.shop-display@1', fields},
+  }]]),
+  programId: 'shop.example',
+  displayFields: fields,
+});
+const app = mountFramework(root, {client, views: {shop}});
+// When removing the application:
+app.dispose();
+shop.dispose();
+```
+
+Use a reviewed, credential-free program origin with the separate-origin headers described above. Serve the public shop bootstrap and its module dependencies from that origin. The registry grant and requested display fields determine which product details the program receives. Product pages and selected-product rate pages each contain at most 48 entries. Quantities respect each product's maximum, up to 100.
+
+The program can request search, paging, product selection, quantity changes and native review. Opening review does not obtain a quote or prepare an allocation. The first explicit native review action obtains the quote; the next purchase confirmation submits that retained quote through the existing command runner. Recovery, allocation status and acknowledgement remain native controls. Pending commands keep their original identity when retried.
+
+The [shop display schema](shop-display.schema.json) defines the versioned projection. Snapshots expose opaque product handles and approved display data. They do not expose catalog identifiers, wallet balances, quote tokens, command keys, receipts or credentials. Rate disclosures distinguish independent base rates from finite-ticket draws and retain the applicable conditional, code-supply and feasibility explanations. A preview grant permits bounded raster artwork.
+
+The host rejects stale or busy actions and invalidates review when its account, model or program session changes. Disabling the view with `shop.setEnabled(false)` restores the native shop. Program failure retains native fallback, and application recovery controls remain available for pending purchases. Dispose both the application and adapter when removing them.

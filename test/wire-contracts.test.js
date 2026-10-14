@@ -227,3 +227,31 @@ test('listing and order records validate creation, purchase replay, cancellation
   now='2026-09-30T12:03:00.000Z';x.core.expireListings({role:'admin'});
   assert.equal((await call('listings',undefined)).items.find(row=>row.id===timed.id).status,'expired');
 });
+
+test('commerce settings and shop responses preserve effective controls, metadata and viewer fields',async t=>{
+  const x=fixture(),manager={...x.alice,role:'admin'};let actor=manager,handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const initial=await call('commerceSettings',undefined);assert.equal(initial.revision,0);assert.deepEqual(initial.settings,initial.effectiveSettings);
+  const configuration={key:'commerce-record',expectedRevision:0,settings:{playerShops:true,packResale:true,allowedCurrencyIds:['credits']}};
+  const configured=await call('configureCommerce',configuration);assert.equal(configured.revision,1);assert.equal(configured.settings.playerShops,true);assert.equal(configured.settings.maxStockPerListing,100);assert.equal(Object.hasOwn(configured,'effectiveSettings'),false);assert.deepEqual(await call('configureCommerce',configuration),configured);
+  const adminInput={key:'shop-record-admin',name:'Managed',kind:'admin',metadata:{theme:{handle:'authored',snapshotId:'authored'}}};
+  const managed=await call('createShop',adminInput);assert.equal(managed.kind,'admin');assert.deepEqual(managed.metadata,adminInput.metadata);assert.deepEqual(await call('createShop',adminInput),managed);assert.equal(Object.hasOwn(managed,'mine'),false);
+  actor=x.bob;const player=await call('createShop',{key:'shop-record-player',name:'Personal'});assert.equal(player.kind,'player');assert.equal(player.ownerId,x.bob.userId);
+  const playerView=await call('shops',undefined,{query:{limit:1,sort:'name'}});assert.equal(playerView.total,2);assert.equal(playerView.items[0].mine,false);assert.equal(typeof playerView.next,'string');
+  actor=manager;const disabled=await call('setShopEnabled',{key:'shop-record-disable',shopId:player.id,enabled:false});assert.equal(disabled.enabled,false);assert.equal((await call('shops',undefined)).items.find(shop=>shop.id===player.id).mine,false);
+  actor=x.bob;assert.equal((await call('shops',undefined)).items.find(shop=>shop.id===player.id).mine,true);
+  actor=x.alice;assert.equal((await call('shops',undefined)).items.some(shop=>shop.id===player.id),false);
+  x.core.configureAdmin(manager,{key:'shop-record-pause',expectedRevision:0,scope:'site',changes:{playerShopsPaused:true},reason:'Pause player shops'});
+  const effective=await call('commerceSettings',undefined);assert.equal(effective.settings.playerShops,true);assert.equal(effective.effectiveSettings.playerShops,false);
+  for(const mutate of [value=>delete value.effectiveSettings,value=>delete value.settings.packResale,value=>value.effectiveSettings.playerShops='false',value=>value.settings.maxStockPerListing=1001,value=>value.revision=-1,value=>value.secret='hidden']){
+    const invalid=structuredClone(effective);mutate(invalid);assert.throws(()=>validateWireResponse('commerceSettings',200,invalid),WireContractError);
+  }
+  for(const mutate of [value=>delete value.settings,value=>delete value.settings.enabled,value=>value.settings.allowedCurrencyIds=[null],value=>value.revision=1.5]){const invalid=structuredClone(configured);mutate(invalid);assert.throws(()=>validateWireResponse('configureCommerce',200,invalid),WireContractError);}
+  for(const id of ['createShop','setShopEnabled'])for(const mutate of [value=>delete value.ownerId,value=>value.enabled='true',value=>value.kind='unknown',value=>value.metadata=null,value=>value.createdAt='invalid',value=>value.credentials={}]){
+    const invalid=structuredClone(managed);mutate(invalid);assert.throws(()=>validateWireResponse(id,200,invalid),WireContractError);
+  }
+  const page=await call('shops',undefined);for(const mutate of [value=>delete value.items[0].mine,value=>value.items[0].mine=1,value=>value.total=-1]){const invalid=structuredClone(page);mutate(invalid);assert.throws(()=>validateWireResponse('shops',200,invalid),WireContractError);}
+});

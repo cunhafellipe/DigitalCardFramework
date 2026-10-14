@@ -5498,15 +5498,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "revision": {
-                      "type": "integer"
-                    },
-                    "settings": {
-                      "$ref": "#/components/schemas/CommerceSettings"
-                    }
-                  }
+                  "$ref": "#/components/schemas/CommerceSettingsView"
                 }
               }
             }
@@ -5627,7 +5619,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CommerceSettingsRecord"
                 }
               }
             }
@@ -5757,7 +5749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/ShopPage"
                 }
               }
             }
@@ -5876,7 +5868,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ShopRecord"
                 }
               }
             }
@@ -6017,7 +6009,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ShopRecord"
                 }
               }
             }
@@ -19480,6 +19472,220 @@
         },
         "additionalProperties": false
       },
+      "CommerceSettingsValues": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "playerShops": {
+            "type": "boolean",
+            "default": false
+          },
+          "packResale": {
+            "type": "boolean",
+            "default": false
+          },
+          "allowedCurrencyIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "maxListingsPerShop": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000,
+            "default": 200
+          },
+          "maxStockPerListing": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          },
+          "maxRaffleEntries": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "default": 10000
+          }
+        },
+        "required": [
+          "enabled",
+          "playerShops",
+          "packResale",
+          "allowedCurrencyIds",
+          "maxListingsPerShop",
+          "maxStockPerListing",
+          "maxRaffleEntries"
+        ]
+      },
+      "CommerceSettingsRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "settings"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "settings": {
+            "$ref": "#/components/schemas/CommerceSettingsValues"
+          }
+        }
+      },
+      "CommerceSettingsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "settings",
+          "effectiveSettings"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "settings": {
+            "$ref": "#/components/schemas/CommerceSettingsValues"
+          },
+          "effectiveSettings": {
+            "$ref": "#/components/schemas/CommerceSettingsValues"
+          }
+        }
+      },
+      "ShopRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "ownerId",
+          "enabled",
+          "metadata",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "kind": {
+            "enum": [
+              "admin",
+              "player"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ShopView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "ownerId",
+          "enabled",
+          "metadata",
+          "createdAt",
+          "mine"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "kind": {
+            "enum": [
+              "admin",
+              "player"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mine": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ShopPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "next"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ShopView"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "CommandIntent": {
         "type": "object",
         "additionalProperties": false,
@@ -21502,7 +21708,7 @@
                 ]
               },
               "result": {
-                "type": "object"
+                "$ref": "#/components/schemas/ShopRecord"
               }
             }
           },

@@ -128,3 +128,21 @@ async function listingRecords(){
   return {remaining,metadata,status,fulfillment,title,paid};
 }
 void listingRecords;
+
+async function shopSettings(){
+  const view=await call('commerceSettings',undefined);
+  const available:boolean=view.effectiveSettings.playerShops;
+  const change=await call('configureCommerce',{key:'settings',expectedRevision:view.revision,settings:{playerShops:true}});
+  const maximum:number=change.settings.maxStockPerListing;
+  // @ts-expect-error configuration receipts contain stored settings, not effective settings
+  void change.effectiveSettings;
+  const shop=await call('createShop',{key:'shop',name:'Shop'});
+  const kind:'admin'|'player'=shop.kind,metadata:unknown=shop.metadata.theme;
+  const disabled=await call('setShopEnabled',{key:'disable',shopId:shop.id,enabled:false});
+  const enabled:boolean=disabled.enabled;
+  const mine:boolean|undefined=(await call('shops',undefined)).items[0]?.mine;
+  // @ts-expect-error mutation records do not carry viewer-dependent mine
+  void shop.mine;
+  return {available,maximum,kind,metadata,enabled,mine};
+}
+void shopSettings;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added host-approved browser pack renderers with custom front/back artwork, cosmetic reveal progress, native fallback and Python/Go pack examples.
+
 - Added a host-approved browser-program card renderer with bounded frame allocation, native fallback and Python/Go custom HTML/CSS examples.
 
 - Added Python and Go examples that generate editable layered `.dcard` artwork with front and back faces, masked foil and bounded tilt motion.

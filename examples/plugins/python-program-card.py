@@ -1,6 +1,7 @@
 """Write reviewed custom card HTML/CSS with the Python standard library.
 
 Run: python python-program-card.py OUTPUT_DIR
+Pack artwork: python python-program-card.py --pack OUTPUT_DIR
 The host supplies /program-bootstrap.js and its framework imports on the
 approved separate origin. This generator emits no JavaScript.
 """
@@ -75,14 +76,76 @@ body { background: #101526; }
 '''
 
 
-def main(directory):
+PACK_HTML = '''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Celestial Archive Pack</title>
+  <link rel="stylesheet" href="card.css">
+  <script type="module" src="/program-bootstrap.js"></script>
+</head>
+<body>
+  <main class="pack-display" aria-label="Celestial Archive pack presentation">
+    <button class="sealed-sleeve" type="button" data-dc-intent="select" aria-label="Select Celestial Archive pack">
+      <span class="crimp crimp-top" aria-hidden="true"></span>
+      <span class="pack-face pack-front">
+        <span class="pack-brand">THE CELESTIAL ARCHIVE</span>
+        <span class="pack-seal" aria-hidden="true"><span class="seal-orbit"></span><span class="seal-star">+</span></span>
+        <span class="pack-caption"><strong>Nightfall Series</strong><small>Collectible card pack</small></span>
+        <span class="pack-hint">Select pack</span>
+      </span>
+      <span class="pack-face pack-back">
+        <span class="pack-brand">SEALED COLLECTION</span>
+        <span class="pack-spine" aria-hidden="true"></span>
+        <span class="pack-caption"><strong>A new discovery awaits</strong><small>Review contents and price in the host before buying.</small></span>
+        <span class="pack-hint">Select pack</span>
+      </span>
+      <span class="crimp crimp-bottom" aria-hidden="true"></span>
+    </button>
+  </main>
+</body>
+</html>
+'''
+
+PACK_CSS = ''':root { color-scheme: dark; font-family: Georgia, serif; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: #131424; }
+.pack-display { width: 100%; height: 100%; padding: 5px; perspective: 900px; }
+.sealed-sleeve { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 1px solid #bca86c; border-radius: 3px; overflow: hidden; background: #191b36; color: #fff0c5; font: inherit; text-align: center; cursor: pointer; transform: rotateX(calc(var(--dc-tilt-y, 0) * -4deg)) rotateY(calc(var(--dc-tilt-x, 0) * 6deg)); }
+.sealed-sleeve:focus-visible { outline: 3px solid #b0e8e2; outline-offset: -5px; }
+.pack-face { position: absolute; inset: 7% 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 8% 8% 5%; }
+.pack-front { background: radial-gradient(ellipse at calc(50% + var(--dc-tilt-x, 0) * 15%) 40%, #765582 0, #393556 44%, #191b36 85%); }
+.pack-back { visibility: hidden; background: linear-gradient(90deg, #1b3339, #2e4a4d 48%, #1b3339); }
+:root[data-dc-side="back"] .pack-front { visibility: hidden; }
+:root[data-dc-side="back"] .pack-back { visibility: visible; }
+.crimp { position: absolute; z-index: 2; left: 0; right: 0; height: 7%; background: repeating-linear-gradient(90deg, #c6b073 0 2px, #71614b 2px 4px, #a58d60 4px 6px); border-bottom: 1px solid #dec990; }
+.crimp-top { top: 0; } .crimp-bottom { bottom: 0; border-top: 1px solid #dec990; border-bottom: 0; }
+.pack-brand { font: 9px system-ui, sans-serif; letter-spacing: .15em; line-height: 1.8; }
+.pack-seal { position: absolute; inset: 27% 19% 34%; display: grid; place-items: center; opacity: calc(.7 + var(--dc-reveal-progress, 0) * .3); }
+.seal-orbit { position: absolute; inset: 8%; border: 2px solid #dec690; border-radius: 50%; transform: rotate(-30deg) scaleY(.55); }
+.seal-star { color: #b9e1df; font-size: clamp(40px, 12vw, 90px); transform: rotate(calc(45deg + var(--dc-flip-progress, 0) * 20deg)); }
+.pack-caption { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 18px; }
+.pack-caption strong { font-size: clamp(14px, 4vw, 24px); font-weight: normal; }
+.pack-caption small { font: 10px system-ui, sans-serif; line-height: 1.6; }
+.pack-hint { font: 9px system-ui, sans-serif; opacity: .7; }
+.pack-spine { position: absolute; top: 0; bottom: 0; width: 12px; border-inline: 1px solid #8eb3aa; opacity: .25; }
+@media (prefers-reduced-motion: reduce) { .sealed-sleeve, .seal-star { transform: none; } }
+'''
+
+
+def main(directory, pack=False):
     output = Path(directory)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "index.html").write_text(HTML, encoding="utf-8", newline="\n")
-    (output / "card.css").write_text(CSS, encoding="utf-8", newline="\n")
+    (output / "index.html").write_text(PACK_HTML if pack else HTML, encoding="utf-8", newline="\n")
+    (output / "card.css").write_text(PACK_CSS if pack else CSS, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: python-program-card.py OUTPUT_DIR")
-    main(sys.argv[1])
+    if len(sys.argv) == 3 and sys.argv[1] == "--pack":
+        main(sys.argv[2], pack=True)
+    elif len(sys.argv) == 2 and sys.argv[1] != "--pack":
+        main(sys.argv[1])
+    else:
+        raise SystemExit("Usage: python-program-card.py [--pack] OUTPUT_DIR")

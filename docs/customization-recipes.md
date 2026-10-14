@@ -185,6 +185,40 @@ Programs load within the active-frame limit, which defaults to four and accepts 
 
 Disabled, unavailable or failed programs use the native renderer. Custom web-compatible logic may use the existing `connectProgram` bridge directly; this generated-asset example does not establish a WebAssembly runtime or replace pack, album or editor-tool contracts.
 
+## Install a reviewed browser pack renderer
+
+Generate custom pack HTML/CSS using either example's pack mode:
+
+```sh
+python examples/plugins/python-program-card.py --pack pack-output
+go run examples/plugins/go-program-card/main.go --pack pack-output
+```
+
+Serve the reviewed output and framework bootstrap on a separate origin with the same headers and module setup described above. Use a distinct registry entry for its URL, then map product IDs through the pack adapter:
+
+```js
+import { createProgramPackRenderer } from '@digital-card/framework/presentation/program-pack-view';
+
+const packRenderer = createProgramPackRenderer({
+  registry: new Map([['celestial-pack', {
+    approved: true,
+    version: '1',
+    url: 'https://programs.example/packs/index.html',
+    title: 'Celestial pack',
+    intents: ['select'],
+  }]]),
+  products: { starter: 'celestial-pack' },
+});
+const view = mountFramework(root, { client, packRenderer });
+// When removing this host view:
+view.dispose();
+packRenderer.dispose();
+```
+
+The adapter replaces pack artwork in the shop and owned-pack list. Host controls switch front/back; selecting the program artwork focuses the normal review or open/replay control without activating it. Purchase review, payment, opening and replay retain their existing host behavior. Reveal progress is cosmetic and follows the authoritative opening result; the frame receives no product, price, ownership or reward records.
+
+Direct calls return `{node, setSide, setPresentationInputs, dispose}` for mapped programs. Native fallback views may omit `setPresentationInputs`. The renderer also provides `setEnabled(boolean)` and `dispose()`, with the same frame, timeout, message and mapping bounds as the card adapter. Disabled, unapproved, failed or unmapped programs retain native pack artwork and preview cards. This replaces pack appearance, not the complete opener view or its command authority.
+
 ## Album appearance
 
 The default album renderer accepts `layout.appearance` with solid `background`, text `color`, `borderColor`, `padding`, `radius` and `borderWidth`. Colors accept hexadecimal RGB/RGBA, comma-separated integer `rgb()`/`rgba()`, or transparent/black/white/red/green/blue/gray/grey/yellow/orange/purple/pink/brown/navy/teal. RGB channels range from 0 to 255 and alpha from 0 to 1. Padding and radius range from 0 to 100 pixels; border width ranges from 0 to 12 pixels. Omitted properties use the reference styles. Appearance applies to the album grid, without changing ownership or placements.

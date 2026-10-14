@@ -1,5 +1,6 @@
 import {mountProgram, connectProgram, programHeaders, type ProgramRegistry} from '@digital-card/framework/presentation/program';
 import {createProgramCardRenderer} from '@digital-card/framework/presentation/program-card-view';
+import {createProgramPackRenderer} from '@digital-card/framework/presentation/program-pack-view';
 
 const registry: ProgramRegistry = new Map([['celestial', {approved: true, url: 'https://programs.example/card/', version: '1', intents: ['select']}]]);
 const root = document.createElement('div');
@@ -21,3 +22,14 @@ program.setInputs({tilt: {x: 'secret'}});
 program.setInputs({bindings: {code: 'private'}});
 // @ts-expect-error The renderer maps IDs to approved program IDs.
 createProgramCardRenderer({registry, cards: {dawn: () => 'celestial'}});
+const packs = createProgramPackRenderer({registry, products: {starter: 'celestial'}});
+const pack = packs({id: 'starter', name: 'Starter', lineId: 'sky'}, {side: 'front', onSelect: product => console.log(product.id)});
+if ('node' in pack) {
+  pack.setSide?.('back');
+  pack.setPresentationInputs?.({revealProgress: 0.5});
+  pack.dispose?.();
+  // @ts-expect-error Pack programs cannot receive private purchase data.
+  pack.setPresentationInputs?.({price: 100});
+}
+packs.setEnabled(false);
+packs.dispose();

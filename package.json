@@ -62,6 +62,7 @@
     "./presentation/integration": "./src/presentation/integration.js",
     "./presentation/program": {"types": "./src/presentation/program.d.ts", "default": "./src/presentation/program.js"},
     "./presentation/program-card-view": {"types": "./src/presentation/program-card-view.d.ts", "default": "./src/presentation/program-card-view.js"},
+    "./presentation/program-pack-view": {"types": "./src/presentation/program-pack-view.d.ts", "default": "./src/presentation/program-pack-view.js"},
     "./presentation/program-bootstrap": "./src/presentation/program-bootstrap.js",
     "./presentation/identity": "./src/presentation/identity.js",
     "./presentation/package": "./src/presentation/package.js",

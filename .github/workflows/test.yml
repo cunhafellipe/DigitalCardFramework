@@ -110,6 +110,11 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
+      - run: xvfb-run --auto-servernum node test/program-pack-browser.mjs test-results/program-pack
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/program-card-browser.mjs test-results/program-card
         env:
           HEADED: '1'

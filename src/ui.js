@@ -290,10 +290,11 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
       form.append(row,preview,button(t('wallet.convert'),()=>action(()=>mutate('convert',{from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version}),{message:r=>t('wallet.converted',{amount:r.amount,from:currencyName(r.from),received:r.received,to:currencyName(r.to)})})),element('p','dc-muted',t('wallet.wholeUnits')));node.append(form);
     }return node;
   }
-  function packArt(product,small=false) {
+  function packArt(product,small=false,onSelect,onRendered) {
     const previewCards=[],pool=product.slots?.flatMap(s=>s.pool)??[];for(const entry of [...pool.slice(0,2),pool[0]].filter(Boolean)){const variant=model.catalog.variants.find(v=>v.id===entry.variantId),definition=model.catalog.cards.find(c=>c.id===variant?.cardId);if(!definition)continue;const card=renderer({id:'preview',definition,variant,rarityId:variant.rarityId,serialNumber:null,bindings:{}},{interactive:false});card.tabIndex=-1;previewCards.push(card);}
-    let rendered;try{rendered=packRenderer(product,{small,lineName:lineName(product.lineId),previewCards,localization});}catch{rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});}
+    let rendered;try{rendered=packRenderer(product,{small,lineName:lineName(product.lineId),previewCards,localization,onSelect});}catch{rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});}
     if(!rendered?.node&&!rendered?.nodeType)rendered=renderPack(product,{small,lineName:lineName(product.lineId),previewCards,localization});
+    onRendered?.(rendered);
     if(rendered?.node){if(rendered.dispose)viewDisposers.push(()=>rendered.dispose());return rendered.node;}return rendered;
   }
   function shop() {
@@ -305,7 +306,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     for(const [n,title,description]of [['01','shop.stepBuy','shop.stepBuyDescription'],['02','shop.stepReveal','shop.stepRevealDescription'],['03','shop.stepCollect','shop.stepCollectDescription']]){const step=element('div');step.append(element('span','dc-step-number',n),element('strong','',t(title)),element('small','dc-muted',t(description)));guide.append(step);}node.append(guide);
     const grid=element('div','dc-shop-grid');
     for(const product of model.catalog.products.filter(p=>p.enabled!==false)) {
-      const box=element('article','dc-product');box.append(packArt(product));
+      const box=element('article','dc-product');box.append(packArt(product,false,()=>{if(!disposed&&!shopDisposed&&commandPrincipal===principal&&buy.isConnected)buy.focus();}));
       const info=element('div','dc-product-info'),count=product.slots.reduce((n,s)=>n+s.count,0),strategy=product.allocationStrategy,
         deckVersion=strategy&&Object.keys(strategy).length===3&&strategy.deckScope==='purchase-slot'&&((strategy.algorithm==='weighted-deck@1'&&strategy.version===1)||(strategy.algorithm==='weighted-deck@2'&&strategy.version===2)||(strategy.algorithm==='weighted-deck@3'&&strategy.version===3)||(strategy.algorithm==='weighted-deck@4'&&strategy.version===4))?strategy.version:0,ticketDeck=deckVersion>0;
     info.append(element('span','dc-eyebrow',lineName(product.lineId)),element('h3','',product.name.replace(/^.*? · /,'')),element('p','dc-muted',t('shop.cardsPerPack',{count})+((!ticketDeck||deckVersion>=2)&&product.duplicatePolicy.scope!=='none'?t('shop.duplicateProtection'):'')));
@@ -383,13 +384,20 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   }
   function packs() {
     const node=section(t('packs.title'),t('packs.description'));
+    const appearances=new Map(),principal=commandPrincipal;let packsDisposed=false;
     const sealed=model.packs.filter(p=>!p.openedAt),opened=model.packs.filter(p=>p.openedAt);
     const list=element('div','dc-pack-list');
     for(const pack of [...sealed,...opened.slice().reverse()]) {
-      const box=element('article','dc-owned-pack');box.append(packArt(pack.product,true));
+      const box=element('article','dc-owned-pack');box.append(packArt(pack.product,true,()=>{if(!disposed&&!packsDisposed&&commandPrincipal===principal&&open.isConnected)open.focus();},view=>appearances.set(pack.id,view)));
       const info=element('div');info.append(element('span','dc-badge'+(pack.openedAt?'':' is-sealed'),t(pack.openedAt?'packs.opened':'packs.sealed')),element('h3','',pack.product.name),element('small','dc-muted',date(pack.createdAt)));
-      box.append(info,button(t(pack.openedAt?'packs.replay':'packs.open'),()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw new Error(state.error.message);},{message:t(pack.openedAt?'packs.replaying':'packs.openSuccess')})));list.append(box);
+      const open=button(t(pack.openedAt?'packs.replay':'packs.open'),()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw new Error(state.error.message);},{message:t(pack.openedAt?'packs.replaying':'packs.openSuccess')}));box.append(info,open);list.append(box);
     }
+    const unsubscribe=controller.subscribe(state=>{
+      if(disposed||packsDisposed||commandPrincipal!==principal)return;
+      for(const [id,view]of appearances){const count=state.receipt?.cards.length??0,revealProgress=state.receipt?.id===id?(count?state.revealed/count:state.phase==='complete'?1:0):0;
+        // Cosmetic renderer failures must not interrupt committed opening or reveal publication.
+        try{if(typeof view.setPresentationInputs==='function')view.setPresentationInputs({revealProgress});else view.node?.setPresentationInputs?.({revealProgress});}catch{}}
+    });viewDisposers.push(()=>{packsDisposed=true;unsubscribe();appearances.clear();});
     if(!model.packs.length)empty(node,t('packs.empty'),t('packs.emptyDescription'),t('packs.browse'),'shop');
     node.append(list);const opener=element('div');node.append(opener);openerDispose=mountOpener(opener,{controller,cardRenderer:renderer,view:openerView,onSelect:inspect,localization,packArtwork:id=>model.packs.find(pack=>pack.id===id)?.product.artwork});return node;
   }

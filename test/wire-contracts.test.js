@@ -179,3 +179,51 @@ test('checked wallet, exact and rounded conversions, and listing quote branches 
     }
   }
 });
+
+test('listing and order records validate creation, purchase replay, cancellation and public pages',async t=>{
+  let now='2026-09-30T12:00:00.000Z',actor,handler;
+  const x=fixture({clock:()=>now,actionHandlers:{'external.item':async()=>{},'external.fail':async()=>{throw new Error('Delivery unavailable');}},actionOptions:{maxAttempts:1}}),seller={...x.alice,role:'admin'};
+  actor=seller;
+  const shop=x.core.createShop(seller,{key:'record-shop',name:'Shop',kind:'admin'});
+  const server=createServer((request,response)=>handler(request,response));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const stocks=[{kind:'mint-card',variantId:'dawn.standard',quantity:2},{kind:'mint-pack',productId:'common',quantity:2},{kind:'action',handler:'external.item',quantity:2},{kind:'action',handler:'external.fail',quantity:2}];
+  const orders=[];
+  for(const [index,items]of stocks.entries()){
+    actor=seller;
+    const input={key:'record-listing-'+index,shopId:shop.id,title:'Stock',price:{currencyId:'credits',amount:index>1?0:20},items,metadata:{custom:{label:'Edition'}}};
+    const listing=await call('createListing',input);assert.deepEqual(await call('createListing',input),listing);
+    assert.equal(listing.preview.kind,['card','pack','custom','custom'][index]);assert.equal(listing.mine,true);assert.equal(listing.remaining,2);
+    assert.deepEqual(listing.metadata,input.metadata);
+    for(const mutate of [value=>delete value.remaining,value=>value.remaining=-1,value=>value.mine='yes',value=>value.status='unknown',value=>value.units=[],value=>value.entries={},value=>value.preview.copyIds=['sealed']]){
+      const invalid=structuredClone(listing);mutate(invalid);assert.throws(()=>validateWireResponse('createListing',200,invalid),WireContractError);
+    }
+    const optional=structuredClone(listing);delete optional.shopName;delete optional.sellerName;validateWireResponse('createListing',200,optional);
+    actor=x.bob;
+    const buyerListing=(await call('listings',undefined,{query:{shopId:shop.id}})).items.find(row=>row.id===listing.id);assert.equal(buyerListing.mine,false);
+    const quote=await call('quoteListing',{listingId:listing.id}),purchase={key:'record-buy-'+index,listingId:listing.id,quantity:quote.quantity,unitIds:quote.unitIds,digest:quote.digest};
+    const order=await call('buyListing',purchase);orders.push({order,purchase});assert.deepEqual(await call('buyListing',purchase),order);
+    assert.equal(order.items[0].kind,['copy','pack','custom','custom'][index]);assert.equal(order.fulfillment,index>1?'pending':'complete');
+    for(const mutate of [value=>delete value.paid,value=>value.paid.amount=-1,value=>value.quantity=1.5,value=>value.fulfillment='unknown',value=>value.items[0].code='private',value=>value.items[0].copyIds=['sealed'],value=>value.actionJobIds=[null]]){
+      const invalid=structuredClone(order);mutate(invalid);assert.throws(()=>validateWireResponse('buyListing',200,invalid),WireContractError);
+    }
+    actor=seller;
+    const canceled=await call('cancelListing',{key:'record-cancel-'+index,listingId:listing.id});assert.equal(canceled.status,'canceled');assert.equal(canceled.remaining,0);
+  }
+  await x.core.dispatchActions({role:'admin'});
+  actor=x.bob;
+  const page=await call('orders',undefined,{query:{limit:2}});assert.equal(page.items.length,2);assert.equal(page.total,4);assert.equal(typeof page.next,'string');
+  const all=await call('orders',undefined);assert.equal(all.items.find(row=>row.id===orders[2].order.id).fulfillment,'complete');assert.equal(all.items.find(row=>row.id===orders[3].order.id).fulfillment,'attention-required');
+  assert.deepEqual(await call('buyListing',orders[2].purchase),orders[2].order);
+  for(const id of ['listings','orders']){
+    const page=await call(id,undefined);
+    for(const mutate of [value=>value.total='4',value=>value.next=42,value=>delete value.items[0].id]){const invalid=structuredClone(page);mutate(invalid);assert.throws(()=>validateWireResponse(id,200,invalid),WireContractError);}
+  }
+  actor=seller;
+  const timed=await call('createListing',{key:'timed-record',shopId:shop.id,title:'Timed',price:{currencyId:'credits',amount:0},items:{kind:'action',handler:'external.item',quantity:1},startsAt:'2026-09-30T12:01:00.000Z',endsAt:'2026-09-30T12:02:00.000Z'});assert.equal(timed.phase,'upcoming');
+  now='2026-09-30T12:03:00.000Z';x.core.expireListings({role:'admin'});
+  assert.equal((await call('listings',undefined)).items.find(row=>row.id===timed.id).status,'expired');
+});

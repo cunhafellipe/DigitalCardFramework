@@ -1752,6 +1752,24 @@ schemas.ListingQuoteItem={oneOf:[
 ]};
 schemas.ListingQuote={type:'object',additionalProperties:false,required:['listingId','quantity','unitIds','digest','price','items'],properties:{listingId:str,quantity:{type:'integer',minimum:1,maximum:1000},unitIds:{type:'array',minItems:1,maxItems:1000,uniqueItems:true,items:str},digest:{type:'string',pattern:'^[a-f0-9]{64}(?![\\s\\S])'},price:{type:'object',additionalProperties:false,required:['currencyId','amount'],properties:{currencyId:str,amount:{type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER}}},items:{type:'array',minItems:1,maxItems:1000,items:ref('ListingQuoteItem')}}};
 for(const [path,method,schema]of [['/wallet','get','Wallet'],['/convert','post','ConversionReceipt'],['/listings/quote','post','ListingQuote']])openapi.paths[path][method].responses['200'].content['application/json'].schema=ref(schema);
+schemas.ListingPreview={oneOf:[
+  {type:'object',additionalProperties:false,required:['kind','name','cardId','variantId'],properties:{kind:{const:'card'},name:str,cardId:str,variantId:str}},
+  {type:'object',additionalProperties:false,required:['kind','name','productId','preallocated'],properties:{kind:{const:'pack'},name:str,productId:str,preallocated:{const:true}}},
+  {type:'object',additionalProperties:false,required:['kind','name'],properties:{kind:{const:'custom'},name:str}}
+]};
+schemas.ListingRecord={type:'object',additionalProperties:false,required:['id','shopId','sellerId','title','price','kind','previewAt','startsAt','endsAt','perBuyerLimit','metadata','raffle','createdAt','description','status','phase','remaining','preview','mine','entryCount','drawnAt','claimUntil'],properties:{
+  id:str,shopId:str,sellerId:str,title:str,price:schemas.ListingQuote.properties.price,kind:{enum:['copies','packs','mint-card','mint-pack','action']},
+  previewAt:{type:'string',format:'date-time'},startsAt:{type:'string',format:'date-time'},endsAt:maybeTime,perBuyerLimit:{type:'integer',minimum:1,maximum:1000},metadata:{type:'object'},raffle:schemas.CreateListing.properties.raffle,createdAt:{type:'string',format:'date-time'},description:{type:'string'},shopName:{type:'string'},sellerName:{type:'string'},
+  status:{enum:['active','canceled','expired']},phase:{enum:['upcoming','expired','entries-open','awaiting-draw','claiming','live','canceled']},remaining:{type:'integer',minimum:0,maximum:1000},preview:ref('ListingPreview'),mine:{type:'boolean'},entryCount:{type:'integer',minimum:0,maximum:100000},drawnAt:maybeTime,claimUntil:maybeTime
+}};
+schemas.OrderItem={oneOf:[
+  {type:'object',additionalProperties:false,required:['kind','copyId'],properties:{kind:{const:'copy'},copyId:str}},
+  {type:'object',additionalProperties:false,required:['kind','packId'],properties:{kind:{const:'pack'},packId:str}},
+  {type:'object',additionalProperties:false,required:['kind','jobId'],properties:{kind:{const:'custom'},jobId:str}}
+]};
+schemas.OrderRecord={type:'object',additionalProperties:false,required:['id','listingId','shopId','buyerId','sellerId','quantity','unitIds','paid','createdAt','items','actionJobIds','fulfillment'],properties:{id:str,listingId:str,shopId:str,buyerId:str,sellerId:str,quantity:schemas.ListingQuote.properties.quantity,unitIds:schemas.ListingQuote.properties.unitIds,paid:schemas.ListingQuote.properties.price,createdAt:{type:'string',format:'date-time'},items:{type:'array',minItems:1,maxItems:1000,items:ref('OrderItem')},actionJobIds:{type:'array',maxItems:1000,uniqueItems:true,items:str},fulfillment:{enum:['complete','pending','attention-required']}}};
+for(const [name,item]of [['ListingPage','ListingRecord'],['OrderPage','OrderRecord']])schemas[name]={...schemas.Page,additionalProperties:false,properties:{...schemas.Page.properties,items:{...schemas.Page.properties.items,items:ref(item)},total:{type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER}}};
+for(const [path,method,schema]of [['/listings','post','ListingRecord'],['/listings/cancel','post','ListingRecord'],['/listings/buy','post','OrderRecord'],['/listings','get','ListingPage'],['/orders','get','OrderPage']])openapi.paths[path][method].responses['200'].content['application/json'].schema=ref(schema);
 const durableCommands=['purchase','openPack','convert','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','consumeBinding','counterTrade','preferences','readNotifications','commitImport','reportCodeUsage','createShop','createListing','buyListing','cancelListing','enterRaffle','openCard','configureAdmin','administerCards'];
 const commandOperations=Object.fromEntries(Object.values(openapi.paths).flatMap(item=>Object.values(item).map(operation=>[operation.operationId,operation])));
 const commandSchema=command=>commandOperations[command==='preferences'?'setPreferences':command].requestBody.content['application/json'].schema;

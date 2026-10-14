@@ -107,3 +107,24 @@ void walletAndListing;
 // @ts-expect-error balance entries are integer JSON numbers
 const invalidWallet:Schemas['Wallet']={credits:'100'};
 void invalidWallet;
+
+async function listingRecords(){
+  const listing=await call('createListing',{key:'listing-record',shopId:'shop',title:'Stock',price:{currencyId:'credits',amount:0},items:{kind:'action',handler:'reward',quantity:1}});
+  const remaining:number=listing.remaining,metadata:unknown=listing.metadata.custom;
+  const canceled=await call('cancelListing',{key:'cancel-record',listingId:listing.id});
+  const status:'active'|'canceled'|'expired'=canceled.status;
+  const quote=await call('quoteListing',{listingId:listing.id});
+  const order=await call('buyListing',{key:'buy-record',listingId:listing.id,quantity:quote.quantity,unitIds:quote.unitIds,digest:quote.digest});
+  const fulfillment:'pending'|'complete'|'attention-required'=order.fulfillment;
+  for(const item of order.items){
+    if(item.kind==='copy'){const id:string=item.copyId;void id;}
+    else if(item.kind==='pack'){const id:string=item.packId;void id;}
+    else {const id:string=item.jobId;void id;}
+    // @ts-expect-error order references do not expose sealed card lists
+    void item.copyIds;
+  }
+  const title:string|undefined=(await call('listings',undefined)).items[0]?.title;
+  const paid:number|undefined=(await call('orders',undefined)).items[0]?.paid.amount;
+  return {remaining,metadata,status,fulfillment,title,paid};
+}
+void listingRecords;

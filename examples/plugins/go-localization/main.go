@@ -12,6 +12,11 @@ const spanish = `{
   "protocol": "digital-card-localization@1",
   "locale": "es",
   "messages": {
+    "marketplace.settings": "Configuración comercial",
+    "marketplace.settingsJson": "Configuración JSON",
+    "marketplace.applySettings": "Aplicar configuración comercial",
+    "marketplace.error": "No se pudo completar esta acción del mercado. Revisa los detalles en la aplicación principal.",
+    "marketplace.editRejected": "No se pudo aplicar el cambio. Revisa los campos actuales y vuelve a intentarlo.",
     "trades.editRejected": "El último cambio no se guardó. Comprueba los valores y vuelve a intentarlo.",
 "trades.error": "No se pudo completar esta acción. Revisa los detalles en el anfitrión.",
 "trades.previous": "Página anterior",

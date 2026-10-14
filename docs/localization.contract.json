@@ -12,6 +12,26 @@
     "other"
   ],
   "keys": {
+    "marketplace.error": {
+      "placeholders": [],
+      "plural": false
+    },
+    "marketplace.settings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "marketplace.settingsJson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "marketplace.applySettings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "marketplace.editRejected": {
+      "placeholders": [],
+      "plural": false
+    },
     "trades.editRejected": {
       "placeholders": [],
       "plural": false

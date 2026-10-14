@@ -1,0 +1,880 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/marketplace-display/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile": {
+      "const": "dc.marketplace-display@1"
+    },
+    "snapshotId": {
+      "type": "string",
+      "maxLength": 36,
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "enum": [
+          "listingName",
+          "description",
+          "shopName",
+          "price",
+          "schedule",
+          "availability",
+          "raffleState",
+          "sellerFields",
+          "allocation",
+          "orderStatus",
+          "itemName",
+          "preview"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "locale": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "dir": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "refresh": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "more": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "previous": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reviewPurchase": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "cancelStock": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "checkRaffle": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "enterRaffle": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reviewWinner": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "retryPurchase": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createShop": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "shopName": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "shopType": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "adminShop": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "playerShop": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createShopButton": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "listStock": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "shop": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "listingTitle": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "unitPrice": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "stockSource": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "stockItem": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "stockQuantity": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "ownedCard": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "ownedPack": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "issueCard": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "issuePack": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "actionItem": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "handler": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "params": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "previewTime": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "releaseTime": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "endTime": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "raffleJson": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reviewStock": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "checkStock": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "ackStock": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "retryListing": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createListing": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "history": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "loadOrders": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "closeReview": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "settings": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "settingsJson": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "applySettings": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "editRejected": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "working": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "empty": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "refresh",
+        "more",
+        "previous",
+        "reviewPurchase",
+        "cancelStock",
+        "checkRaffle",
+        "enterRaffle",
+        "reviewWinner",
+        "retryPurchase",
+        "createShop",
+        "shopName",
+        "shopType",
+        "adminShop",
+        "playerShop",
+        "createShopButton",
+        "listStock",
+        "shop",
+        "listingTitle",
+        "currency",
+        "unitPrice",
+        "stockSource",
+        "stockItem",
+        "stockQuantity",
+        "ownedCard",
+        "ownedPack",
+        "issueCard",
+        "issuePack",
+        "actionItem",
+        "handler",
+        "params",
+        "previewTime",
+        "releaseTime",
+        "endTime",
+        "raffleJson",
+        "reviewStock",
+        "checkStock",
+        "ackStock",
+        "retryListing",
+        "createListing",
+        "history",
+        "loadOrders",
+        "closeReview",
+        "settings",
+        "settingsJson",
+        "applySettings",
+        "editRejected",
+        "working",
+        "empty"
+      ]
+    },
+    "busy": {
+      "type": "boolean"
+    },
+    "recoverable": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "listings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hasPrevious": {
+          "type": "boolean"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "handle": {
+                "type": "string",
+                "maxLength": 36,
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "reviewable": {
+                "type": "boolean"
+              },
+              "cancellable": {
+                "type": "boolean"
+              },
+              "raffle": {
+                "type": "boolean"
+              },
+              "enterable": {
+                "type": "boolean"
+              },
+              "winnerReviewable": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "shop": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "price": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "schedule": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "availability": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "raffleStatus": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "allocation": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "handle",
+              "position",
+              "reviewable",
+              "cancellable",
+              "raffle",
+              "enterable",
+              "winnerReviewable"
+            ]
+          }
+        }
+      },
+      "required": [
+        "page",
+        "total",
+        "hasPrevious",
+        "hasMore",
+        "items"
+      ]
+    },
+    "orders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hasPrevious": {
+          "type": "boolean"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "handle": {
+                "type": "string",
+                "maxLength": 36,
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "price": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "status": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "handle",
+              "position"
+            ]
+          }
+        }
+      },
+      "required": [
+        "page",
+        "total",
+        "hasPrevious",
+        "hasMore",
+        "items"
+      ]
+    },
+    "seller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "canCreateShop": {
+          "type": "boolean"
+        },
+        "canList": {
+          "type": "boolean"
+        },
+        "admin": {
+          "type": "boolean"
+        },
+        "canEditAction": {
+          "type": "boolean"
+        },
+        "kinds": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "enum": [
+              "copies",
+              "packs",
+              "mint-card",
+              "mint-pack",
+              "action"
+            ]
+          }
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "amount": {
+                  "type": "string",
+                  "maxLength": 16
+                },
+                "quantity": {
+                  "type": "string",
+                  "maxLength": 4
+                },
+                "preview": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "starts": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "ends": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "raffle": {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                "shopName": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "shopKind": {
+                  "enum": [
+                    "admin",
+                    "player"
+                  ]
+                },
+                "kind": {
+                  "enum": [
+                    "",
+                    "copies",
+                    "packs",
+                    "mint-card",
+                    "mint-pack",
+                    "action"
+                  ]
+                }
+              },
+              "required": [
+                "title",
+                "amount",
+                "quantity",
+                "preview",
+                "starts",
+                "ends",
+                "raffle",
+                "shopName",
+                "shopKind",
+                "kind"
+              ]
+            }
+          ]
+        },
+        "shops": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasPrevious": {
+              "type": "boolean"
+            },
+            "hasMore": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 48,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "maxLength": 36,
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "selected": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "handle",
+                  "position",
+                  "selected"
+                ]
+              }
+            }
+          },
+          "required": [
+            "page",
+            "total",
+            "hasPrevious",
+            "hasMore",
+            "items"
+          ]
+        },
+        "targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasPrevious": {
+              "type": "boolean"
+            },
+            "hasMore": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 48,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "maxLength": 36,
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "selected": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "handle",
+                  "position",
+                  "selected"
+                ]
+              }
+            }
+          },
+          "required": [
+            "page",
+            "total",
+            "hasPrevious",
+            "hasMore",
+            "items"
+          ]
+        },
+        "currencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasPrevious": {
+              "type": "boolean"
+            },
+            "hasMore": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 48,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "maxLength": 36,
+                    "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "selected": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "handle",
+                  "position",
+                  "selected"
+                ]
+              }
+            }
+          },
+          "required": [
+            "page",
+            "total",
+            "hasPrevious",
+            "hasMore",
+            "items"
+          ]
+        },
+        "stock": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tickets": {
+              "type": "boolean"
+            },
+            "reviewed": {
+              "type": "boolean"
+            },
+            "blocked": {
+              "type": "boolean"
+            },
+            "reviewable": {
+              "type": "boolean"
+            },
+            "inspectable": {
+              "type": "boolean"
+            },
+            "acknowledgeable": {
+              "type": "boolean"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "disclosure": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "review": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "attempt": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "tickets",
+            "reviewed",
+            "blocked",
+            "reviewable",
+            "inspectable",
+            "acknowledgeable",
+            "retryable"
+          ]
+        }
+      },
+      "required": [
+        "canCreateShop",
+        "canList",
+        "admin",
+        "canEditAction",
+        "kinds",
+        "draft",
+        "shops",
+        "targets",
+        "currencies",
+        "stock"
+      ]
+    },
+    "previews": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "string",
+            "maxLength": 36,
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+          },
+          "mediaType": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "bytes": {}
+        },
+        "required": [
+          "handle",
+          "mediaType",
+          "bytes"
+        ]
+      }
+    }
+  },
+  "required": [
+    "profile",
+    "snapshotId",
+    "fields",
+    "locale",
+    "dir",
+    "labels",
+    "busy",
+    "recoverable",
+    "status",
+    "listings",
+    "orders",
+    "seller",
+    "previews"
+  ]
+}

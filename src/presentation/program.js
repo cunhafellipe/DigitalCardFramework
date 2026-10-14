@@ -1,3 +1,4 @@
+import {marketplaceDisplayProfile,validateMarketplaceDisplay,validateMarketplaceIntent,marketplaceIntents} from './marketplace-display.js';
 import {tradingDisplayProfile,validateTradingDisplay,validateTradingIntent,tradingIntents} from './trading-display.js';
 import { ensure, canonical, clamp } from "./data.js";
 import {albumDisplayProfile,validateAlbumDisplay} from './album-display.js';
@@ -40,6 +41,8 @@ export function mountProgram(
     onCollectionIntent = () => {},
     tradingDisplay,
     onTradingIntent = () => {},
+    marketplaceDisplay,
+    onMarketplaceIntent = () => {},
     shopDisplay,
     onShopIntent = () => {},
   },
@@ -78,6 +81,9 @@ export function mountProgram(
   let lastShop;
   const prepareShop=value=>{const snapshot=validateShopDisplay(value);ensure(entry.shopDisplay?.profile===shopDisplayProfile&&Array.isArray(entry.shopDisplay.fields)&&snapshot.fields.every(field=>entry.shopDisplay.fields.includes(field)),'PROGRAM_CONTENT','Shop display is not granted');return snapshot;};
   if(shopDisplay!==undefined)lastShop=prepareShop(shopDisplay);
+  let lastMarketplace;
+  const prepareMarketplace=value=>{const snapshot=validateMarketplaceDisplay(value);ensure(entry.marketplaceDisplay?.profile===marketplaceDisplayProfile&&Array.isArray(entry.marketplaceDisplay.fields)&&snapshot.fields.every(field=>entry.marketplaceDisplay.fields.includes(field)),'PROGRAM_CONTENT','Marketplace display is not granted');return snapshot;};
+  if(marketplaceDisplay!==undefined)lastMarketplace=prepareMarketplace(marketplaceDisplay);
   const current = state => session === state && !disposed && hostVisible && !document.hidden;
   const send = message => { if (session?.ready && current(session)) session.port.postMessage(message); };
   const clean = () => {
@@ -108,7 +114,7 @@ export function mountProgram(
       try {
         const message = event.data;
         ensure(
-          canonical(message).length <= (message?.intent==='editor-propose'?32768:4096),
+          canonical(message).length <= (message?.intent==='marketplace-edit'?65536:message?.intent==='editor-propose'?32768:4096),
           "PROGRAM_MESSAGE",
           "Message too large",
         );
@@ -140,6 +146,7 @@ export function mountProgram(
           if(lastOpener)send({version:1,type:'content',content:lastOpener});
           if(lastEditor)send({version:1,type:'content',content:lastEditor});
           if(lastCollection)send({version:1,type:'content',content:lastCollection});
+          if(lastMarketplace)send({version:1,type:'content',content:lastMarketplace});
           if(lastTrading)send({version:1,type:'content',content:lastTrading});
           if(lastShop)send({version:1,type:'content',content:lastShop});
           onReady();
@@ -151,7 +158,9 @@ export function mountProgram(
             "PROGRAM_INTENT",
             "Intent not allowed",
           );
-          if(tradingIntents.includes(message.intent)){
+          if(marketplaceIntents.includes(message.intent)){
+            ensure(lastMarketplace,'PROGRAM_CONTENT','Marketplace display is required');const {version,type,nonce,...event}=message;const intent=validateMarketplaceIntent(event,lastMarketplace);if(intent.snapshotId!==lastMarketplace.snapshotId)return;onMarketplaceIntent(intent);
+          }else if(tradingIntents.includes(message.intent)){
             ensure(lastTrading,'PROGRAM_CONTENT','Trading display is required');
             const {version,type,nonce,...event}=message;
             const intent=validateTradingIntent(event,lastTrading);
@@ -206,6 +215,7 @@ export function mountProgram(
   document.addEventListener("visibilitychange", visibility);
   start();
   return {
+    setMarketplaceDisplay(value){if(disposed)return;lastMarketplace=prepareMarketplace(value);send({version:1,type:'content',content:lastMarketplace});},
     setTradingDisplay(value){if(disposed)return;lastTrading=prepareTrading(value);send({version:1,type:'content',content:lastTrading});},
     setShopDisplay(value){if(disposed)return;lastShop=prepareShop(value);send({version:1,type:'content',content:lastShop});},
     setCollectionDisplay(value){if(disposed)return;lastCollection=prepareCollection(value);send({version:1,type:'content',content:lastCollection});},
@@ -241,7 +251,7 @@ function filterInputs(input) {
 }
 
 /** Called by the reviewed program entrypoint; source + transferred port authenticate the parent. */
-export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{},onEditorDisplay=()=>{},onCollectionDisplay=()=>{},onShopDisplay=()=>{},onTradingDisplay=()=>{} } = {}) {
+export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpenerDisplay=()=>{},onEditorDisplay=()=>{},onCollectionDisplay=()=>{},onShopDisplay=()=>{},onTradingDisplay=()=>{},onMarketplaceDisplay=()=>{} } = {}) {
   return new Promise((resolve) => {
     const listener = (event) => {
       if (
@@ -261,10 +271,11 @@ export function connectProgram({ onInputs = () => {},onAlbumDisplay=()=>{},onOpe
         if(disposed)return;
         if (e.data?.version === 1 && e.data.type === "inputs")
           onInputs(filterInputs(e.data.inputs ?? {}));
-        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===tradingDisplayProfile)onTradingDisplay(validateTradingDisplay(e.data.content));else if(e.data.content?.profile===shopDisplayProfile)onShopDisplay(validateShopDisplay(e.data.content));else if(e.data.content?.profile===collectionDisplayProfile)onCollectionDisplay(validateCollectionDisplay(e.data.content));else if(e.data.content?.profile===editorDisplayProfile)onEditorDisplay(validateEditorDisplay(e.data.content));else if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
+        else if(e.data?.version===1&&e.data.type==='content'){if(e.data.content?.profile===marketplaceDisplayProfile)onMarketplaceDisplay(validateMarketplaceDisplay(e.data.content));else if(e.data.content?.profile===tradingDisplayProfile)onTradingDisplay(validateTradingDisplay(e.data.content));else if(e.data.content?.profile===shopDisplayProfile)onShopDisplay(validateShopDisplay(e.data.content));else if(e.data.content?.profile===collectionDisplayProfile)onCollectionDisplay(validateCollectionDisplay(e.data.content));else if(e.data.content?.profile===editorDisplayProfile)onEditorDisplay(validateEditorDisplay(e.data.content));else if(e.data.content?.profile===openerDisplayProfile)onOpenerDisplay(validateOpenerDisplay(e.data.content));else onAlbumDisplay(validateAlbumDisplay(e.data.content));}
       };
       port.postMessage({ version: 1, type: "ready", nonce });
       resolve({
+        marketplaceIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateMarketplaceIntent(event)});},
         tradingIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateTradingIntent(event)});},
         shopIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateShopIntent(event)});},
         collectionIntent(event){if(!disposed)port.postMessage({version:1,type:'intent',nonce,...validateCollectionIntent(event)});},

@@ -1,3 +1,4 @@
+import type {MarketplaceDisplayGrant,MarketplaceDisplaySnapshot,MarketplaceIntentEvent} from './marketplace-display.js';
 import type {TradingDisplayGrant,TradingDisplaySnapshot,TradingIntentEvent} from './trading-display.js';
 import type {ShopDisplayGrant,ShopDisplaySnapshot,ShopIntentEvent} from './shop-display.js';
 import type {AlbumDisplayGrant, AlbumDisplaySnapshot} from './album-display.js';
@@ -20,6 +21,7 @@ export interface ProgramRegistryEntry {
   collectionDisplay?:CollectionDisplayGrant;
   shopDisplay?:ShopDisplayGrant;
   tradingDisplay?:TradingDisplayGrant;
+  marketplaceDisplay?:MarketplaceDisplayGrant;
 }
 export type ProgramRegistry = ReadonlyMap<string, ProgramRegistryEntry>;
 export interface ProgramMountOptions {
@@ -40,6 +42,8 @@ export interface ProgramMountOptions {
   onSessionEnd?():void;
   collectionDisplay?:CollectionDisplaySnapshot;
   onCollectionIntent?(event:CollectionIntentEvent):void;
+  marketplaceDisplay?:MarketplaceDisplaySnapshot;
+  onMarketplaceIntent?(event:MarketplaceIntentEvent):void;
   tradingDisplay?:TradingDisplaySnapshot;
   onTradingIntent?(event:TradingIntentEvent):void;
   shopDisplay?:ShopDisplaySnapshot;
@@ -47,6 +51,7 @@ export interface ProgramMountOptions {
 }
 export interface MountedProgram {
   setCollectionDisplay(snapshot:CollectionDisplaySnapshot):void;
+  setMarketplaceDisplay(snapshot:MarketplaceDisplaySnapshot):void;
   setTradingDisplay(snapshot:TradingDisplaySnapshot):void;
   setShopDisplay(snapshot:ShopDisplaySnapshot):void;
   setInputs(inputs: ProgramInputs): void;
@@ -58,8 +63,9 @@ export interface MountedProgram {
 }
 export declare function programHeaders(assetOrigin: string): Record<string, string>;
 export declare function mountProgram(root: HTMLElement, options: ProgramMountOptions): MountedProgram;
-export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void;onShopDisplay?(snapshot:ShopDisplaySnapshot):void;onTradingDisplay?(snapshot:TradingDisplaySnapshot):void}): Promise<{
+export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void;onShopDisplay?(snapshot:ShopDisplaySnapshot):void;onTradingDisplay?(snapshot:TradingDisplaySnapshot):void;onMarketplaceDisplay?(snapshot:MarketplaceDisplaySnapshot):void}): Promise<{
   collectionIntent(event:CollectionIntentEvent):void;
+  marketplaceIntent(event:MarketplaceIntentEvent):void;
   tradingIntent(event:TradingIntentEvent):void;
   shopIntent(event:ShopIntentEvent):void;
   editorProposal(snapshotId:string,revision:number,patch:EditorProposal['patch']):void;

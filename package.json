@@ -42,6 +42,10 @@
       "default": "./src/trade-client.js"
     },
     "./trading-ui": "./src/trading-ui.js",
+    "./marketplace-session": {"types":"./src/marketplace-session.d.ts","default":"./src/marketplace-session.js"},
+    "./presentation/marketplace-display": {"types":"./src/presentation/marketplace-display.d.ts","default":"./src/presentation/marketplace-display.js"},
+    "./presentation/program-marketplace-view": {"types":"./src/presentation/program-marketplace-view.d.ts","default":"./src/presentation/program-marketplace-view.js"},
+    "./presentation/program-marketplace-bootstrap": {"types":"./src/presentation/program-marketplace-bootstrap.d.ts","default":"./src/presentation/program-marketplace-bootstrap.js"},
     "./trading-session": "./src/trading-session.js",
     "./presentation/trading-display": {"types":"./src/presentation/trading-display.d.ts","default":"./src/presentation/trading-display.js"},
     "./presentation/program-trading-view": {"types":"./src/presentation/program-trading-view.d.ts","default":"./src/presentation/program-trading-view.js"},

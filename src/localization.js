@@ -1,6 +1,8 @@
 export const localizationProtocol='digital-card-localization@1';
 const freeze=value=>{for(const child of Object.values(value))if(child&&typeof child==='object')freeze(child);return Object.freeze(value);};
 export const englishMessages=freeze({
+  'marketplace.error':'Unable to complete this marketplace action. Review the details in the host.',
+  'marketplace.settings':'Commerce settings','marketplace.settingsJson':'Settings JSON','marketplace.applySettings':'Apply commerce settings','marketplace.editRejected':'The edit could not be applied. Review the current fields and try again.',
   'trades.editRejected':'The latest edit was not saved. Check the displayed values and try again.',
   'trades.error':'Unable to complete this trade action. Review the details in the host.',
   'trades.previous':'Previous page','trades.closeReview':'Close trade review','trades.reviewAction':'Review trade in host','trades.inspect':'Inspect card','trades.details':'Offer details',

@@ -644,3 +644,49 @@ Display grants control participant names, card names, line, rarity, eligibility 
 The program edits a parent-owned draft and requests native review. Only native confirmation can authorize sending an offer or counteroffer, accepting, declining or cancelling. Counteroffers preserve the original offer digest and swap the existing offer sides. Changes to the draft invalidate prior review; policy review must remain valid when the command is built. Existing application recovery controls retain the original command after an uncertain response.
 
 Disabling trading prevents new composition, acceptance and counteroffers while retaining outstanding offers and permitted cancellation/decline. Disabling the portable adapter restores native controls. Account, model and program-session changes invalidate stale actions and confirmations; disposing the adapter releases its sessions and rendering resources.
+
+## Replace the marketplace with a portable program
+
+The marketplace adapter shares the host's seller draft, purchase review and recovery path with the native view. A program presents listing and order pages, seller options and ordinary listing fields. Shop creation, listing creation, purchases, raffle entry and cancellation require native review. Action parameters and commerce settings use native editors.
+
+Generate a Python or Go interface, then serve its output from a reviewed, credential-free program origin using the separate-origin headers described above:
+
+```sh
+python examples/plugins/python-marketplace-view.py marketplace-output
+go run examples/plugins/go-marketplace-view/main.go marketplace-output
+```
+
+Each generator writes `index.html` and `marketplace.css`. The generated HTML loads `/program-marketplace-bootstrap.js`; serve the public bootstrap at that path and its relative module dependencies alongside it.
+
+Register the program with an explicit display grant:
+
+```js
+import {createProgramMarketplaceView} from '@digital-card/framework/presentation/program-marketplace-view';
+import {marketplaceIntents} from '@digital-card/framework/presentation/marketplace-display';
+import {mountFramework} from '@digital-card/framework/ui';
+
+const fields = ['listingName', 'description', 'shopName', 'price', 'schedule',
+  'availability', 'raffleState', 'sellerFields', 'allocation', 'orderStatus',
+  'itemName', 'preview'];
+const marketplace = createProgramMarketplaceView({
+  registry: new Map([['marketplace.example', {
+    approved: true,
+    version: '1.0.0',
+    url: 'https://programs.example/marketplace/index.html',
+    intents: [...marketplaceIntents],
+    marketplaceDisplay: {profile: 'dc.marketplace-display@1', fields},
+  }]]),
+  programId: 'marketplace.example',
+  displayFields: fields,
+});
+const app = mountFramework(root, {client, views: {marketplace}});
+// When removing the application:
+app.dispose();
+marketplace.dispose();
+```
+
+The [marketplace display schema](marketplace-display.schema.json) describes listing and order windows of up to 24 entries and seller-option windows of up to 48. Display grants control authored labels, prices, schedules, availability, raffle state, seller fields, allocation disclosures, order status and previews. Snapshots use opaque handles; command keys, quote digests, credentials and authoritative identifiers remain with the host.
+
+Editing a seller draft invalidates its stock review. Ticket-based mint-pack stock retains the existing allocation quote, status and reconciliation controls. An uncertain purchase or listing creation must recover its original command before a new attempt. The portable interface cannot acknowledge an allocation failure or submit a financial command directly.
+
+Disabling the adapter restores native controls. Dispose the application and adapter together to release sessions and rendering resources. Fulfillment administration and trading-policy controls are separate views.

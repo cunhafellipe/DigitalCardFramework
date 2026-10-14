@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added portable marketplace views with shared native purchase and seller review, stock recovery, order history and Python/Go layouts.
+
 - Added portable trading views with scoped inventory and offer displays, shared native confirmation, private-inventory support and Python/Go layouts.
 
 - Added portable complete shop views with scoped product and rate displays, native purchase review and recovery, and independent Python/Go layouts.

@@ -3066,7 +3066,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/AuditResult"
                 }
               }
             }
@@ -3308,7 +3308,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImportReceipt"
                 }
               }
             }
@@ -20875,6 +20875,146 @@
           }
         }
       },
+      "AuditIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "description": "Diagnostic context may be absent or malformed when the audited state is damaged."
+          }
+        }
+      },
+      "AuditResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ok",
+              "issues"
+            ],
+            "properties": {
+              "ok": {
+                "const": false
+              },
+              "issues": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "detail"
+                  ],
+                  "properties": {
+                    "code": {
+                      "const": "NO_CATALOG"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ok",
+              "issues",
+              "revision",
+              "counts"
+            ],
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AuditIssue"
+                }
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "counts": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "users",
+                  "copies",
+                  "packs",
+                  "trades",
+                  "events"
+                ],
+                "properties": {
+                  "users": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "copies": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "packs": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "trades": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "events": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ImportReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "digest",
+          "importedAt"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CommandIntent": {
         "type": "object",
         "additionalProperties": false,
@@ -22835,7 +22975,7 @@
                 ]
               },
               "result": {
-                "type": "object"
+                "$ref": "#/components/schemas/ImportReceipt"
               }
             }
           },

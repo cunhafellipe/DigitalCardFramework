@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Define card-policy and resource lifecycle receipts, catalog import receipts, and healthy or damaged-state audit responses.
+
 - Describe checked binding, card inspection, account history, public album, code inventory, action job, availability and trading responses while retaining private-data exclusions.
 - Add TypeScript declarations for card behavior, permission helpers, PNG encoding and album motion.
 

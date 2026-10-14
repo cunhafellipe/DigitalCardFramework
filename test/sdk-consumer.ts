@@ -250,3 +250,20 @@ async function policyMutationResponses(){
   return {state,name,retiredState,restoredState,resourceName,yes,no};
 }
 void policyMutationResponses;
+
+
+async function auditImportResponses(){
+  const audit=await call('audit',undefined);
+  const ok:boolean=audit.ok;
+  if('counts' in audit){const users:number=audit.counts.users,revision:number=audit.revision;void [users,revision];}
+  for(const issue of audit.issues){const code:string=issue.code,detail:unknown=issue.detail;void [code,detail];}
+  const preview=await call('previewImport',{source:{cards:[]},expectedVersion:1});
+  const receipt=await call('commitImport',{key:'import',manifest:preview.manifest,digest:preview.digest,expectedVersion:preview.expectedVersion,policyRevision:preview.policyRevision});
+  const version:number=receipt.version,digest:string=receipt.digest,time:string=receipt.importedAt;
+  // @ts-expect-error import receipt does not repeat the authored catalog
+  void receipt.manifest;
+  // @ts-expect-error audit detail must be narrowed before string use
+  const detail:string=audit.issues[0]?.detail;
+  return {ok,version,digest,time,detail};
+}
+void auditImportResponses;

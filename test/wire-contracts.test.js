@@ -442,3 +442,26 @@ test('card policy and resource HTTP receipts preserve authored documents and lif
   for(const [operation,receipt,field,value]of [['saveCardPolicy',saved,'state','active'],['activateCardPolicy',activated,'affected',{}],['retireCardPolicy',retired,'state','draft'],['restoreCardPolicy',restored,'state','active'],['saveCardResource',resourceSaved,'resource',{}],['retireCardResource',resourceRetired,'retired',false],['restoreCardResource',resourceRestored,'retired',true]])assert.throws(()=>validateWireResponse(operation,200,{...receipt,[field]:value}),WireContractError);
   actor=x.bob;await assert.rejects(call('saveCardPolicy',{...saveInput,key:'policy-denied',expectedRevision:revision()}),error=>error instanceof WireApiError&&error.status===403);await assert.rejects(call('saveCardResource',{...resourceInput,key:'resource-denied',expectedRevision:revision()}),error=>error instanceof WireApiError&&error.status===403);
 });
+
+
+test('audit and import HTTP contracts preserve diagnostics, preview warnings and original receipts',async t=>{
+  const store=new MemoryStore(),x=fixture({store}),manager={...x.alice,role:'admin'},copy=x.open()[0];let actor=manager,handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const healthy=await call('audit',undefined);assert.equal(healthy.ok,true);assert.deepEqual(healthy.issues,[]);assert.equal(healthy.counts.copies,1);
+  const card=structuredClone(x.core.operatorCatalog(manager).cards[0]);card.layers=[];card.stats={attack:12,custom:{names:['one','two'],enabled:true}};
+  const preview=await call('previewImport',{source:{cards:[card]},mode:'merge',expectedVersion:1});assert(preview.warnings.some(warning=>warning.path==='cards.'+card.id+'.layers'&&typeof warning.message==='string'));assert.deepEqual(preview.manifest.cards.find(row=>row.id===card.id).stats,card.stats);
+  const input={key:'import-receipt',manifest:preview.manifest,digest:preview.digest,expectedVersion:preview.expectedVersion,policyRevision:preview.policyRevision},receipt=await call('commitImport',input);assert.equal(receipt.version,2);assert.equal(receipt.digest,preview.digest);assert.deepEqual(await call('commitImport',input),receipt);assert.deepEqual(x.core.inspectCard(x.alice,copy.id).definition,copy.definition);
+  const next=await call('previewImport',{source:{cards:[{...card,name:'Revised'}]},expectedVersion:2});await call('commitImport',{key:'import-next',manifest:next.manifest,digest:next.digest,expectedVersion:next.expectedVersion,policyRevision:next.policyRevision});assert.deepEqual(await call('commitImport',input),receipt);assert.equal(x.core.catalog().version,3);
+  store.transact(s=>{s.copies[copy.id].ownerId='missing-owner';delete s.copies[copy.id].id;});
+  const absent=await call('audit',undefined);assert.equal(absent.ok,false);assert(absent.issues.some(issue=>issue.code==='OWNER_MISSING'&&!Object.hasOwn(issue,'detail')));
+  store.transact(s=>{s.copies[copy.id].id=42;});const numeric=await call('audit',undefined);assert(numeric.issues.some(issue=>issue.code==='OWNER_MISSING'&&issue.detail===42));
+  const empty=new CardFramework();t.after(()=>empty.close());handler=createApiHandler({framework:empty,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  const unconfigured=await call('audit',undefined);assert.equal(unconfigured.ok,false);assert.equal(unconfigured.issues[0].code,'NO_CATALOG');assert.equal(Object.hasOwn(unconfigured,'counts'),false);assert.equal(Object.hasOwn(unconfigured,'revision'),false);
+  for(const mutate of [value=>delete value.version,value=>value.version=0,value=>value.digest='invalid',value=>value.importedAt='invalid',value=>value.manifest={}]){const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('commitImport',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.counts,value=>value.counts.users=-1,value=>value.revision='1',value=>value.issues=[{detail:'missing-code'}],value=>value.issues=[{code:'CUSTOM',credentials:{}}],value=>value.rawState={}]){const invalid=structuredClone(healthy);mutate(invalid);assert.throws(()=>validateWireResponse('audit',200,invalid),WireContractError);}
+  for(const invalid of [{ok:true,issues:unconfigured.issues},{...unconfigured,issues:[]},{...unconfigured,revision:0}])assert.throws(()=>validateWireResponse('audit',200,invalid),WireContractError);
+  actor=x.bob;await assert.rejects(call('audit',undefined),error=>error instanceof WireApiError&&error.status===403);await assert.rejects(call('commitImport',{...input,key:'denied-import'}),error=>error instanceof WireApiError&&error.status===403);
+});

@@ -143,6 +143,48 @@ In Creator studio, select the card and optional variant you want to update and o
 
 Use this route for portable artwork built from supported scene, material and motion primitives. It does not install custom executable renderers, editor tools or live-effect adapters. A developer can also load the archive through `importPackage` from `@digital-card/framework/presentation`.
 
+## Run an external editor transform
+
+An offline transform lets a Python or Go tool compute new scene content without executing uploaded code in Studio. Install a tool and its grants in trusted host configuration:
+
+```js
+import { mountStudio } from '@digital-card/framework/presentation/studio';
+import { createEditorTransforms } from '@digital-card/framework/presentation/editor-transforms';
+
+const editorTransforms = createEditorTransforms({tools: [{
+  id: 'example.grid-decoration', version: '1.0.0', title: 'Grid and decorate',
+  parameters: {
+    columns: {label: 'Columns', type: 'number', default: 2, minimum: 1, maximum: 8, step: 1},
+    gap: {label: 'Gap', type: 'number', default: 12, minimum: 0, maximum: 100, step: 1},
+    padding: {label: 'Padding', type: 'number', default: 20, minimum: 0, maximum: 200, step: 1},
+  },
+  grants: {faces: ['front'], newRasterAssets: true, capabilities: []},
+}]});
+const studio = mountStudio(root, {initialPackage, editorTransforms});
+// On host component removal:
+studio.dispose();
+editorTransforms.dispose();
+```
+
+In Studio, export a transform request, then run either example:
+
+```sh
+python examples/plugins/python-editor-transform.py request.job result.result
+go run examples/plugins/go-editor-transform/main.go request.job result.result
+```
+
+Import the result into the same Studio session and inspect the transformed preview and change summary before applying it. Studio enables Apply once the preview is ready. Apply creates one undoable edit; Undo and Redo use the ordinary project history. The examples compute an aspect-preserving grid for top-level unlocked images and add a new transparent border raster. They retain existing order and skip groups and locked layers.
+
+Requests contain `request.json` and `source.dcard`; results contain `result.json` and `result.dcard`. The source package omits private authoring context and copy-scoped stat values; public card/variant stat definitions and values needed by the scenes remain available. The [header schema](editor-transform.schema.json) describes the versioned envelope. Tools echo the request identity and source digest, but only the retained host session authorizes application. Editing or replacing the project invalidates an older result. Disabling a tool or disposing its session also prevents application. Studio discards its own pending requests when removed; the host owns an externally supplied controller.
+
+A grant permits scene changes on named faces, subject to locked-content and ancestry protection. Existing asset bytes and descriptors, card identity, canvas, posters, and authoring metadata remain protected. New PNG/JPEG/WebP assets require an explicit grant and pass ordinary package validation. Added required capabilities must also be explicitly granted. Neither the tool nor its result can broaden these permissions.
+
+The session defaults to four outstanding jobs and accepts one through eight. Source archives are limited to 64 MiB, result archives to 80 MiB, and retained archive bytes to 128 MiB. Headers allow 64 KiB and parameters 16 KiB. New raster assets are limited to 32, 4 MiB and 4,194,304 pixels each, with 16 MiB and 16,777,216 pixels in aggregate; tighter package limits still apply. The API provides `prepare`, `review`, `apply`, `discard`, `setEnabled`, and `dispose` for custom hosts.
+
+Custom hosts can call `mountReview(project, review, {root, side})` to display the validated proposal without receiving a mutable proposal object. It returns `ready` and `dispose`; each job retains at most one preview. Discarding or disabling the job also closes its preview. Only one result review runs at a time, and an accepted replacement review invalidates the earlier proposal before processing begins.
+
+This is an offline computation and reviewed-application route. It does not install arbitrary live editor-panel callbacks or launch external processes from the browser. Final publication still uses the normal validation and authorization workflow.
+
 ## Author a live vector effect with Python or Go
 
 Generate a card package containing a passive dotLottie animation with either standard-library example:

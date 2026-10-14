@@ -27,7 +27,7 @@ export function mountStudio(
     onPublish,
     performance = {},
     presets = materialPresets,
-    library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants,
+    library, policyProvider, context = {}, panels = [], editorContributions = [], editorContributionGrants, editorTransforms,
   } = {},
 ) {
   presets = { ...presets };
@@ -1038,7 +1038,7 @@ export function mountStudio(
     if (!destination) return;
     side = destination;
     selected = id;
-  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants});
+  },rebuild,open,report,schedule,library,policyProvider,context,panels,editorContributions,editorContributionGrants,editorTransforms});
   root.append(authoring.root);
   const ready = initialPackage
     ? open(initialPackage)

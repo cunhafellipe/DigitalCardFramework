@@ -126,6 +126,7 @@
     "./binding-factory-contracts": "./src/binding-factory-contracts.js",
     "./remote-binding-factory": "./src/remote-binding-factory.js",
     "./presentation/editor-contributions": "./src/presentation/editor-contributions.js",
+    "./presentation/editor-transforms": {"types": "./src/presentation/editor-transforms.d.ts", "default": "./src/presentation/editor-transforms.js"},
     "./localization": "./src/localization.js"
   },
   "scripts": {

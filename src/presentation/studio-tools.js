@@ -52,6 +52,7 @@ export function mountAuthoringTools({
   panels = [],
   editorContributions = [],
   editorContributionGrants,
+  editorTransforms,
 }) {
   let portablePanels,portablePanelError=null;
   try{portablePanels=createEditorContributions(editorContributions,{grants:editorContributionGrants});}
@@ -73,6 +74,8 @@ export function mountAuthoringTools({
   const expandedSpans = new Set();
   const expandedMasks = new Set();
   let mountedPanels = [];
+  const transformStates=new Map();let transformProject=null,transformGeneration=0,authoringRenderGeneration=0;
+  function clearTransforms(){transformGeneration++;for(const state of transformStates.values())if(state.requestId)editorTransforms?.discard(state.requestId);transformStates.clear();}
   const disposePanels = () => {
     for (const panel of mountedPanels) panel.dispose?.();
     mountedPanels = [];
@@ -133,6 +136,38 @@ export function mountAuthoringTools({
   }
   function chosen() {
     return selection.size ? [...selection] : [getSelected()].filter(Boolean);
+  }
+  function renderTransforms(project){
+    if(!editorTransforms)return;
+    if(transformProject!==project){clearTransforms();transformProject=project;}
+    const section=el('section');section.className='dcs-editor-transforms';section.append(el('h3','External editor transforms'),el('p','Export a request, run the installed tool outside the browser, then import and review its result. Applying a reviewed result creates one undoable edit.'));root.append(section);
+    for(const tool of editorTransforms.tools){
+      const state=transformStates.get(tool.id)??{parameters:Object.fromEntries(Object.entries(tool.parameters).map(([key,rule])=>[key,rule.default]))};transformStates.set(tool.id,state);
+      const fieldset=el('fieldset');fieldset.append(el('legend',tool.title));section.append(fieldset);const cycle=authoringRenderGeneration,sameJob=()=>!disposed&&getProject()===project&&transformProject===project&&transformStates.get(tool.id)===state,current=()=>sameJob()&&cycle===authoringRenderGeneration;
+      for(const [key,rule]of Object.entries(tool.parameters)){
+        const wrap=el('label',rule.label),control=el('input');control.setAttribute('aria-label',rule.label);
+        if(rule.type==='boolean'){control.type='checkbox';control.checked=state.parameters[key];}else{control.type=rule.type==='number'?'number':'text';control.value=String(state.parameters[key]);if(rule.type==='number'){control.min=String(rule.minimum);control.max=String(rule.maximum);control.step=String(rule.step);}else control.maxLength=rule.maxLength;}
+        control.disabled=!!state.busy;control.onchange=()=>{if(!current()||state.busy)return;state.parameters[key]=rule.type==='boolean'?control.checked:rule.type==='number'?control.valueAsNumber:control.value;if(state.requestId){editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;render();}};wrap.append(control);fieldset.append(wrap);
+      }
+      const exportButton=button(fieldset,'Export transform request',async()=>{
+        if(!sameJob()){state.busy=false;return;}const generation=transformGeneration;if(state.requestId)editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;
+        try{const prepared=await editorTransforms.prepare(project,{toolId:tool.id,parameters:{...state.parameters}});if(!sameJob()||generation!==transformGeneration){editorTransforms.discard(prepared.requestId);return;}state.requestId=prepared.requestId;const url=URL.createObjectURL(new Blob([prepared.archive],{type:'application/zip'})),link=el('a');link.href=url;link.download=tool.id+'.job';link.click();setTimeout(()=>URL.revokeObjectURL(url),0);report('Transform request exported. Run the external tool, then import its result.');}
+        finally{state.busy=false;if(sameJob())render();}
+      });
+      exportButton.disabled=!!state.busy;const queuedExport=exportButton.onclick;exportButton.onclick=()=>{if(!current()||state.busy)return;state.busy=true;exportButton.disabled=true;queuedExport();};
+      const upload=button(fieldset,'Import transform result',()=>{
+        if(!current()||!state.requestId||state.busy)return;const requestId=state.requestId,generation=transformGeneration,file=el('input');file.type='file';file.accept='.result,.zip';
+        file.onchange=()=>{if(!current()||state.busy)return;const selected=file.files?.[0];if(!selected)return;state.busy=true;delete state.review;render();run(async()=>{
+          if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId){state.busy=false;return;}
+          try{if(selected.size>80*1024*1024+65536+4096)throw new Error('Transform result exceeds its budget');const archive=new Uint8Array(await selected.arrayBuffer());if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;const review=await editorTransforms.review(project,requestId,archive);if(!sameJob()||generation!==transformGeneration||state.requestId!==requestId)return;state.review=review;report('Transform result reviewed. Inspect the changes before applying.');}
+          finally{state.busy=false;if(sameJob())render();}
+        });};file.click();
+      });upload.disabled=!state.requestId||!!state.busy;
+      if(state.review){fieldset.append(el('p','Reviewed changes: '+state.review.changes.scenes.length+' scene(s), '+state.review.changes.addedAssets.length+' new raster asset(s).'));const details=el('ul');for(const path of state.review.changes.scenes)details.append(el('li','Scene: '+path));for(const id of state.review.changes.addedAssets)details.append(el('li','New asset: '+id));fieldset.append(details);const reviewed=state.review,previewRoot=el('div');previewRoot.className='dcs-transform-preview';Object.assign(previewRoot.style,{width:'240px',height:'360px',position:'relative'});fieldset.append(previewRoot);const apply=button(fieldset,'Apply reviewed transform',async()=>{if(!current()||state.review!==reviewed)return;editorTransforms.apply(project,reviewed);delete state.requestId;delete state.review;await rebuild();if(sameJob())report('Reviewed transform applied. Use Undo to restore the previous content.');});apply.disabled=true;
+        try{const preview=editorTransforms.mountReview(project,reviewed,{root:previewRoot,side:tool.grants.faces[0]});mountedPanels.push(preview);preview.ready.then(result=>{if(!current()||state.review!==reviewed)return;if(result.mode==='interactive')apply.disabled=false;else report('The transformed scene could not be previewed. Nothing was applied.');}).catch(()=>{if(current())report('The transform preview is stale or unavailable. Nothing was applied.');});}catch{report('The transform preview is stale or unavailable. Nothing was applied.');}
+      }
+      if(state.requestId)button(fieldset,'Discard transform request',()=>{if(!current())return;editorTransforms.discard(state.requestId);delete state.requestId;delete state.review;render();});
+    }
   }
   async function loadEntries() {
     const n = ++generation;
@@ -219,14 +254,17 @@ export function mountAuthoringTools({
   root.hidden = false;
   function render() {
     if (disposed) return;
+    authoringRenderGeneration++;
     disposePanels();
     const p = getProject();
     root.replaceChildren(el("h2", "Text, stats & templates"));
     if(portablePanelError)root.append(el('p',portablePanelError));
     if (!p) {
+      if(transformProject){clearTransforms();transformProject=null;}
       root.append(el("p", "Open a card to edit."));
       return;
     }
+    renderTransforms(p);
     const fontCache = new Map();
     const nodes = flattenNodes(
         p.scenes.get(p.manifest.faces[getSide()].scene).nodes,
@@ -1242,6 +1280,7 @@ export function mountAuthoringTools({
     },
     dispose() {
       disposed = true;
+      clearTransforms();
       generation++;
       disposePanels();
       portablePanels.dispose();

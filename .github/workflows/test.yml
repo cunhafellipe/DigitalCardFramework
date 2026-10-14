@@ -19,6 +19,7 @@ jobs:
       - run: pnpm --dir src/presentation install --frozen-lockfile
       - run: pnpm test:sdk
       - run: node tools/generate-album-display.mjs --check
+      - run: node tools/generate-editor-transforms.mjs --check
       - run: node --test test/*.test.js
         env:
           DC_TEST_PYTHON_PLUGIN: '1'
@@ -71,6 +72,9 @@ jobs:
       - run: node --test test/portable-lottie-examples.mjs
         env:
           PYTHON: python3
+      - run: node --test test/editor-transform-examples.mjs
+        env:
+          PYTHON: python3
       - run: node --test test/portable-program-examples.mjs
         env:
           PYTHON: python3
@@ -109,6 +113,13 @@ jobs:
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/editor-transforms-browser.mjs test-results/editor-transforms
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          DC_CI_SOFTWARE_WEBGL: '1'
       - run: xvfb-run --auto-servernum node test/localization-browser.mjs test-results/localization
         env:
           HEADED: '1'

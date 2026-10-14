@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added portable complete collection views with host-owned filtering, comparison, preferences and reviewed trade-ups, plus independent Python/Go layouts.
+
 - Added authenticated remote access decisions with explicit role/permission ceilings, fail-closed revocation and independent Python/Go providers.
 
 - Added reviewed live Studio panels with scoped content/style proposals, native review and Undo/Redo, and Python/Go browser-asset examples.

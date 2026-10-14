@@ -82,6 +82,9 @@ jobs:
       - run: node --test test/live-editor-panel-examples.mjs
         env:
           PYTHON: python3
+      - run: node --test test/collection-view-examples.mjs
+        env:
+          PYTHON: python3
       - run: node --test test/access-provider-examples.mjs
         env:
           PYTHON: python3
@@ -118,6 +121,10 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
       - run: xvfb-run --auto-servernum node test/editor-contributions-browser.mjs test-results/editor-contributions
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/program-collection-browser.mjs test-results/program-collection
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

@@ -25,7 +25,7 @@ const server = createServer(async (req, res) => {
     res.end(
       `import {connectProgram} from '/program.js';const bridge=await connectProgram();try{parent.document.body.dataset.breached='yes';}catch{bridge.intent('isolated');}try{await fetch('/forbidden');}catch{bridge.intent('network-blocked');}bridge.intent('unauthorized');`,
     );
-  } else if (["/program.js", "/data.js", "/album-display.js", "/opener-display.js", "/editor-display.js", "/media.js"].includes(req.url)) {
+  } else if (["/program.js", "/data.js", "/album-display.js", "/opener-display.js", "/editor-display.js", "/collection-display.js", "/media.js"].includes(req.url)) {
     res.setHeader("content-type", "text/javascript");
     res.end(
       await readFile(new URL("../src/presentation" + req.url, import.meta.url)),

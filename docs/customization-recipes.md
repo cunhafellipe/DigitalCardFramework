@@ -224,7 +224,7 @@ python examples/plugins/python-program-card.py program-output
 go run examples/plugins/go-program-card/main.go program-output
 ```
 
-Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js`, `album-display.js`, `opener-display.js`, `media.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
+Review the generated `index.html` and `card.css`, then serve them from a separate, credential-free origin. Serve the framework's `program-bootstrap.js`, `program.js`, `album-display.js`, `opener-display.js`, `editor-display.js`, `collection-display.js`, `media.js` and `data.js` together at that origin's root. Apply the response headers returned by `programHeaders(assetOrigin)` from `@digital-card/framework/presentation/program`, and permit credential-free module requests from the sandbox using `Access-Control-Allow-Origin: *`. Keep the program origin separate from the application and any authenticated services. Uploaded card artwork cannot register a program.
 
 Register the reviewed URL in trusted host configuration and supply the standard renderer adapter:
 
@@ -514,3 +514,43 @@ The same localization options are available on `renderAlbums` from `@digital-car
 A bundle contains `protocol: 'digital-card-localization@1'`, a locale, and a `messages` object. Use the keys and placeholders in the [contract reference](localization.contract.json). Plain messages contain named placeholders such as `{amount}`; plural messages contain an `other` form and optional `zero`, `one`, `two`, `few` and `many` forms. Preserve each key's exact placeholder names. Missing keys use built-in English; English fallback selects English plural forms while displaying numbers in the requested locale. A translated plural key uses that locale's plural rules and falls back to its own `other` form.
 
 Bundles are limited to 128 KiB of encoded JSON, 2,048 known keys and 2,048 characters per message form. Validation rejects unknown keys, malformed placeholders and executable values. Translated text is inserted as text, never HTML. Numeric values use locale-aware formatting; timestamps use UTC. Translation does not change stored amounts, purchase commands or permissions.
+
+## Replace the complete collection view with a portable program
+
+Generate a collection layout using either example:
+
+```sh
+python examples/plugins/python-collection-view.py collection-output
+go run examples/plugins/go-collection-view/main.go collection-output
+```
+
+Serve the generated `index.html` and `collection.css` from a reviewed, credential-free program origin using the separate-origin headers described above. Serve `program-collection-bootstrap.js` and its framework module dependencies from that origin as well. Register one explicit host-selected replacement:
+
+```js
+import {createProgramCollectionView} from '@digital-card/framework/presentation/program-collection-view';
+import {collectionIntents} from '@digital-card/framework/presentation/collection-display';
+import {mountFramework} from '@digital-card/framework/ui';
+
+const fields = ['cardName', 'line', 'rarity', 'finish', 'preview'];
+const collection = createProgramCollectionView({
+  registry: new Map([['collection.example', {
+    approved: true,
+    version: '1.0.0',
+    url: 'https://programs.example/collection/index.html',
+    intents: [...collectionIntents],
+    collectionDisplay: {profile: 'dc.collection-display@1', fields},
+  }]]),
+  programId: 'collection.example',
+  displayFields: fields,
+});
+const app = mountFramework(root, {client, views: {collection}});
+// When removing the application:
+app.dispose();
+collection.dispose();
+```
+
+The replacement owns the collection layout and controls. It supports owned-card and catalog browsing, search, line/rarity/finish filters, sorting, favorites, duplicates, availability, inserts, discovery counts, paging, selection, comparison, wishlist changes and enabled trade-up recipes. Pages contain at most 48 items; selection can retain up to 24 owned copies across pages. Line, rarity and recipe options have independent search and paging, so large catalogs do not require an oversized snapshot. The selected line and rarity remain available when browsing another option page. The parent performs filtering over the current collection and retains authoritative item identities. Search uses the same card fields as the native collection view; it does not send the underlying metadata unless the host grants that field.
+
+Inspection and comparison use the host's configured renderers. Favorite and wishlist requests use the existing authenticated command path. A trade-up request opens native review; only confirmation of the selected recipe and copies submits the command. The program receives opaque handles and current snapshots, never the client, account credentials, private bindings or arbitrary mutation access. The host rejects stale or busy actions and clears collection state when the account changes.
+
+The [collection display schema](collection-display.schema.json) defines the versioned projection. Display fields are explicit grants; `tags`, `stats` and `metadata` are optional additional disclosures. Previews use bounded raster bytes resolved by the parent. `setEnabled(false)` restores the native collection, and `dispose()` releases the adapter. Invalid or unavailable programs retain native fallback. This adapter replaces the collection section; other application sections and shell navigation retain their existing contracts.

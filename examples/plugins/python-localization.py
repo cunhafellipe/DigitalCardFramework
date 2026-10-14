@@ -199,6 +199,7 @@ def main():
     "collection.chooseRecipe": "Elige una receta…",
     "collection.tradeUp": "Mejorar las seleccionadas",
     "collection.tradeUpSuccess": "Mejora completada. Se añadió una carta nueva a tu colección.",
+    "collection.previous": "Página anterior de la colección",
     "collection.more": "Mostrar más",
     "collection.selected": "{count} seleccionadas",
     "collection.matchingDefinitions": {

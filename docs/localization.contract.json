@@ -755,6 +755,10 @@
       "placeholders": [],
       "plural": false
     },
+    "collection.previous": {
+      "placeholders": [],
+      "plural": false
+    },
     "collection.more": {
       "placeholders": [],
       "plural": false

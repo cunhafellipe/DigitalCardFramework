@@ -405,7 +405,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     node.append(list);const opener=element('div');node.append(opener);openerDispose=mountOpener(opener,{controller,cardRenderer:renderer,view:openerView,onSelect:inspect,localization,packArtwork:id=>model.packs.find(pack=>pack.id===id)?.product.artwork});return node;
   }
   const viewState={};
-  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
+  const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,isActionBusy:()=>busy,getPrincipal:()=>commandPrincipal,isCurrentModel:captured=>!disposed&&model===captured,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
   const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:t('nav.tradingControls'),admin:t('nav.admin'),marketplace:t('nav.marketplace'),rewards:t('nav.rewards'),codes:t('nav.codes'),albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};

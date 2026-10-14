@@ -15,6 +15,7 @@ export interface ProgramRegistryEntry {
   albumDisplay?: AlbumDisplayGrant;
   openerDisplay?: OpenerDisplayGrant;
   editorDisplay?: EditorDisplayGrant;
+  collectionDisplay?:CollectionDisplayGrant;
 }
 export type ProgramRegistry = ReadonlyMap<string, ProgramRegistryEntry>;
 export interface ProgramMountOptions {
@@ -33,8 +34,11 @@ export interface ProgramMountOptions {
   editorDisplay?:EditorDisplaySnapshot;
   onEditorProposal?(event:EditorProposal):void;
   onSessionEnd?():void;
+  collectionDisplay?:CollectionDisplaySnapshot;
+  onCollectionIntent?(event:CollectionIntentEvent):void;
 }
 export interface MountedProgram {
+  setCollectionDisplay(snapshot:CollectionDisplaySnapshot):void;
   setInputs(inputs: ProgramInputs): void;
   setAlbumDisplay(snapshot: AlbumDisplaySnapshot): void;
   setOpenerDisplay(snapshot: OpenerDisplaySnapshot): void;
@@ -44,10 +48,12 @@ export interface MountedProgram {
 }
 export declare function programHeaders(assetOrigin: string): Record<string, string>;
 export declare function mountProgram(root: HTMLElement, options: ProgramMountOptions): MountedProgram;
-export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void}): Promise<{
+export declare function connectProgram(options?: {onInputs?(inputs: ProgramInputs): void; onAlbumDisplay?(snapshot: AlbumDisplaySnapshot): void; onOpenerDisplay?(snapshot: OpenerDisplaySnapshot): void;onEditorDisplay?(snapshot:EditorDisplaySnapshot):void;onCollectionDisplay?(snapshot:CollectionDisplaySnapshot):void}): Promise<{
+  collectionIntent(event:CollectionIntentEvent):void;
   editorProposal(snapshotId:string,revision:number,patch:EditorProposal['patch']):void;
   intent(name: string): void;
   selectItem(snapshotId: string, handle: string): void;
   openerIntent(intent: OpenerIntent, snapshotId: string, handle?: string): void;
   dispose(): void;
 }>;
+import type {CollectionDisplayGrant,CollectionDisplaySnapshot,CollectionIntentEvent} from './collection-display.js';

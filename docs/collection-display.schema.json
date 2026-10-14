@@ -1,0 +1,719 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://digital-card.invalid/collection-display/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "snapshotId",
+    "fields",
+    "locale",
+    "dir",
+    "labels",
+    "query",
+    "options",
+    "optionWindows",
+    "counts",
+    "page",
+    "hasMore",
+    "selected",
+    "tradeUps",
+    "busy",
+    "items",
+    "previews"
+  ],
+  "properties": {
+    "profile": {
+      "const": "dc.collection-display@1"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 8,
+      "items": {
+        "enum": [
+          "cardName",
+          "line",
+          "rarity",
+          "finish",
+          "tags",
+          "stats",
+          "metadata",
+          "preview"
+        ]
+      }
+    },
+    "locale": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "dir": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "description",
+        "search",
+        "line",
+        "rarity",
+        "finish",
+        "sort",
+        "show",
+        "browse",
+        "includeInserts",
+        "owned",
+        "catalog",
+        "allLines",
+        "allRarities",
+        "allFinishes",
+        "finishStandard",
+        "finishGloss",
+        "finishHolo",
+        "finishFoil",
+        "newest",
+        "nameOrder",
+        "rarityOrder",
+        "allCards",
+        "favorites",
+        "duplicates",
+        "available",
+        "hideInserts",
+        "showInserts",
+        "discoveries",
+        "totalCopies",
+        "matching",
+        "selected",
+        "compare",
+        "clear",
+        "recipe",
+        "chooseRecipe",
+        "tradeUp",
+        "more",
+        "previous",
+        "inspect",
+        "favorite",
+        "unfavorite",
+        "addWishlist",
+        "onWishlist",
+        "discovered",
+        "notCollected",
+        "reserved",
+        "empty",
+        "selectionLimit"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "search": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "line": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "rarity": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "finish": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "sort": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "show": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "browse": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "includeInserts": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "owned": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "catalog": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "allLines": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "allRarities": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "allFinishes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "finishStandard": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "finishGloss": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "finishHolo": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "finishFoil": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "newest": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "nameOrder": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "rarityOrder": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "allCards": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "favorites": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "duplicates": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "available": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "hideInserts": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "showInserts": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "discoveries": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "totalCopies": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "matching": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "selected": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "compare": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "clear": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "recipe": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "chooseRecipe": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "tradeUp": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "more": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "previous": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "inspect": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "favorite": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "unfavorite": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "addWishlist": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "onWishlist": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "discovered": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "notCollected": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "reserved": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "empty": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "selectionLimit": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "search",
+        "line",
+        "rarity",
+        "finish",
+        "sort",
+        "show",
+        "inserts"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "owned",
+            "catalog"
+          ]
+        },
+        "search": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
+        "rarity": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
+        "finish": {
+          "enum": [
+            "",
+            "standard",
+            "gloss",
+            "holo",
+            "foil"
+          ]
+        },
+        "sort": {
+          "enum": [
+            "newest",
+            "name",
+            "rarity"
+          ]
+        },
+        "show": {
+          "enum": [
+            "all",
+            "favorites",
+            "duplicates",
+            "available"
+          ]
+        },
+        "inserts": {
+          "type": "boolean"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lines",
+        "rarities",
+        "recipes"
+      ],
+      "properties": {
+        "lines": {
+          "type": "array",
+          "maxItems": 49,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "handle",
+              "label"
+            ],
+            "properties": {
+              "handle": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          }
+        },
+        "rarities": {
+          "type": "array",
+          "maxItems": 49,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "handle",
+              "label"
+            ],
+            "properties": {
+              "handle": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          }
+        },
+        "recipes": {
+          "type": "array",
+          "maxItems": 49,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "handle",
+              "label"
+            ],
+            "properties": {
+              "handle": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          }
+        }
+      }
+    },
+    "optionWindows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lines",
+        "rarities",
+        "recipes"
+      ],
+      "properties": {
+        "lines": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "search",
+            "page",
+            "hasMore"
+          ],
+          "properties": {
+            "search": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasMore": {
+              "type": "boolean"
+            }
+          }
+        },
+        "rarities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "search",
+            "page",
+            "hasMore"
+          ],
+          "properties": {
+            "search": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasMore": {
+              "type": "boolean"
+            }
+          }
+        },
+        "recipes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "search",
+            "page",
+            "hasMore"
+          ],
+          "properties": {
+            "search": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "hasMore": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discoveries",
+        "definitions",
+        "copies",
+        "matching",
+        "selected"
+      ],
+      "properties": {
+        "discoveries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "definitions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "copies": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "matching": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "selected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "hasMore": {
+      "type": "boolean"
+    },
+    "selected": {
+      "type": "array",
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      }
+    },
+    "tradeUps": {
+      "type": "boolean"
+    },
+    "busy": {
+      "type": "boolean"
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "position",
+          "selected",
+          "favorite",
+          "wished",
+          "discovered",
+          "copies",
+          "reserved",
+          "available"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "favorite": {
+            "type": "boolean"
+          },
+          "wished": {
+            "type": "boolean"
+          },
+          "discovered": {
+            "type": "boolean"
+          },
+          "copies": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "reserved": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "line": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "rarity": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "finish": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "stats": {
+            "type": "object"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "previews": {
+      "type": "array",
+      "maxItems": 48,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "mediaType",
+          "bytes"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "mediaType": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "bytes": {
+            "description": "Native Uint8Array; raster and aggregate budgets validated separately."
+          }
+        }
+      }
+    }
+  }
+}

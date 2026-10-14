@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './helpers.js';
+import {codesFixture,vault} from './codes-fixtures.mjs';
+import {CardFramework} from '../src/core.js';
 import {validateWireRequest,validateWireResponse,WireContractError} from '../src/wire-contracts.js';
 import {createWireTransport,WireApiError} from '../src/wire-client.js';
 import {openapi} from '../src/contracts.js';
@@ -348,4 +350,44 @@ test('directory, notifications, ledger and public-album HTTP projections retain 
   const optionalData=structuredClone(notices);delete optionalData.items[0].data;validateWireResponse('notifications',200,optionalData);optionalData.items[0].data={custom:{nested:[null,true,1]}};validateWireResponse('notifications',200,optionalData);
   for(const mutate of [value=>delete value[0].reference,value=>value[0].delta=0.5,value=>value[0].balance=-1,value=>value[0].at='invalid',value=>value[0].credentials={}]){const invalid=structuredClone(history);mutate(invalid);assert.throws(()=>validateWireResponse('history',200,invalid),WireContractError);}
   for(const mutate of [value=>delete value[0].ownerName,value=>value[0].cardCount=-1,value=>value[0].cardCount='1',value=>value[0].placements=[]]){const invalid=structuredClone(albums);mutate(invalid);assert.throws(()=>validateWireResponse('publicAlbums',200,invalid),WireContractError);}
+});
+
+
+test('operator code and action HTTP records exclude secrets while retaining lifecycle and authored data',async t=>{
+  let now='2026-09-30T12:00:00.000Z';
+  const x=codesFixture({stock:2,clock:()=>now,change(c){c.variants.find(row=>row.id==='dawn.standard').onOpen=[{id:'deliver',handler:'example.contract-delivery',params:{private:'delivery-secret'}}];},actionHandlers:{'example.contract-delivery':async()=>({privateResult:'provider-secret'})}});
+  let actor={...x.alice,role:'admin'},handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const input={key:'pool-contract',pool:{id:'additional',providerId:'example.additional',name:'Additional',metadata:{region:{names:['one','two']}}}};
+  const configured=await call('configureCodePool',input);assert.equal(configured.normalization,'exact');assert.equal(configured.enabled,true);assert.equal(configured.instructions,'');assert.equal(configured.redeemUrl,null);assert.deepEqual(configured.metadata,input.pool.metadata);assert.deepEqual(await call('configureCodePool',input),configured);
+  x.core.importCodes(actor,{key:'expiring-contract',poolId:'additional',codes:[{code:'EXPIRING-PRIVATE',expiresAt:'2026-09-30T12:01:00.000Z',metadata:{extension:{label:'authored'}}}]});
+  const initial=await call('codeInventory',undefined,{query:{limit:1}});assert.equal(initial.total,3);assert.equal(initial.items[0].copyId,null);assert.equal(initial.items[0].allocatedAt,null);assert.equal(typeof initial.next,'string');
+  const next=await call('codeInventory',undefined,{query:{limit:1,after:initial.next}});assert.notEqual(next.items[0].id,initial.items[0].id);
+  const opened=x.openCode(),codeId=opened.codes[0].id;
+  const allocated=(await call('codeInventory',undefined)).items.find(row=>row.id===codeId);assert.equal(allocated.holderId,x.alice.userId);assert.equal(allocated.copyId,opened.id);assert.equal(allocated.status,'allocated');
+  x.core.revealCode(x.alice,{key:'code-reveal-contract',codeId});x.core.reportCodeUsage(x.alice,{key:'code-reported',codeId,used:true});
+  now='2026-09-30T12:02:00.000Z';
+  const records=await call('codeInventory',undefined);assert.equal(records.items.find(row=>row.id===codeId).reportedUsed,true);assert.equal(records.items.find(row=>row.poolId==='additional').status,'expired');
+  const pools=await call('codePools',undefined);assert.equal(pools.find(row=>row.id==='rewards').counts.allocated,1);assert.equal(pools.find(row=>row.id==='additional').counts.expired,1);
+  const pending=await call('actionJobs',undefined,{query:{limit:1}});assert.equal(pending.total,2);assert.equal(pending.items[0].status,'pending');assert.equal(typeof pending.next,'string');
+  await x.core.dispatchActions(actor);const jobs=await call('actionJobs',undefined);assert(jobs.items.every(job=>job.status==='succeeded'));assert(jobs.items.every(job=>job.attempts===1));assert(jobs.items.every(job=>job.history.length>1));
+  const payload=JSON.stringify({records,pools,jobs});for(const secret of ['SECRET-REWARD','EXPIRING-PRIVATE','delivery-secret','provider-secret','fingerprint','leaseToken'])assert.equal(payload.includes(secret),false);
+  for(const mutate of [value=>delete value.createdAt,value=>delete value.enabled,value=>value.normalization='unknown',value=>value.metadata=null,value=>value.secret='private']){const invalid=structuredClone(configured);mutate(invalid);assert.throws(()=>validateWireResponse('configureCodePool',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value[0].counts,value=>value[0].counts.allocated=-1,value=>value[0].counts.unknown=1]){const invalid=structuredClone(pools);mutate(invalid);assert.throws(()=>validateWireResponse('codePools',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.items[0].holderHistory,value=>value.items[0].status='unknown',value=>value.items[0].revealedAt='invalid',value=>value.items[0].metadata=null,value=>value.items[0].secret={},value=>value.items[0].fingerprint='private']){const invalid=structuredClone(records);mutate(invalid);assert.throws(()=>validateWireResponse('codeInventory',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.items[0].handler,value=>value.items[0].attempts=-1,value=>value.items[0].status='unknown',value=>value.items[0].params={},value=>value.items[0].leaseToken='private',value=>value.items[0].result={}]){const invalid=structuredClone(jobs);mutate(invalid);assert.throws(()=>validateWireResponse('actionJobs',200,invalid),WireContractError);}
+  actor=x.bob;for(const operation of ['codePools','codeInventory','actionJobs'])await assert.rejects(call(operation,undefined),error=>error instanceof WireApiError&&error.status===403);
+  await assert.rejects(call('configureCodePool',{...input,key:'denied-pool'}),error=>error instanceof WireApiError&&error.status===403);
+  const generated=new CardFramework({clock:()=>now,random:()=>0,codeVault:vault(),codeGenerators:{'example.generator':()=>({code:'GENERATED-PRIVATE',metadata:{provider:{version:1}}})},actionHandlers:{'example.contract-delivery':async()=>{}}});t.after(()=>generated.close());
+  generated.publishCatalog({role:'admin'},x.c);const user=generated.registerUser({role:'admin'},{provider:'test',subject:'generated-reader',displayName:'Generated reader'});actor={userId:user.id,role:'admin'};
+  generated.grantCurrency(actor,{key:'generated-fund',userId:user.id,currencyId:'credits',amount:100,reason:'Fixture funding'});
+  handler=createApiHandler({framework:generated,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  const generatedPool=await call('configureCodePool',{key:'generated-pool',pool:{id:'rewards',providerId:'example.game',name:'Generated',generator:'example.generator'}});assert.equal(generatedPool.generator,'example.generator');
+  const purchase=generated.purchase(actor,{key:'generated-purchase',...generated.quote(actor,{productId:'bundle'})});generated.openPack(actor,{key:'generated-open',packId:purchase.packs[0].id});
+  const generatedInventory=await call('codeInventory',undefined);assert.equal(generatedInventory.total,1);const generatedCode=generatedInventory.items[0];assert.equal(generatedCode.batchId,null);assert.equal(generatedCode.externalId,null);assert.equal(generatedCode.expiresAt,null);assert.equal(generatedCode.status,'allocated');assert.deepEqual(generatedCode.metadata,{provider:{version:1}});assert.equal(JSON.stringify(generatedInventory).includes('GENERATED-PRIVATE'),false);
+  assert.equal((await call('codePools',undefined))[0].counts.allocated,1);
+
 });

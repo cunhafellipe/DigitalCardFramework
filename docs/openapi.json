@@ -4270,7 +4270,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "$ref": "#/components/schemas/CodePoolView"
                   }
                 }
               }
@@ -4454,7 +4454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CodePoolRecord"
                 }
               }
             }
@@ -4634,7 +4634,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/CodeInventoryPage"
                 }
               }
             }
@@ -7769,7 +7769,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/ActionJobPage"
                 }
               }
             }
@@ -14223,7 +14223,8 @@
             "format": "date-time"
           }
         },
-        "description": "Sanitized delivery history; no executable params, provider output or lease token."
+        "description": "Sanitized delivery history; no executable params, provider output or lease token.",
+        "additionalProperties": false
       },
       "CardStatField": {
         "type": "object",
@@ -20063,6 +20064,372 @@
             "maxItems": 200,
             "items": {
               "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "CodePoolRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "providerId",
+          "name",
+          "normalization",
+          "enabled",
+          "metadata",
+          "instructions",
+          "redeemUrl",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "generator": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Installed synchronous server code factory. Immutable after pool creation."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "normalization": {
+            "enum": [
+              "exact",
+              "upper-trim"
+            ],
+            "default": "exact"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "redeemUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000,
+            "description": "HTTPS URL without credentials. Never include a secret code."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CodePoolView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "providerId",
+          "name",
+          "normalization",
+          "enabled",
+          "metadata",
+          "instructions",
+          "redeemUrl",
+          "createdAt",
+          "counts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "generator": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Installed synchronous server code factory. Immutable after pool creation."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "normalization": {
+            "enum": [
+              "exact",
+              "upper-trim"
+            ],
+            "default": "exact"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "redeemUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000,
+            "description": "HTTPS URL without credentials. Never include a secret code."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "available": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "allocated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expired": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "redeemed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "revoked": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      },
+      "CodeInventoryRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "createdAt",
+          "poolId",
+          "providerId",
+          "batchId",
+          "externalId",
+          "importedAt",
+          "expiresAt",
+          "allocatedAt",
+          "status",
+          "copyId",
+          "holderId",
+          "holderHistory",
+          "revealedAt",
+          "reportedUsed",
+          "redeemedAt",
+          "revokedAt",
+          "metadata",
+          "history"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "poolId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "batchId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "allocatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "allocated",
+              "expired",
+              "redeemed",
+              "revoked"
+            ]
+          },
+          "copyId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "holderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "holderHistory": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "revealedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "reportedUsed": {
+            "type": "boolean"
+          },
+          "redeemedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CodeInventoryPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "next"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/CodeInventoryRecord"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ActionJobPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "next"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ActionJob"
             }
           },
           "total": {

@@ -199,3 +199,20 @@ async function accountReadResponses(){
   }
 }
 void accountReadResponses;
+
+
+async function operatorReadResponses(){
+  const configured=await call('configureCodePool',{key:'pool',pool:{id:'pool',providerId:'provider',name:'Pool'}});
+  const enabled:boolean=configured.enabled,metadata:unknown=configured.metadata.custom;
+  for(const pool of await call('codePools',undefined)){const available:number|undefined=pool.counts.available;void available;}
+  for(const row of (await call('codeInventory',undefined)).items){const copy:string|null=row.copyId,batch:string|null=row.batchId,history:unknown[]=row.history;void [copy,batch,history];
+    // @ts-expect-error operator inventory excludes encrypted secrets and fingerprints
+    void row.secret;
+  }
+  for(const job of (await call('actionJobs',undefined)).items){const handler:string=job.handler,status:'pending'|'running'|'succeeded'|'dead'=job.status;void [handler,status];
+    // @ts-expect-error delivery diagnostics exclude executable parameters
+    void job.params;
+  }
+  return {enabled,metadata};
+}
+void operatorReadResponses;

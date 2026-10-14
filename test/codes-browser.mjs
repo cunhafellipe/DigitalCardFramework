@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as playwright from 'playwright';
 const engine=process.env.BROWSER_ENGINE??'chromium',root=fileURLToPath(new URL('../src/',import.meta.url));
 const output=path.resolve(process.argv[2]??'../PortableCardQA/codes');
-const allowed=new Set(['code-ui.js','ui-kit.js']);
+const allowed=new Set(['code-ui.js','ui-kit.js','localization.js']);
 const server=createServer(async(req,res)=>{
   const name=new URL(req.url,'http://localhost').pathname.slice(1);
   if(!name){res.setHeader('Content-Type','text/html');res.end(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="max-width:440px;margin:30px auto;font:16px system-ui;background:#141324;color:#f5efff"><h1>Private code reveals</h1><script type="module">

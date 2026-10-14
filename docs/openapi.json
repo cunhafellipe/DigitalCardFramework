@@ -98,6 +98,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -182,6 +192,16 @@
           },
           "409": {
             "description": "Funds, inventory, supply, quote, version or request-key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -280,6 +300,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -364,6 +394,16 @@
           },
           "409": {
             "description": "Funds, inventory, supply, quote, version or request-key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -462,6 +502,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -553,6 +603,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -599,6 +659,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -697,6 +767,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -743,6 +823,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -841,6 +931,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -925,6 +1025,16 @@
           },
           "409": {
             "description": "Funds, inventory, supply, quote, version or request-key conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1023,6 +1133,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1064,6 +1184,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1165,6 +1295,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1210,6 +1350,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1272,6 +1422,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1327,6 +1487,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1428,6 +1598,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1469,6 +1649,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1539,6 +1729,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1601,6 +1801,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1649,6 +1859,16 @@
           },
           "404": {
             "description": "Unknown or inaccessible resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1754,6 +1974,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -1882,6 +2112,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2003,6 +2243,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2086,6 +2336,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -2184,6 +2444,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -2314,6 +2584,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -2459,6 +2739,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2573,6 +2863,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -2710,6 +3010,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2824,6 +3134,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -2952,6 +3272,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3046,6 +3376,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3133,6 +3473,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -3261,6 +3611,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3382,6 +3742,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3490,6 +3860,16 @@
           },
           "409": {
             "description": "Pending or conflicting settlement",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -3691,6 +4071,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3878,6 +4268,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4042,6 +4442,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -4248,6 +4658,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4388,6 +4808,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -4578,6 +5008,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4751,6 +5191,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -4950,6 +5400,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5134,6 +5594,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5221,6 +5691,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -5349,6 +5829,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5470,6 +5960,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5557,6 +6057,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -5678,6 +6188,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -5815,6 +6335,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5927,6 +6457,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -6075,6 +6615,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6196,6 +6746,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6303,6 +6863,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -6449,6 +7019,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -6561,6 +7141,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -6689,6 +7279,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6810,6 +7410,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6924,6 +7534,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -7061,6 +7681,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -7175,6 +7805,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -7303,6 +7943,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -7417,6 +8067,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -7554,6 +8214,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -7705,6 +8375,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -7828,6 +8508,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -7972,6 +8662,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -8059,6 +8759,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -8228,6 +8938,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -8342,6 +9062,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -8470,6 +9200,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -8584,6 +9324,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -8712,6 +9462,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -8826,6 +9586,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -8954,6 +9724,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9075,6 +9855,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9189,6 +9979,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -9325,6 +10125,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9412,6 +10222,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -9542,6 +10362,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -9689,6 +10519,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9819,6 +10659,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -9940,6 +10790,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -10054,6 +10914,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -10219,6 +11089,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -10351,6 +11231,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -10492,6 +11382,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -10653,6 +11553,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -10740,6 +11650,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -10844,6 +11764,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -10972,6 +11902,16 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -11069,6 +12009,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {
@@ -11190,6 +12140,16 @@
           },
           "507": {
             "description": "Installation or account capacity reached; operator intervention required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response for an otherwise undocumented failure status",
             "content": {
               "application/json": {
                 "schema": {

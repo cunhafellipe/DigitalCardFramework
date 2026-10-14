@@ -1,3 +1,4 @@
+import {FrameworkError} from '../src/catalog.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './helpers.js';
@@ -44,6 +45,8 @@ test('negative acquisition fixtures reject missing, null, unknown and inexact in
 });
 
 test('every published error status carries the JSON error envelope',()=>{
+  const operations=Object.values(openapi.paths).flatMap(Object.values);assert.equal(operations.length,96);
+  for(const operation of operations)assert.equal(operation.responses.default.content['application/json'].schema.$ref,'#/components/schemas/Error');
   for(const item of Object.values(openapi.paths))for(const operation of Object.values(item))for(const [status,response]of Object.entries(operation.responses)){
     if(Number(status)>=400)assert.equal(response.content['application/json'].schema.$ref,'#/components/schemas/Error');
   }
@@ -464,4 +467,20 @@ test('audit and import HTTP contracts preserve diagnostics, preview warnings and
   for(const mutate of [value=>delete value.counts,value=>value.counts.users=-1,value=>value.revision='1',value=>value.issues=[{detail:'missing-code'}],value=>value.issues=[{code:'CUSTOM',credentials:{}}],value=>value.rawState={}]){const invalid=structuredClone(healthy);mutate(invalid);assert.throws(()=>validateWireResponse('audit',200,invalid),WireContractError);}
   for(const invalid of [{ok:true,issues:unconfigured.issues},{...unconfigured,issues:[]},{...unconfigured,revision:0}])assert.throws(()=>validateWireResponse('audit',200,invalid),WireContractError);
   actor=x.bob;await assert.rejects(call('audit',undefined),error=>error instanceof WireApiError&&error.status===403);await assert.rejects(call('commitImport',{...input,key:'denied-import'}),error=>error instanceof WireApiError&&error.status===403);
+});
+
+
+test('default wire error contract preserves extension errors and redacts unexpected HTTP failures',async t=>{
+  let failure=new Error('private provider detail'),handler;
+  const server=createServer((request,response)=>handler(request,response));
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:{catalog:async()=>{throw failure;}},resolveIdentity:()=>null});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>null});
+  await assert.rejects(()=>call('catalog',undefined),error=>error instanceof WireApiError&&error.status===500&&error.code==='INTERNAL_ERROR'&&error.message==='The server could not complete this request');
+  failure=new FrameworkError('EXAMPLE_EXTENSION_RETRY','Extension service is temporarily unavailable',503);
+  await assert.rejects(()=>call('catalog',undefined),error=>error instanceof WireApiError&&error.status===503&&error.code===failure.code&&error.message===failure.message);
+  handler=(_request,response)=>{response.statusCode=503;response.setHeader('Content-Type','application/json');response.end(JSON.stringify({code:'EXAMPLE_EXTENSION_RETRY',message:'Unavailable',privateDetail:'hidden'}));};
+  await assert.rejects(()=>call('catalog',undefined),error=>error instanceof WireContractError&&error.phase==='response:503');
 });

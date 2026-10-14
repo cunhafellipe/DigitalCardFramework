@@ -1882,7 +1882,8 @@ schemas.BindingFactoryCommand={type:'object',additionalProperties:false,required
 schemas.BindingFactoryStatus={type:'object',additionalProperties:false,required:['batchId','state','counts','errorCode'],properties:{batchId:issuanceBatchId,state:{enum:['pending','ready','attached','cancel_pending','cancelled','quarantined','activation_pending','activation_failed','active']},counts:{type:'object',additionalProperties:false,required:['total','pending','ready','attached','cancelled','activationPending','activationFailed'],properties:Object.fromEntries(['total','pending','ready','attached','cancelled','activationPending','activationFailed'].map(key=>[key,{type:'integer',minimum:0,maximum:1000}]))},errorCode:schemas.CodeIssuanceStatus.properties.errorCode}};
 openapi.paths['/operator/binding-factories/status']=route('get','bindingFactoryStatus',ref('BindingFactoryStatus'),{parameters:[{name:'batchId',in:'query',required:true,schema:issuanceBatchId}],description:'Requires bindings.manage. Read-only factory progress without private inputs or results.'});
 openapi.paths['/operator/binding-factories/recover']=route('post','recoverBindingFactories',ref('BindingFactoryStatus'),{requestSchema:ref('BindingFactoryCommand'),description:'Requires bindings.manage. Look up or cancel precommit provisioning; recover committed activation under its original identity.'});
-// All documented failure statuses use the same JSON envelope.
+// All failure statuses use the same JSON envelope, including adapter and extension errors.
 for(const item of Object.values(openapi.paths))for(const operation of Object.values(item)){
+  operation.responses.default={description:'Error response for an otherwise undocumented failure status',content:{'application/json':{schema:ref('Error')}}};
   for(const [status,response]of Object.entries(operation.responses??{}))if(Number(status)>=400)response.content={'application/json':{schema:ref('Error')}};
 }

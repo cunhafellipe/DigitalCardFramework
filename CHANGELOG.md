@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Document the shared error envelope for otherwise unspecified HTTP failure statuses across all API operations.
+
 - Add opt-in validation and TypeScript contracts for framework event envelopes and existing core, code, operator, trade and commerce event payloads, preserving custom action delivery behavior and alternate command/domain payloads.
 - Add TypeScript declarations for stat CSV import, export and parsing, including empty-cell deletion and explicit JSON null values.
 

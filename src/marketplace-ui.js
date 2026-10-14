@@ -1,3 +1,4 @@
+import {localizeDiagnostic} from './localization.js';
 import { el, button as baseButton, field, select, section } from "./ui-kit.js";
 import {createLocalization,localizationKeys} from "./localization.js";
 export {renderMarketplace} from "./marketplace-native.js";
@@ -66,7 +67,7 @@ export function renderFulfillments(model, { client,locale='en',messages={},local
                 });
                 await load(true);
               } catch (error) {
-                if (!disposed) status.textContent = error.message;
+                if (!disposed) status.textContent = localizeDiagnostic(localization,error);
               }
             }),
           );
@@ -76,7 +77,7 @@ export function renderFulfillments(model, { client,locale='en',messages={},local
       more.hidden = !cursor;
       status.textContent = t('rewards.total',{count:result.total});
     } catch (error) {
-      if (!disposed) status.textContent = error.message;
+      if (!disposed) status.textContent = localizeDiagnostic(localization,error);
     } finally {
       if(!disposed)more.disabled = false;
     }
@@ -127,7 +128,7 @@ export function renderTradingControls(model, { client,locale='en',messages={},lo
             current.revision = result.revision;
             status.textContent = t('tradingControls.saved');
           } catch (error) {
-            if(!disposed)status.textContent = error.message;
+            if(!disposed)status.textContent = localizeDiagnostic(localization,error);
           }
         }),
       );
@@ -149,12 +150,12 @@ export function renderTradingControls(model, { client,locale='en',messages={},lo
               });
               if(!disposed)status.textContent = t(locked?'tradingControls.locked':'tradingControls.unlocked');
             } catch (error) {
-              if(!disposed)status.textContent = error.message;
+              if(!disposed)status.textContent = localizeDiagnostic(localization,error);
             }
           }),
         );
     } catch (error) {
-      if (!disposed) status.textContent = error.message;
+      if (!disposed) status.textContent = localizeDiagnostic(localization,error);
     }
   }
   const ready = load();

@@ -108,6 +108,11 @@ export interface TradeDraftState {
     reviewPhase: 'idle' | 'pending' | 'allowed' | 'error';
     reviewExpiresAt: string | null;
     error: string | null;
+    diagnostic?: {
+        code?: string;
+        message: string;
+        name?: string;
+    } | null;
     ownNext: string | null;
     partnerNext: string | null;
     selectedGive: TradeDraftCopy[];

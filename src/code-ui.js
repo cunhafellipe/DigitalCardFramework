@@ -1,5 +1,5 @@
 import { el, button, section, field } from './ui-kit.js';
-import {createLocalization,localizationKeys} from './localization.js';
+import {localizeDiagnostic,createLocalization,localizationKeys} from './localization.js';
 
 /** Keeps retry identity in memory; never stores the returned secret in Web Storage. */
 export function createCodeRevealController({ codeId, reveal, key = () => crypto.randomUUID() }) {
@@ -17,7 +17,7 @@ export function createCodeRevealController({ codeId, reveal, key = () => crypto.
       pending = Promise.resolve().then(() => reveal({ codeId, key: requestKey })).then(result => {
         if (typeof result?.code !== 'string') throw new Error('The server did not return a code.');
         publish({ phase: 'revealed', code: result.code, error: null }); return disposed ? undefined : result.code;
-      }).catch(error => { publish({ phase: 'error', code: null, error: error.message }); }).finally(() => { pending = null; });
+      }).catch(error => { publish({ phase: 'error', code: null, error: error.message, diagnostic: {code:error.code,message:error.message,name:error.name} }); }).finally(() => { pending = null; });
       return pending;
     },
     dispose() { disposed = true; state = { phase: 'disposed', code: null, error: null }; listeners.clear(); },
@@ -70,7 +70,7 @@ export function renderCodeReveal({ codeId, mode = 'scratch' }, { reveal, key, th
     output.textContent = state.code ?? t('codes.private');
     cover.hidden = state.phase === 'revealed' || mode === 'open';
     if (cover.hidden) cover.style.display = 'none';
-    status.textContent = state.error ?? t(state.phase==='loading'?'codes.loading':state.phase==='revealed'?'codes.revealed':mode==='peel'?'codes.peelHint':mode==='scratch'?'codes.scratchHint':'codes.openLoading');
+    status.textContent = (state.error ? localizeDiagnostic(localization,state.diagnostic) : null) ?? t(state.phase==='loading'?'codes.loading':state.phase==='revealed'?'codes.revealed':mode==='peel'?'codes.peelHint':mode==='scratch'?'codes.scratchHint':'codes.openLoading');
   });
   surface.append(output, cover); node.append(surface, status, revealButton);
   if (mode === 'open') queueMicrotask(() => controller.open());
@@ -103,11 +103,11 @@ export function renderCodeHistory(model, { client, codeRevealRenderer = renderCo
           const report = button(t(row.reportedUsed?'codes.clearMarker':'codes.markUsed'), async () => {
             report.disabled = true;
             try { const updated = await client.reportCodeUsage({ codeId: row.id, used: !row.reportedUsed, key: client.requestKey() }); if(disposed)return;row.reportedUsed = updated.reportedUsed; describe(); report.textContent = t(row.reportedUsed?'codes.clearMarker':'codes.markUsed'); }
-            catch (error) { if(!disposed)status.textContent = error.message; } finally { report.disabled = false; }
+            catch (error) { if(!disposed)status.textContent = localizeDiagnostic(localization,error); } finally { report.disabled = false; }
           }, 'dc-quiet'); card.append(report);
           if(client.reconcileCode)card.append(button(t('codes.checkProvider'), async () => {
             try { const result=await client.reconcileCode({codeId:row.id});if(disposed)return;status.textContent=result.status==='unverified'?t('codes.providerUnverified'):t('codes.providerConfirmed',{status:enumLabel(result.status)});if(result.status!=='unverified'){row.status=result.status;describe();} }
-            catch(error){if(!disposed)status.textContent=error.message;}
+            catch(error){if(!disposed)status.textContent=localizeDiagnostic(localization,error);}
           },'dc-quiet'));
           if (row.redeemUrl) { let url; try { url = new URL(row.redeemUrl); } catch {} if(url?.protocol==='https:'&&!url.username&&!url.password) { const link = el('a', 'dc-quiet',t('codes.redeemWebsite')); link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; card.append(link); } }
         } else card.append(el('p', 'dc-muted', row.revealUnavailableReason ?? t('codes.unavailable')));
@@ -116,7 +116,7 @@ export function renderCodeHistory(model, { client, codeRevealRenderer = renderCo
         list.append(card);
       }
       cursor = result.next; next.hidden = !cursor; status.textContent = result.total ? t('codes.total',{count:result.total}) : t('codes.empty');
-    } catch (error) { if (!disposed && current === generation) status.textContent = error.message; }
+    } catch (error) { if (!disposed && current === generation) status.textContent = localizeDiagnostic(localization,error); }
     finally { if(current===generation){loading=false;next.disabled=false;} }
   }
   const find=button(t('codes.searchButton'),()=>load(true),'dc-quiet');node.insertBefore(find,list);

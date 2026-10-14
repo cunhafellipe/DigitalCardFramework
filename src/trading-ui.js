@@ -1,5 +1,5 @@
 import {createTradingSession} from './trading-session.js';
-import {createLocalization,localizationKeys} from './localization.js';
+import {localizeDiagnostic,createLocalization,localizationKeys} from './localization.js';
 import {el,button,field,select,section} from './ui-kit.js';
 
 /** Two real inventories, two offer trays, and immutable offer review. Entire view is replaceable. */
@@ -19,10 +19,10 @@ export function renderTrading(model,context,sharedSession){
     search.addEventListener('input',()=>{if(side==='give')ownSearch=search.value.toLowerCase();else partnerSearch=search.value.toLowerCase();renderState();});
     pane.prepend(heading);tray.setAttribute('aria-label',t(side==='give'?'trades.offerTray':'trades.requestTray'));tray.dataset.side=side;
     tray.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('application/x-dc-copy')){e.preventDefault();tray.classList.add('is-dragover');}});tray.addEventListener('dragleave',()=>tray.classList.remove('is-dragover'));
-    tray.addEventListener('drop',e=>{e.preventDefault();tray.classList.remove('is-dragover');try{const item=JSON.parse(e.dataTransfer.getData('application/x-dc-copy'));if(item.side!==side)throw new Error(t('trades.wrongTray'));draft.add(side,item.id);}catch(err){error.textContent=err.message;}});
+    tray.addEventListener('drop',e=>{e.preventDefault();tray.classList.remove('is-dragover');try{const item=JSON.parse(e.dataTransfer.getData('application/x-dc-copy'));if(item.side!==side)throw new Error(t('trades.wrongTray'));draft.add(side,item.id);}catch(err){error.textContent=localizeDiagnostic(localization,err);}});
     pane.append(grid,more,el('h4','',t(side==='give'?'trades.youOffer':'trades.youRequest')),tray,money);board.append(pane);panes[side]={heading,grid,tray,more,money};
     for(const currency of model.catalog.currencies.filter(c=>model.catalog.features.currencyTrading&&c.tradable)){const input=field(money,t(side==='give'?'trades.offerCurrency':'trades.requestCurrency',{currency:currency.name}),{type:'number',value:'0'});input.min='0';input.step='1';input.dataset.currency=currency.id;
-      input.addEventListener('input',()=>{try{input.setCustomValidity('');draft.setCurrency(side,currency.id,Number(input.value));error.textContent='';}catch(err){input.setCustomValidity(err.message);draft.review(false);error.textContent=err.message;confirm.disabled=send.disabled=true;}});}
+      input.addEventListener('input',()=>{try{input.setCustomValidity('');draft.setCurrency(side,currency.id,Number(input.value));error.textContent='';}catch(err){input.setCustomValidity(localizeDiagnostic(localization,err));draft.review(false);error.textContent=localizeDiagnostic(localization,err);confirm.disabled=send.disabled=true;}});}
   }
   const message=field(composer,t('trades.message'),{type:'textarea',placeholder:t('trades.messagePlaceholder')});message.maxLength=500;message.rows=2;message.addEventListener('input',()=>draft?.setMessage(message.value));
   const review=button(t('trades.reviewAction'),()=>{if([...composer.querySelectorAll('.dc-offer-money input')].every(input=>input.reportValidity()))session.review(node);},'dc-quiet'),confirm={checked:false,disabled:false};
@@ -47,7 +47,7 @@ export function renderTrading(model,context,sharedSession){
 
   async function loadDirectory(){await session.loadDirectory(recipientSearch.value);}
   function startDraft(trade=null){ownLimit=partnerLimit=24;session.start(choose.value||null,trade);composer.scrollIntoView({block:'nearest'});}
-  function renderState(){if(disposed||!state)return;confirm.checked=state.reviewed;confirm.disabled=state.phase!=='ready'||!state.recipientId||state.reviewPhase==='pending';send.disabled=!state.reviewed||!state.recipientId;send.textContent=t(counter?'trades.sendCounter':'trades.send');error.textContent=state.error??(state.reviewPhase==='pending'?t('trades.checking'):'');
+  function renderState(){if(disposed||!state)return;confirm.checked=state.reviewed;confirm.disabled=state.phase!=='ready'||!state.recipientId||state.reviewPhase==='pending';send.disabled=!state.reviewed||!state.recipientId;send.textContent=t(counter?'trades.sendCounter':'trades.send');error.textContent=(state.error?(state.diagnostic?localizeDiagnostic(localization,state.diagnostic):state.error):null)??(state.reviewPhase==='pending'?t('trades.checking'):'');
     if(document.activeElement!==message)message.value=state.message;
     summary.textContent=t('trades.offerCards',{count:state.give.length})+state.giveCurrencies.map(c=>' + '+num(c.amount)+' '+name(c.currencyId)).join('')+' · '+t('trades.requestCards',{count:state.receive.length})+state.receiveCurrencies.map(c=>' + '+num(c.amount)+' '+name(c.currencyId)).join('')+(state.phase==='loading'?t('trades.loadingInventories'):'');
     for(const side of ['give','receive']){const pane=panes[side],items=side==='give'?state.inventory:state.partnerInventory,search=side==='give'?ownSearch:partnerSearch,limit=side==='give'?ownLimit:partnerLimit;
@@ -56,7 +56,7 @@ export function renderTrading(model,context,sharedSession){
       for(const copy of filtered.slice(0,limit)){
         const tile=el('div','dc-trade-card'+(state[side].includes(copy.id)?' is-selected':'')),eligible=model.catalog.features.cardTrading&&(copy.tradable||copy.remoteReviewRequired===true||counter&&copy.lockedBy===counter.id&&copy.untradableReason==='Reserved by another transaction');tile.draggable=!!eligible;tile.dataset.copyId=copy.id;
         tile.addEventListener('dragstart',e=>{e.dataTransfer.effectAllowed='copy';e.dataTransfer.setData('application/x-dc-copy',JSON.stringify({side,id:copy.id}));});tile.append(renderCopy(copy,{interactive:false,onSelect:inspect,localization}));
-        const add=button(t(state[side].includes(copy.id)?'trades.inOffer':'trades.add'),()=>{try{draft.add(side,copy.id);}catch(err){error.textContent=err.message;}},'dc-quiet');add.disabled=!eligible||state[side].includes(copy.id);tile.append(add);if(!eligible)tile.append(el('small','dc-muted',copy.untradableReason??t('trades.reserved')));else if(copy.remoteReviewRequired)tile.append(el('small','dc-muted',t('trades.availabilityReview')));pane.grid.append(tile);
+        const add=button(t(state[side].includes(copy.id)?'trades.inOffer':'trades.add'),()=>{try{draft.add(side,copy.id);}catch(err){error.textContent=localizeDiagnostic(localization,err);}},'dc-quiet');add.disabled=!eligible||state[side].includes(copy.id);tile.append(add);if(!eligible)tile.append(el('small','dc-muted',copy.untradableReason??t('trades.reserved')));else if(copy.remoteReviewRequired)tile.append(el('small','dc-muted',t('trades.availabilityReview')));pane.grid.append(tile);
       }
       if(!filtered.length)pane.grid.append(el('p','dc-muted',state.phase==='loading'?t('trades.loading'):side==='receive'&&session.partnerPrivate?t('trades.privateInventory'):t('trades.noCards')));
       pane.more.hidden=filtered.length<=limit;

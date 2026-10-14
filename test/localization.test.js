@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createLocalization,validateLocalizationBundle,localizationProtocol,localizationSchema,localizationKeys,englishMessages} from '../src/localization.js';
+import {localizeDiagnostic,diagnosticKeys,createLocalization,validateLocalizationBundle,localizationProtocol,localizationSchema,localizationKeys,englishMessages} from '../src/localization.js';
 
 const bundle=(messages={},locale='fr')=>({protocol:localizationProtocol,locale,messages});
 const invalid=input=>assert.throws(()=>validateLocalizationBundle(input),{name:'TypeError',message:'Invalid localization bundle'});
@@ -74,4 +74,29 @@ test('independent instances retain their locale and validated message snapshot',
   const messages={'packs.open':'Ouvrir le paquet'},fr=createLocalization({locale:'fr',messages}),en=createLocalization();messages['packs.open']='Changed';
   assert.equal(fr.text('packs.open'),'Ouvrir le paquet');assert.equal(en.text('packs.open'),'Open pack');assert.equal(fr.number(1234.5),'1 234,5');assert.equal(en.number(1234.5),'1,234.5');
   assert.equal(createLocalization({locale:'ar'}).dir,'rtl');assert.equal(en.dir,'ltr');
+});
+
+
+test('structured diagnostics use catalog keys without changing machine data or authored literals',()=>{
+  const messages=Object.fromEntries(Object.values(diagnosticKeys).map(key=>[key,'Local '+key]));
+  messages['diagnostic.unknown']='Local unknown';
+  const local=createLocalization({locale:'es',messages}),english=createLocalization();
+  for(const [code,key] of Object.entries(diagnosticKeys)){
+    const error=Object.freeze({code,message:'Authored <name> 0007',status:503,retryAfter:17});
+    assert.equal(localizeDiagnostic(local,error),'Local '+key);
+    assert.equal(localizeDiagnostic(english,error),englishMessages[key]);
+    assert.deepEqual(error,{code,message:'Authored <name> 0007',status:503,retryAfter:17});
+  }
+  for(const code of ['FUTURE_SERVER_CODE','__proto__','toString'])assert.equal(localizeDiagnostic(local,{code,message:'Untrusted detail'}),'Local unknown');
+  assert.equal(localizeDiagnostic(local,null),'Local unknown');
+  assert.equal(localizeDiagnostic(local,new SyntaxError('Raw parser detail')),'Local diagnostic.input');
+  assert.equal(localizeDiagnostic(local,{message:'Authored <name> 0007'}),'Authored <name> 0007');
+});
+
+test('wire parser diagnostics preserve phase, operation and validation details',async()=>{
+  const {WireContractError}=await import('../src/wire-contracts.js');
+  const error=new WireContractError('inventory','response',[{instancePath:'/0',message:'invalid authored value'}]);
+  const before=structuredClone({...error}),local=createLocalization({locale:'es',messages:{'diagnostic.contract':'No se pudo leer la respuesta.'}});
+  assert.equal(localizeDiagnostic(local,error),'No se pudo leer la respuesta.');
+  assert.deepEqual({...error},before);assert.equal(error.message,'Invalid response contract for inventory');
 });

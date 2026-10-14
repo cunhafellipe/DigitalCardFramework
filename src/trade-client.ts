@@ -23,7 +23,7 @@ export interface TradeDraftOptions {
 export interface TradeDraftState {
   phase:'idle'|'loading'|'ready'|'error';recipientId:string|null;owner:TradeOwner|null;partner:TradeOwner|null;
   inventory:TradeDraftCopy[];partnerInventory:TradeDraftCopy[];give:string[];receive:string[];
-  giveCurrencies:TradeMoney[];receiveCurrencies:TradeMoney[];message:string;reviewed:boolean;reviewPhase:'idle'|'pending'|'allowed'|'error';reviewExpiresAt:string|null;error:string|null;
+  giveCurrencies:TradeMoney[];receiveCurrencies:TradeMoney[];message:string;reviewed:boolean;reviewPhase:'idle'|'pending'|'allowed'|'error';reviewExpiresAt:string|null;error:string|null;diagnostic?:{code?:string;message:string;name?:string}|null;
   ownNext:string|null;partnerNext:string|null;selectedGive:TradeDraftCopy[];selectedReceive:TradeDraftCopy[];
 }
 export interface TradeDraftOffer {
@@ -37,6 +37,7 @@ export interface TradeDraft {
   review(value?:boolean):void;reviewAsync():Promise<void>;buildOffer():TradeDraftOffer;clear():void;dispose():void;
 }
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
+const diagnostic=(error:unknown)=>({code:record(error)&&typeof error.code==='string'?error.code:undefined,message:message(error),name:error instanceof Error?error.name:undefined});
 const message=(error:unknown)=>error instanceof Error?error.message:'Unable to load trade inventory';
 function seed(value:unknown):TradeSeed|null {
   if(!record(value))return null;
@@ -82,7 +83,7 @@ export function createTradeDraft({client,userId,catalog,storage,namespace=userId
   const publicState=():TradeDraftState=>structuredClone({...state,selectedGive:selected('give'),selectedReceive:selected('receive')});
   function invalidateReview(){reviewGeneration++;reviewAbort?.abort();reviewAbort=null;if(expiryTimer!==undefined)clearTimeout(expiryTimer);expiryTimer=undefined;}
   function publish(change:Partial<typeof state>,edit=false){
-    if(disposed)return;if(edit)invalidateReview();state={...state,...change,...(edit?{reviewed:false,reviewPhase:'idle' as const,reviewExpiresAt:null,error:null}:{})};
+    if(disposed)return;if(edit)invalidateReview();state={...state,...(Object.hasOwn(change,'error')?{diagnostic:null}:{}),...change,...(edit?{reviewed:false,reviewPhase:'idle' as const,reviewExpiresAt:null,error:null,diagnostic:null}:{})};
     if(edit)try{storage?.setItem(storageKey,JSON.stringify({toUserId:state.recipientId,give:{copyIds:state.give,currencies:state.giveCurrencies},receive:{copyIds:state.receive,currencies:state.receiveCurrencies},message:state.message,parentTradeId}));}catch{}
     const version=++publication,snapshot=publicState();for(const listener of listeners){if(disposed||version!==publication)break;listener(structuredClone(snapshot));}
   }
@@ -111,7 +112,7 @@ export function createTradeDraft({client,userId,catalog,storage,namespace=userId
       if(!record(result)||result.status!=='allowed'||typeof result.inputDigest!=='string'||!/^[a-f0-9]{64}$/.test(result.inputDigest)||typeof result.snapshotDigest!=='string'||!/^[a-f0-9]{64}$/.test(result.snapshotDigest)||typeof result.expiresAt!=='string'||!Number.isFinite(Date.parse(result.expiresAt))||!Array.isArray(result.copyIds)||result.copyIds.length!==copyIds.length||new Set(result.copyIds).size!==copyIds.length||!result.copyIds.every(id=>typeof id==='string'&&copyIds.includes(id)))throw new Error('Invalid trade review response');
       if(Date.parse(result.expiresAt)<=Date.now())throw new Error('Trade review expired. Review the offer again.');
       reviewAbort=null;publish({reviewed:true,reviewPhase:'allowed',reviewExpiresAt:result.expiresAt,error:null});expireReview(current);
-    }catch(error){if(disposed||current!==reviewGeneration)return;reviewAbort=null;publish({reviewed:false,reviewPhase:'error',reviewExpiresAt:null,error:error instanceof Error?error.message:'Unable to review trade'});}
+    }catch(error){if(disposed||current!==reviewGeneration)return;reviewAbort=null;publish({reviewed:false,reviewPhase:'error',reviewExpiresAt:null,diagnostic:diagnostic(error),error:error instanceof Error?error.message:'Unable to review trade'});}
   }
   function sideFields(side:TradeSide){if(!['give','receive'].includes(side))throw new Error('Invalid trade side');return side==='give'?{list:'inventory' as const,cursor:'ownNext' as const,owner:userId}:{list:'partnerInventory' as const,cursor:'partnerNext' as const,owner:state.recipientId};}
   function select(side:TradeSide,copyId:string){if(disposed)return;sideFields(side);const copy=copyMaps[side].get(copyId);if(!eligible(copy))throw new Error(copy?.untradableReason??'Card is not available');if(state[side].includes(copyId))return;if(state[side].length>=100)throw new Error('An offer can contain at most 100 cards per side');publish({[side]:[...state[side],copyId]},true);}
@@ -125,7 +126,7 @@ export function createTradeDraft({client,userId,catalog,storage,namespace=userId
       for(const side of ['give','receive'] as const)copyMaps[side].clear();own.items.forEach(copy=>copyMaps.give.set(copy.id,copy));partner.items.forEach(copy=>copyMaps.receive.set(copy.id,copy));
       const restore=restored?.toUserId===recipientId?restored:null;restored=null;
       publish({phase:'ready',owner:own.owner,partner:partner.owner,inventory:own.items,partnerInventory:partner.items,ownNext:own.next??null,partnerNext:partner.next??null,give:(restore?.give?.copyIds??[]).filter(id=>eligible(copyMaps.give.get(id))),receive:(restore?.receive?.copyIds??[]).filter(id=>eligible(copyMaps.receive.get(id))),giveCurrencies:restore?.give?.currencies??[],receiveCurrencies:restore?.receive?.currencies??[],message:restore?.message??''},true);
-    }catch(error){if(generation===current)publish({phase:'error',error:message(error),inventory:[],partnerInventory:[],give:[],receive:[]});}
+    }catch(error){if(generation===current)publish({phase:'error',diagnostic:diagnostic(error),error:message(error),inventory:[],partnerInventory:[],give:[],receive:[]});}
   }
   return {
     getState:publicState,subscribe(listener){if(disposed)return()=>{};listeners.add(listener);listener(publicState());return()=>{listeners.delete(listener);};},load,

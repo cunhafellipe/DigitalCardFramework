@@ -65,7 +65,7 @@ test('translated labels preserve ordinary direct purchase and authored catalog c
 });
 
 test('localized stale recovery requires inspection and acknowledgement followed by fresh review',async()=>{
-  const x=setup();try{const original=x.client.purchase;let fail=true;x.client.purchase=async input=>{if(fail){x.calls.purchases.push(structuredClone(input));x.setState('stale');throw new ApiError('ALLOCATION_STALE','Server-authored failure',409);}return original(input);};await x.mount();click(x.root,'‹Review purchase');await settle();click(x.root,'‹Buy reviewed packs');await settle();assert(x.root.textContent.includes(x.localization.text('allocation.needsReview')));assert(x.root.textContent.includes('Server-authored failure'));
+  const x=setup();try{const original=x.client.purchase;let fail=true;x.client.purchase=async input=>{if(fail){x.calls.purchases.push(structuredClone(input));x.setState('stale');throw new ApiError('ALLOCATION_STALE','Server-authored failure',409);}return original(input);};await x.mount();click(x.root,'‹Review purchase');await settle();click(x.root,'‹Buy reviewed packs');await settle();assert(x.root.textContent.includes(x.localization.text('allocation.needsReview')));assert(x.root.textContent.includes(x.localization.text('diagnostic.changed')));assert(!x.root.textContent.includes('Server-authored failure'));
     click(x.root,x.localization.text('allocation.check'));await settle();assert.equal(x.calls.purchases.length,1);assert(find(x.root,'‹Review purchase').disabled);assert(x.root.textContent.includes(x.localization.text('allocation.stale')));
     click(x.root,x.localization.text('allocation.acknowledge'));await settle();assert.equal(x.calls.purchases.length,1);assert.equal(x.calls.quotes.length,1);assert.deepEqual(x.calls.acknowledgements,[{attemptId:'attempt'}]);fail=false;x.setDigest('b'.repeat(64));click(x.root,'‹Review purchase');await settle();assert.equal(x.calls.purchases.length,1);click(x.root,'‹Buy reviewed packs');await settle();assert.equal(x.calls.purchases[1].allocationDigest,'b'.repeat(64));assert.notEqual(x.calls.purchases[1].key,x.calls.purchases[0].key);
   }finally{x.close();}
@@ -273,4 +273,28 @@ test('standalone authoring tools keep locale per instance and preserve text, fie
     const amount=studioField(tools.root,'Authored <field>');assert.equal(amount.value,'7');amount.value='1000';amount.dispatchEvent(new window.Event('change'));await settle();assert.equal(first.manifest.authoring.values.card.score,1000);assert.equal(studioField(tools.root,'Authored <field>').value,'1000');assert(first.undoEdit());tools.render();assert.equal(first.manifest.authoring.values.card.score,7);assert(first.redoEdit());tools.render();assert.equal(first.manifest.authoring.values.card.score,1000);
     assert.equal(second.scenes.get('scenes/front.json').nodes[0].id,'art');assert(other.textContent.includes('Text, stats & templates'));assert(!other.textContent.includes('‹'));assert.equal(first.scenes.get('scenes/front.json').nodes.find(n=>n.id===selected).text,'0007 <b>Artist text</b> é ₹');
   }finally{tools.dispose();english.dispose();await window.happyDOM.abort();delete globalThis.document;delete globalThis.HTMLElement;}
+});
+
+
+test('code reveal localizes structured errors and retries the same identity before exposing literal code',async()=>{
+  const window=new Window();globalThis.document=window.document;
+  const calls=[],failure=new ApiError('FORBIDDEN','Raw provider detail',403),localization=createLocalization({locale:'es',messages:{'diagnostic.access':'Esta cuenta no puede realizar esta acción.'}});
+  const view=renderCodeReveal({codeId:'private-id',mode:'open'},{localization,key:()=> 'original-key',reveal:async input=>{calls.push({...input});if(calls.length===1)throw failure;return {code:'0007 <secret> Ñ'};}});
+  try{
+    document.body.append(view.node);view.node.querySelector('button').click();await settle();
+    assert(view.node.textContent.includes('Esta cuenta no puede realizar esta acción.'));assert(!view.node.textContent.includes('Raw provider detail'));
+    view.node.querySelector('button').click();await settle();assert.deepEqual(calls,[{codeId:'private-id',key:'original-key'},{codeId:'private-id',key:'original-key'}]);
+    assert.equal(view.node.querySelector('output').textContent,'0007 <secret> Ñ');assert.equal(view.node.querySelector('secret'),null);assert.equal(failure.code,'FORBIDDEN');assert.equal(failure.status,403);
+  }finally{view.dispose();await window.happyDOM.abort();delete globalThis.document;}
+});
+
+
+test('pack action preserves the opener failure code when forwarding its localized message',async()=>{
+  const x=setup();try{
+    x.packs.push({id:'pack-0',product:x.product,createdAt:'2026-10-12T01:02:03Z',openedAt:null});
+    x.client.openPack=async()=>{throw new ApiError('PACK_LOCKED','Raw opener detail',409);};
+    await x.mount();click(x.root,x.localization.text('nav.packs'));click(x.root,x.localization.text('packs.open'));await settle();
+    assert.equal(x.root.querySelector('.dc-status').textContent,x.localization.text('diagnostic.unavailable'));
+    assert(!x.root.textContent.includes('Raw opener detail'));
+  }finally{x.close();}
 });

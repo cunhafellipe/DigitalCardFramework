@@ -1,4 +1,4 @@
-import {createLocalization} from '../localization.js';
+import {createLocalization,localizeDiagnostic} from '../localization.js';
 import { analyzePerformance, enforcePerformance } from "./performance.js";
 import {
   createProject,
@@ -351,7 +351,7 @@ export function mountStudio(
         }
         await rebuild();
       } catch (error) {
-        report(error.message);
+        report(localizeDiagnostic(localization,error));
       }
     };
     file.click();
@@ -835,7 +835,7 @@ export function mountStudio(
               );
               await rebuild();
             } catch (error) {
-              report(error.message);
+              report(localizeDiagnostic(localization,error));
             }
           };
           input.click();
@@ -1038,7 +1038,7 @@ export function mountStudio(
               await importPackage(new Uint8Array(await f.arrayBuffer())),
             );
         } catch (error) {
-          report(error.message);
+          report(localizeDiagnostic(localization,error));
         }
     },
     { signal: events.signal },

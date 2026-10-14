@@ -9,6 +9,22 @@ import sys
 
 def main():
     messages = {
+    "diagnostic.import": "No se pudo importar este archivo. Comprueba su formato y contenido.",
+    "diagnostic.font": "Esta fuente no puede mostrar el texto solicitado. Comprueba la fuente y los caracteres necesarios.",
+    "diagnostic.signIn": "Inicia sesión de nuevo antes de continuar.",
+    "diagnostic.recovery": "Esta solicitud necesita recuperación. Comprueba su estado antes de continuar.",
+    "diagnostic.unknown": "No se pudo completar esta solicitud. Comprueba su estado actual antes de continuar.",
+    "diagnostic.input": "Comprueba los valores e inténtalo de nuevo.",
+    "diagnostic.contract": "No se pudo leer la respuesta. Comprueba el estado de la solicitud antes de continuar.",
+    "diagnostic.network": "No se pudo confirmar la solicitud. Reintenta la solicitud original.",
+    "diagnostic.access": "Esta cuenta no puede realizar esta acción.",
+    "diagnostic.changed": "Los detalles han cambiado. Recarga y revísalos de nuevo.",
+    "diagnostic.unavailable": "Esta acción no está disponible actualmente.",
+    "diagnostic.funds": "No hay fondos suficientes para esta acción.",
+    "diagnostic.capacity": "No queda capacidad suficiente para esta acción.",
+    "diagnostic.pending": "La solicitud original está pendiente. Recupérala antes de iniciar otra.",
+    "diagnostic.storage": "El almacenamiento de recuperación no está disponible. Restáuralo antes de continuar.",
+    "diagnostic.notFound": "El elemento solicitado ya no está disponible.",
     "marketplace.settings": "Configuración comercial",
     "marketplace.settingsJson": "Configuración JSON",
     "marketplace.applySettings": "Aplicar configuración comercial",

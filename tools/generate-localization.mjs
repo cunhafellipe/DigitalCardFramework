@@ -11,6 +11,8 @@ export declare const localizationSchema: Readonly<Record<string,unknown>>;
 export declare const localizationKeys: Readonly<Record<LocalizationKey,{readonly placeholders: readonly string[]; readonly plural: boolean}>>;
 export declare const englishMessages: Readonly<Record<LocalizationKey,string|LocalizationPlural>>;
 export declare function validateLocalizationBundle(input: unknown): LocalizationBundle;
+export declare const diagnosticKeys: Readonly<Record<string,LocalizationKey>>;
+export declare function localizeDiagnostic(localization: Localization, error: unknown): string;
 export declare function createLocalization(options?: {locale?: string; messages?: LocalizationMessages}): Localization;
 `;
 for(const [name,content]of [['docs/localization.contract.json',JSON.stringify(localizationSchema,null,2)+'\n'],['src/localization.d.ts',declarations]]){

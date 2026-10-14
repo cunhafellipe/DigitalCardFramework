@@ -1,4 +1,4 @@
-import {createLocalization} from '../localization.js';
+import {createLocalization,localizeDiagnostic} from '../localization.js';
 import {
   addText,
   configureAuthoring,
@@ -607,7 +607,7 @@ export function mountAuthoringTools({
         row.append(coverage);
         updateCoverage(sample);
       } catch (error) {
-        row.append(el("p", t('studioTools.fontDiagnostic',{message:error.message})));
+        row.append(el("p", t('studioTools.fontDiagnostic',{message:localizeDiagnostic(localization,error)+' '+error.message})));
       }
     }
     const stats = el("details");
@@ -1146,10 +1146,10 @@ export function mountAuthoringTools({
           const font = fontCache.get(asset.id), text = textValue(node, p.manifest),
             layout = layoutText(node, text, fontMeasure(font, node));
           layouts[face + ":" + node.id] = { ...layout, nodeId: node.id, face };
-          for (const issue of fontDiagnostics(font, node, text)) textDiagnostics.push({ face, node, message: issue.message });
+          for (const issue of fontDiagnostics(font, node, text)) textDiagnostics.push({ face, node, diagnostic: issue, message: localizeDiagnostic(localization,issue)+' '+issue.message });
           if (layout.overflow) textDiagnostics.push({ face, node, message: t('studioTools.textOverflowsItsBox') });
         } catch (error) {
-          textDiagnostics.push({ face, node, message: error.message });
+          textDiagnostics.push({ face, node, diagnostic: error, message: localizeDiagnostic(localization,error)+' '+error.message });
         }
       }
     }

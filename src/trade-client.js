@@ -1,4 +1,5 @@
 const record = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+const diagnostic = (error) => ({ code: record(error) && typeof error.code === 'string' ? error.code : undefined, message: message(error), name: error instanceof Error ? error.name : undefined });
 const message = (error) => error instanceof Error ? error.message : 'Unable to load trade inventory';
 function seed(value) {
     if (!record(value))
@@ -77,7 +78,7 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
             return;
         if (edit)
             invalidateReview();
-        state = { ...state, ...change, ...(edit ? { reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null } : {}) };
+        state = { ...state, ...(Object.hasOwn(change, 'error') ? { diagnostic: null } : {}), ...change, ...(edit ? { reviewed: false, reviewPhase: 'idle', reviewExpiresAt: null, error: null, diagnostic: null } : {}) };
         if (edit)
             try {
                 storage?.setItem(storageKey, JSON.stringify({ toUserId: state.recipientId, give: { copyIds: state.give, currencies: state.giveCurrencies }, receive: { copyIds: state.receive, currencies: state.receiveCurrencies }, message: state.message, parentTradeId }));
@@ -162,7 +163,7 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
             if (disposed || current !== reviewGeneration)
                 return;
             reviewAbort = null;
-            publish({ reviewed: false, reviewPhase: 'error', reviewExpiresAt: null, error: error instanceof Error ? error.message : 'Unable to review trade' });
+            publish({ reviewed: false, reviewPhase: 'error', reviewExpiresAt: null, diagnostic: diagnostic(error), error: error instanceof Error ? error.message : 'Unable to review trade' });
         }
     }
     function sideFields(side) { if (!['give', 'receive'].includes(side))
@@ -201,7 +202,7 @@ export function createTradeDraft({ client, userId, catalog, storage, namespace =
         }
         catch (error) {
             if (generation === current)
-                publish({ phase: 'error', error: message(error), inventory: [], partnerInventory: [], give: [], receive: [] });
+                publish({ phase: 'error', diagnostic: diagnostic(error), error: message(error), inventory: [], partnerInventory: [], give: [], receive: [] });
         }
     }
     return {

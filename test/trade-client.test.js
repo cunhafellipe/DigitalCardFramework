@@ -53,3 +53,11 @@ test('counter draft reviews carry parent digest and copy versions without releas
 test('a pending review subscriber can dispose or edit before remote dispatch',async()=>{
   for(const dispose of [true,false]){const x=fixture();let calls=0;x.client.reviewTransfer=async input=>{calls++;return allowed(input);};const draft=createTradeDraft(x);await draft.load('bob');draft.add('give','a');draft.subscribe(state=>{if(state.reviewPhase==='pending'){if(dispose)draft.dispose();else draft.setMessage('Changed before dispatch');}});await draft.reviewAsync();assert.equal(calls,0);assert(!draft.getState().reviewed);draft.dispose();}
 });
+
+
+test('trade failures retain diagnostic codes and clear them on a successful reload',async()=>{
+  const failure=Object.assign(new Error('Raw inventory detail'),{code:'INVENTORY_PRIVATE',status:403});let fail=true;
+  const draft=createTradeDraft({userId:'owner',catalog:{features:{cardTrading:true},currencies:[]},client:{tradeInventory:async()=>{if(fail)throw failure;return {owner:{id:'owner'},items:[],next:null};}}});
+  await draft.load();assert.equal(draft.getState().error,'Raw inventory detail');assert.equal(draft.getState().diagnostic.code,'INVENTORY_PRIVATE');
+  fail=false;await draft.load();assert.equal(draft.getState().error,null);assert.equal(draft.getState().diagnostic,null);assert.equal(failure.status,403);draft.dispose();
+});

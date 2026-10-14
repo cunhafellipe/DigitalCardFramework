@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Localized structured collector, administration and Studio diagnostic summaries, preserving original error codes, recovery identity and detailed font diagnostics.
+
 - Cleared retained and late opening results when the authenticated account changes, while preserving same-account reveal and replay.
 
 - Added portable application-shell layouts with bounded responsive composition, native navigation and recovery regions, and Python/Go rail and header examples.

@@ -4,7 +4,7 @@ const portableRenderers=new Map();
 import {createRevealController,createCommandRunner} from './client.js';
 import {defaultCSS} from './styles.js';
 import {createApplicationShell} from './application-shell.js';
-import {createLocalization} from './localization.js';
+import {localizeDiagnostic,createLocalization} from './localization.js';
 import {albumAppearance,applyAlbumAppearance,albumArtwork,validateAlbumPageSize} from './album-appearance.js';
 export {albumAppearance,validateAlbumAppearance} from './album-appearance.js';
 import {render3DInspector,renderComparison} from './inspector-ui.js';
@@ -206,7 +206,7 @@ export function mountOpener(root,{controller,cardRenderer=renderCard,view,onSele
     node.append(element('h3','',t(state.phase==='complete'?'opener.complete':'opener.title')));
     if(state.phase==='idle')node.append(element('p','dc-muted',t('opener.idle')));
     if(state.phase==='loading')node.append(element('p','',t('opener.loading')));
-    if(state.error)node.append(element('p','dc-error',state.error.message));
+    if(state.error)node.append(element('p','dc-error',localizeDiagnostic(localization,state.error)));
     if(state.receipt) {
       const row=element('div','dc-row');
       node.append(element('p','dc-muted',t('opener.progress',{revealed:state.revealed,total:state.receipt.cards.length})));
@@ -262,7 +262,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
       const value=await fn();
       if(!disposed){if(refreshAfter)await refresh();status.className='dc-status is-success';status.textContent=typeof message==='function'?message(value):message;}
       return value;
-    } catch(error) {if(!disposed){status.className='dc-status dc-error';status.textContent=error.message;}return undefined;}
+    } catch(error) {if(!disposed){status.className='dc-status dc-error';status.textContent=localizeDiagnostic(localization,error);}return undefined;}
     finally {busy=false;root.removeAttribute('aria-busy');controls.forEach(([b,disabled])=>{if(b.isConnected)b.disabled=disabled;});}
   }
   function field(parent,label,type='text',value='') {
@@ -281,7 +281,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     if(active==='admin'&&name!==active&&viewLeave&&!approved){viewLeave(()=>navigate(name,true));return;}
     const refreshAfterAdmin=active==='admin' && name!=='admin';
     active=name;status.textContent='';renderView();
-    if(refreshAfterAdmin)refresh().catch(error=>{if(!disposed){status.className='dc-status dc-error';status.textContent=error.message;}});
+    if(refreshAfterAdmin)refresh().catch(error=>{if(!disposed){status.className='dc-status dc-error';status.textContent=localizeDiagnostic(localization,error);}});
   }
   function wallet() {
     const node=section(t('wallet.title'),t('wallet.description'));
@@ -314,7 +314,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     for(const pack of [...sealed,...opened.slice().reverse()]) {
       const box=element('article','dc-owned-pack');box.append(packArt(pack.product,true,()=>{if(!disposed&&!packsDisposed&&commandPrincipal===principal&&open.isConnected)open.focus();},view=>appearances.set(pack.id,view)));
       const info=element('div');info.append(element('span','dc-badge'+(pack.openedAt?'':' is-sealed'),t(pack.openedAt?'packs.opened':'packs.sealed')),element('h3','',pack.product.name),element('small','dc-muted',date(pack.createdAt)));
-      const open=button(t(pack.openedAt?'packs.replay':'packs.open'),()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw new Error(state.error.message);},{message:t(pack.openedAt?'packs.replaying':'packs.openSuccess')}));box.append(info,open);list.append(box);
+      const open=button(t(pack.openedAt?'packs.replay':'packs.open'),()=>action(async()=>{await controller.load(pack.id);const state=controller.getState();if(state.error)throw Object.assign(new Error(state.error.message),state.error);},{message:t(pack.openedAt?'packs.replaying':'packs.openSuccess')}));box.append(info,open);list.append(box);
     }
     const unsubscribe=controller.subscribe(state=>{
       if(disposed||packsDisposed||commandPrincipal!==principal)return;
@@ -367,6 +367,6 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     catch{if(disposed||generation!==shellGeneration)return false;applicationShell.install(null);return false;}
   }
   const shellReady=setShell(shell);
-  const ready=refresh().catch(error=>{if(disposed)return;status.className='dc-status dc-error';status.textContent=error.message;throw error;});
+  const ready=refresh().catch(error=>{if(disposed)return;status.className='dc-status dc-error';status.textContent=localizeDiagnostic(localization,error);throw error;});
   return {ready,shellReady,setShell,refresh,inspect,inspectTogether,dispose(){if(disposed)return;disposed=true;shellGeneration++;mutate?.dispose();openerDispose?.();viewDisposers.forEach(fn=>fn());controller.dispose();inspector.close();applicationShell.dispose();removeStyles();root.replaceChildren();for(const [name,value]of [['lang',oldLang],['dir',oldDir]])if(value===null)root.removeAttribute(name);else root.setAttribute(name,value);}};
 }

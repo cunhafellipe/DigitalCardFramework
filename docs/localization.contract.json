@@ -12,6 +12,70 @@
     "other"
   ],
   "keys": {
+    "diagnostic.import": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.font": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.signIn": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.recovery": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.unknown": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.input": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.contract": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.network": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.access": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.changed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.unavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.funds": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.capacity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.pending": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.storage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "diagnostic.notFound": {
+      "placeholders": [],
+      "plural": false
+    },
     "marketplace.error": {
       "placeholders": [],
       "plural": false

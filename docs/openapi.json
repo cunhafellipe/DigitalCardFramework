@@ -8275,7 +8275,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardPolicySaveReceipt"
                 }
               }
             }
@@ -8517,7 +8517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardPolicyActivationReceipt"
                 }
               }
             }
@@ -8638,7 +8638,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardPolicyRetireReceipt"
                 }
               }
             }
@@ -8759,7 +8759,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardPolicyRestoreReceipt"
                 }
               }
             }
@@ -8880,7 +8880,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardResourceSaveReceipt"
                 }
               }
             }
@@ -9001,7 +9001,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardResourceRetireReceipt"
                 }
               }
             }
@@ -9122,7 +9122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardResourceRestoreReceipt"
                 }
               }
             }
@@ -20703,6 +20703,175 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "CardPolicySaveReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/CardPolicy"
+          },
+          "state": {
+            "const": "draft"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardPolicyActivationReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "affected",
+          "revision"
+        ],
+        "properties": {
+          "policy": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,99}@[1-9][0-9]{0,8}$"
+          },
+          "affected": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cardId": {
+                  "type": "string"
+                },
+                "variantId": {
+                  "type": "string"
+                },
+                "issues": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CardPolicyIssue"
+                  },
+                  "maxItems": 2048
+                }
+              },
+              "required": []
+            },
+            "maxItems": 20000
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardPolicyRetireReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "policy": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,99}@[1-9][0-9]{0,8}$"
+          },
+          "state": {
+            "const": "retired"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardPolicyRestoreReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy",
+          "state",
+          "revision"
+        ],
+        "properties": {
+          "policy": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,99}@[1-9][0-9]{0,8}$"
+          },
+          "state": {
+            "const": "superseded"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardResourceSaveReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource",
+          "revision"
+        ],
+        "properties": {
+          "resource": {
+            "$ref": "#/components/schemas/CardLibraryResource"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardResourceRetireReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "retired",
+          "revision"
+        ],
+        "properties": {
+          "reference": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,99}@[1-9][0-9]{0,8}$"
+          },
+          "retired": {
+            "const": true
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CardResourceRestoreReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "retired",
+          "revision"
+        ],
+        "properties": {
+          "reference": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9._-]{0,99}@[1-9][0-9]{0,8}$"
+          },
+          "retired": {
+            "const": false
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },

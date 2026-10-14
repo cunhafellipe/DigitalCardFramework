@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {fixture} from './helpers.js';
 import {codesFixture,vault} from './codes-fixtures.mjs';
 import {CardFramework} from '../src/core.js';
+import {fixture as presentationFixture,build as buildPresentation} from './presentation-fixtures.mjs';
 import {validateWireRequest,validateWireResponse,WireContractError} from '../src/wire-contracts.js';
 import {createWireTransport,WireApiError} from '../src/wire-client.js';
 import {openapi} from '../src/contracts.js';
@@ -414,4 +415,30 @@ test('availability and trading HTTP records retain compatibility and immutable l
   for(const operation of ['configureTrading','tradingPolicy'])for(const mutate of [value=>delete value.policy.allowGifts,value=>value.revision=-1,value=>value.policy.rules[0].decision='unknown',value=>value.policy.maxCardsPerSide='100',value=>value.private={ }]){const invalid=structuredClone(configured);mutate(invalid);assert.throws(()=>validateWireResponse(operation,200,invalid),WireContractError);}
   for(const mutate of [value=>delete value.lock,value=>value.version=0,value=>delete value.lock.actorId,value=>value.lock.until='invalid',value=>value.lock.reason=1,value=>value.lock.credentials={}]){const invalid=structuredClone(locked);mutate(invalid);assert.throws(()=>validateWireResponse('setCardTransferLock',200,invalid),WireContractError);}
   validateWireResponse('setCardTransferLock',200,{...indefinite,lock:{...indefinite.lock,actorId:null}});
+});
+
+
+test('card policy and resource HTTP receipts preserve authored documents and lifecycle replay',async t=>{
+  const x=fixture(),manager={...x.alice,role:'admin'};let actor=manager,handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})}),revision=()=>x.core.cardPolicies(manager).revision;
+  const document={schemaVersion:1,id:'contracts.policy',revision:1,name:'Policy <literal>',fields:[{key:'demo.required',label:'Required',type:'string',required:true},{key:'demo.power',label:'Power',type:'number',default:2},{key:'demo.double',label:'Double',type:'number',source:'calculated',calculate:['mul',['field','demo.power'],2]}],defaults:{stats:{'demo.power':2}}};
+  const saveInput={key:'policy-receipt-save',expectedRevision:revision(),document},saved=await call('saveCardPolicy',saveInput);assert.equal(saved.state,'draft');assert.deepEqual(saved.document,document);assert.deepEqual(await call('saveCardPolicy',saveInput),saved);
+  const preview=await call('previewCardPolicy',{expectedRevision:revision(),policy:'contracts.policy@1',assignments:[{scope:'installation',policy:'contracts.policy@1'}]});
+  const activateInput={...preview,key:'policy-receipt-activate'},activated=await call('activateCardPolicy',activateInput);assert(activated.affected.length>0);assert.deepEqual(activated.affected,preview.affected);assert.deepEqual(await call('activateCardPolicy',activateInput),activated);
+  const detached=await call('previewCardPolicy',{expectedRevision:revision(),policy:'contracts.policy@1',assignments:[]});await call('activateCardPolicy',{...detached,key:'policy-receipt-detach'});
+  const retireInput={key:'policy-receipt-retire',expectedRevision:revision(),policy:'contracts.policy@1'},retired=await call('retireCardPolicy',retireInput);assert.equal(retired.state,'retired');assert.deepEqual(await call('retireCardPolicy',retireInput),retired);
+  const restoreInput={key:'policy-receipt-restore',expectedRevision:revision(),policy:'contracts.policy@1'},restored=await call('restoreCardPolicy',restoreInput);assert.equal(restored.state,'superseded');assert.deepEqual(await call('restoreCardPolicy',restoreInput),restored);assert.deepEqual(await call('saveCardPolicy',saveInput),saved);assert.deepEqual(await call('activateCardPolicy',activateInput),activated);
+  const pkg=await buildPresentation(presentationFixture());await x.core.registerCardPresentation(manager,pkg.archive);
+  const asset=pkg.manifest.assets[0],resource={kind:'template',document:{id:'contracts.template',revision:1,name:'Template <literal>',packageDigest:pkg.digest,canvas:{...pkg.manifest.canvas},slots:[],assetDigests:{[asset.id]:asset.sha256},tags:['authored']}};
+  const resourceInput={key:'resource-receipt-save',expectedRevision:revision(),resource},resourceSaved=await call('saveCardResource',resourceInput);assert.deepEqual(resourceSaved.resource,resource);assert.equal(Object.hasOwn(resourceSaved.resource,'retired'),false);assert.deepEqual(await call('saveCardResource',resourceInput),resourceSaved);
+  const resourceRetireInput={key:'resource-receipt-retire',expectedRevision:revision(),reference:'contracts.template@1',kind:'template'},resourceRetired=await call('retireCardResource',resourceRetireInput);assert.equal(resourceRetired.retired,true);assert.deepEqual(await call('retireCardResource',resourceRetireInput),resourceRetired);
+  const resourceRestoreInput={key:'resource-receipt-restore',expectedRevision:revision(),reference:'contracts.template@1',kind:'template'},resourceRestored=await call('restoreCardResource',resourceRestoreInput);assert.equal(resourceRestored.retired,false);assert.deepEqual(await call('restoreCardResource',resourceRestoreInput),resourceRestored);assert.deepEqual(await call('saveCardResource',resourceInput),resourceSaved);
+  const registry=x.core.cardPolicies(manager);assert.equal(registry.history.length,registry.revision);assert.equal(registry.resources.find(row=>row.document.id==='contracts.template').retired,false);
+  const receipts={saveCardPolicy:saved,activateCardPolicy:activated,retireCardPolicy:retired,restoreCardPolicy:restored,saveCardResource:resourceSaved,retireCardResource:resourceRetired,restoreCardResource:resourceRestored};
+  for(const [operation,receipt]of Object.entries(receipts))for(const mutate of [value=>delete value.revision,value=>value.revision=-1,value=>value.credentials={}]){const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse(operation,200,invalid),WireContractError);}
+  for(const [operation,receipt,field,value]of [['saveCardPolicy',saved,'state','active'],['activateCardPolicy',activated,'affected',{}],['retireCardPolicy',retired,'state','draft'],['restoreCardPolicy',restored,'state','active'],['saveCardResource',resourceSaved,'resource',{}],['retireCardResource',resourceRetired,'retired',false],['restoreCardResource',resourceRestored,'retired',true]])assert.throws(()=>validateWireResponse(operation,200,{...receipt,[field]:value}),WireContractError);
+  actor=x.bob;await assert.rejects(call('saveCardPolicy',{...saveInput,key:'policy-denied',expectedRevision:revision()}),error=>error instanceof WireApiError&&error.status===403);await assert.rejects(call('saveCardResource',{...resourceInput,key:'resource-denied',expectedRevision:revision()}),error=>error instanceof WireApiError&&error.status===403);
 });

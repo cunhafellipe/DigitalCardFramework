@@ -231,3 +231,22 @@ async function tradingAvailabilityResponses(){
   return {gifts,max,version};
 }
 void tradingAvailabilityResponses;
+
+
+async function policyMutationResponses(){
+  const saved=await call('saveCardPolicy',{key:'save',expectedRevision:0,document:{schemaVersion:1,id:'policy',revision:1,name:'Policy'}});
+  const state:'draft'=saved.state,name:string=saved.document.name;
+  const preview=await call('previewCardPolicy',{expectedRevision:saved.revision,policy:'policy@1',assignments:[]});
+  const active=await call('activateCardPolicy',{...preview,key:'activate'});
+  for(const row of active.affected){const card:string|undefined=row.cardId;void card;}
+  const retired=await call('retireCardPolicy',{key:'retire',expectedRevision:active.revision,policy:'policy@1'});const retiredState:'retired'=retired.state;
+  const restored=await call('restoreCardPolicy',{key:'restore',expectedRevision:retired.revision,policy:'policy@1'});const restoredState:'superseded'=restored.state;
+  const resource=await call('saveCardResource',{key:'resource',expectedRevision:restored.revision,resource:{kind:'template',document:{id:'template',revision:1,name:'Template'}}});
+  const resourceName:string=resource.resource.document.name;
+  const removed=await call('retireCardResource',{key:'remove-resource',expectedRevision:resource.revision,reference:'template@1',kind:'template'});const yes:true=removed.retired;
+  const returned=await call('restoreCardResource',{key:'restore-resource',expectedRevision:removed.revision,reference:'template@1',kind:'template'});const no:false=returned.retired;
+  // @ts-expect-error mutation receipts do not expose registry history
+  void saved.history;
+  return {state,name,retiredState,restoredState,resourceName,yes,no};
+}
+void policyMutationResponses;

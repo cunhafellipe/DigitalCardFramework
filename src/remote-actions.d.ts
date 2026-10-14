@@ -1,6 +1,6 @@
 import type {ActionJson} from './action-contracts.js';
-export {actionProtocol,actionDeliverySchema,validateActionDelivery,validateActionAcknowledgment} from './action-contracts.js';
-export type {ActionJson,ActionDelivery,ActionAcknowledgment} from './action-contracts.js';
+export {actionProtocol,actionDeliverySchema,validateActionDelivery,validateActionAcknowledgment,validateFrameworkEvent} from './action-contracts.js';
+export type {ActionJson,ActionDelivery,ActionAcknowledgment,FrameworkEvent,KnownFrameworkEvent,KnownEventData} from './action-contracts.js';
 export interface CommittedAction {
   idempotencyKey: string;
   userId: string | null;

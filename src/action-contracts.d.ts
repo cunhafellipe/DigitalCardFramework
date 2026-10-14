@@ -8,3 +8,22 @@ export declare const actionProtocol:'digital-card-action@1';
 export declare const actionDeliverySchema:Readonly<Record<string,unknown>>;
 export declare function validateActionDelivery(value:unknown):ActionDelivery;
 export declare function validateActionAcknowledgment(value:unknown):ActionAcknowledgment;
+
+export interface KnownEventData {
+  'catalog.published':{version:number};
+  'catalog.imported':{version:number;userId:string|null;digest:string};
+  'user.registered':{userId:string};
+  'provenance.backfilled':{count:number};
+  'currency.external-settled':{providerId:string;transactionId:string;userId:string;currencyId:string;amount:number};
+  'card.issued':{copyId:string;ownerId:string;variantId:string;provenance:Record<string,ActionJson>};
+  'card.opened':{copyId:string;userId:string;packId:string|null;openedAt:string};
+  'card.transferred':{copyId:string;from:string;to:string;tradeId:string};
+}
+export interface FrameworkEvent<Type extends string=string> {
+  id:string;sequence:number;type:Type;at:string;completionId?:string;
+  data:Type extends keyof KnownEventData?KnownEventData[Type]:Record<string,ActionJson>;
+}
+export type KnownFrameworkEvent={[Type in keyof KnownEventData]:FrameworkEvent<Type>}[keyof KnownEventData];
+/** Validate an envelope without changing the arbitrary custom-action contract. */
+export declare function validateFrameworkEvent<Type extends string>(value:unknown,expectedType:Type):FrameworkEvent<Type>;
+export declare function validateFrameworkEvent(value:unknown):FrameworkEvent;

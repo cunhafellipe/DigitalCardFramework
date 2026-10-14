@@ -1,6 +1,6 @@
 import { FrameworkError } from "./catalog.js";
 import {actionProtocol as protocol,validateActionDelivery,validateActionAcknowledgment} from './action-contracts.js';
-export {actionProtocol,actionDeliverySchema,validateActionDelivery,validateActionAcknowledgment} from './action-contracts.js';
+export {actionProtocol,actionDeliverySchema,validateActionDelivery,validateActionAcknowledgment,validateFrameworkEvent} from './action-contracts.js';
 
 const fail = (code, message, status = 503) => {
   throw new FrameworkError(code, message, status);

@@ -177,6 +177,7 @@ jobs:
       - run: node test/admin-browser.mjs test-results/admin
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/presentation-resolution-browser.mjs test-results/resolution
         env:
           HEADED: '1'

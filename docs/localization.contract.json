@@ -2430,6 +2430,1147 @@
     "tradingControls.unlocked": {
       "placeholders": [],
       "plural": false
+    },
+    "admin.unnamedAccount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.default": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.on": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.off": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.paused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.adminControlPanel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.yourCommunityUnderControl": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.controlComplexity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.adminSections": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.youHaveAnUnsavedDraft": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.keepEditingOrDiscardItBefore": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.keepEditing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.discardDraftAndContinue": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.overview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.cardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.people": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.website": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.activity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.changesStayAsDraftsUntilYou": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.basic": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.advanced": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.savedSettingsNoChanges": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reviewChanges": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.cancel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.unsavedDraftNothingHasChangedYet": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.settingsChangedWhileYouWereEditing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.weCouldNotFinishThatRequest": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reloadCurrentSettingsThenReviewYour": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reloadCurrentSettings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.adminPanelUnavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadingYourControls": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.yourAccountMayNeedAdministratorPermissions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.checkingTheSavedSettingsAndYour": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.refreshingSettings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.yourSavedControlsWillAppearIn": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.technicalDetails": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.openTradingPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.yourAccountCanViewTheseSettings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reviewBeforeSaving": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.checkExactlyWhatWillChangeNothing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.setting": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.saved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.afterSaving": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.removalRetiresTheSelectedCopiesAnd": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.newCopiesWillBeIssuedAnd": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.saving": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.retrySameChange": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.saveChanges": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.aClearViewOfYourCommunity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.keepTheEssentialsRunningMakeA": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.someActivityIsPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noEmergencyPausesActive": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.yourEmergencySwitchesAreClearIndividual": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packTypes": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.accounts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.manageYourCardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.setPackPricesRunADiscount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.manageCardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.helpAPerson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.controlPermissionsAndCorrectTheirCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.findAPerson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.controlTheWebsite": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pausePurchasesOrTradingAndManage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.websiteControls": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.simpleSwitchesForTheActivitiesYour": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.aHostPolicyAlsoLimitsActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.commerceIsDisabledInTheHost": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.theHostTradingPolicyIsDisabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.communityActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pausingStopsNewActivityPeopleCan": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packPurchases": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowPeopleToBuyNewPacks": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.trading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowDirectTradesBetweenPeopleThis": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.userShops": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowCommunityMembersToCreateShops": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reasonOptional": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.aShortNoteHelpsTheNext": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.disabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noSettingsHaveChanged": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.websiteActivitySettingsUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.theseControlsApplyAcrossTheWebsite": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.effectiveHostPolicy": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.directTrading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.commerceEnabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tradingPolicyEnabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.notReported": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.enabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.turningOnAnAdminControlCannot": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pricesSalesAndPackSettingsGrouped": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.searchCardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.salesPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.salesAllowed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noMatchingCardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tryAnotherNameOrAddA": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allCardLines": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.manageSalesForThisLineOr": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.salesForThisCardLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.resumeLineSales": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pauseLineSales": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.lineSalesResumed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.lineSalesPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.lineSales": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.appliesToNewPackPurchasesAnd": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.newSalesForThisLineAre": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.thisLineCanBeSoldSubject": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noDiscount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.disabledInCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packPurchasesPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.availableUnderNormalRules": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noPacksInThisLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.addAPackInYourCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.setAClearPriceReviewThe": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packPricing": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pricesUseWholeCurrencyUnitsDiscounts": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.regularPrice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.discountPercent": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.use0ForTheRegularPrice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.buyerPaysPerPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.rarityWeighting": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.relativeMultipliersForFutureDraws1": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.baseShareByDrawPool": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noEligibleWeight": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.theseAreBaseSharesNotGuaranteed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.discount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packSettingsUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.appliesToFuturePurchasesSavedAllocations": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.resetPackSettingsToCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packSettingsResetToCatalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packPrice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.custom": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.catalog": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.findAPersonAdjustWhatThey": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.searchPeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.findPeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.findingPeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.searchingAccountsByName": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.restrictionsSet": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noAccountBlocks": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noPeopleFound": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tryAnotherNameAccountsAppearAfter": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadMorePeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.backToPerson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allPeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadingThisPerson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.checkingCurrentPermissionsAndCardOwnership": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.changesHereApplyOnlyToThis": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.giveCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.removeCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.cardInventory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.whatThisPersonCanDo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.blockingAPermissionStopsNewActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowTrading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.directTradesWithOtherPeople": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowSelling": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.createListingsAndSellThroughUser": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.allowBuying": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.buyPacksAndMarketplaceItems": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.selling": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.buying": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.blocked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noPermissionsHaveChanged": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.accountPermissionsUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.removeSelectedCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.createNewCopiesForThisPerson": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.chooseTheExactCopiesToRetire": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.cardToGive": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.numberOfCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noEnabledVariantsAreAvailableTo": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.unavailableForRemoval": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noCardsToRemove": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.thisPersonDoesNotOwnAny": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadMoreCards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.reasonForThisInventoryChange": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.requiredThisNoteIsSavedIn": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.addAReasonForChangingThis": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.chooseAnAvailableCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.currentInventory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.selectAtLeastOneAvailableCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.retiredFromInventory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.aRecordOfWhoChangedSettings": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.refreshActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadingActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.fetchingTheAdministratorChangeHistory": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tradingPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.userShopsPaused": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.userShopsEnabled": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tradingBlocked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.sellingBlocked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.buyingBlocked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.accountPermissions": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.administrator": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.settingsUpdated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.seeChanges": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.inventoryDetails": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.noAdminChangesYet": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.savedSettingsAndInventoryChangesWill": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadMoreActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.revision": {
+      "placeholders": [
+        "revision"
+      ],
+      "plural": false
+    },
+    "admin.reviewTitle": {
+      "placeholders": [
+        "title"
+      ],
+      "plural": false
+    },
+    "admin.reviewReason": {
+      "placeholders": [
+        "reason"
+      ],
+      "plural": false
+    },
+    "admin.pausedActivities": {
+      "placeholders": [
+        "activities"
+      ],
+      "plural": false
+    },
+    "admin.manage": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.backTo": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.lineSalesTitle": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.edit": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.lineReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.discountActive": {
+      "placeholders": [
+        "percent"
+      ],
+      "plural": false
+    },
+    "admin.buyerDiscount": {
+      "placeholders": [
+        "percent"
+      ],
+      "plural": false
+    },
+    "admin.multiplier": {
+      "placeholders": [
+        "rarity"
+      ],
+      "plural": false
+    },
+    "admin.resetTitle": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.packReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.permissionsTitle": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.accountReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.giveTitle": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.removeTitle": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.ownedBy": {
+      "placeholders": [
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.changedBy": {
+      "placeholders": [
+        "date",
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.updated": {
+      "placeholders": [
+        "label"
+      ],
+      "plural": false
+    },
+    "admin.technicalChange": {
+      "placeholders": [
+        "id",
+        "operator",
+        "target"
+      ],
+      "plural": false
+    },
+    "admin.targetReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.poolDraws": {
+      "placeholders": [
+        "count",
+        "pool"
+      ],
+      "plural": true
+    },
+    "admin.recordedCards": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.addCopies": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.addedCards": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.removedCards": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.accountCounts": {
+      "placeholders": [
+        "cards",
+        "packs"
+      ],
+      "plural": false
+    },
+    "admin.availableCount": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": false
+    },
+    "admin.copySerial": {
+      "placeholders": [
+        "serial"
+      ],
+      "plural": false
+    },
+    "admin.copyReference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.removeCopy": {
+      "placeholders": [
+        "identity",
+        "name"
+      ],
+      "plural": false
+    },
+    "admin.serialIdentity": {
+      "placeholders": [
+        "serial"
+      ],
+      "plural": false
+    },
+    "admin.copyIdentity": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "admin.packPurchasesActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.tradingActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.userShopsActivity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.admin": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.serverUnavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.clientRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.storageUnavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pendingPrevious": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.recoverCardChange": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.recoverSettingsChange": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.recoverDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.savedCommand": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.unconfirmed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.settingsUpdate": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.recoverOriginal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.unsupportedCommand": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.loadBeforeReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.changeBeforeReview": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.draftDiscarded": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.pendingAnother": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.restoreStorage": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.changesSaved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.unconfirmedResult": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.savedRefreshFailed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.recoveryCardCommand": {
+      "placeholders": [
+        "action",
+        "quantity"
+      ],
+      "plural": false
+    },
+    "admin.giveAction": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.removeAction": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.packTypesLabel": {
+      "placeholders": [],
+      "plural": false
+    },
+    "admin.cardCount": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "admin.packCount": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
     }
   }
 }

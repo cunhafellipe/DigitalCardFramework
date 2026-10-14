@@ -62,7 +62,7 @@ test('per-form and total UTF-8 limits apply to portable bundles',()=>{
 
 test('expanded collector catalog accepts bounded large bundles and retains old bundle compatibility',()=>{
   assert.equal(localizationSchema.maximumBytes,65536);assert.equal(localizationSchema.maximumMessages,1024);assert(Object.keys(localizationKeys).length>512);
-  const makeMessages=padding=>Object.fromEntries(Object.entries(localizationKeys).map(([key,metadata])=>{const text='x'.repeat(padding)+metadata.placeholders.map(name=>'{'+name+'}').join(' ');return [key,metadata.plural?{other:text}:text];})),large=bundle(makeMessages(70));
+  const makeMessages=padding=>Object.fromEntries(Object.entries(localizationKeys).map(([key,metadata])=>{const text='x'.repeat(padding)+metadata.placeholders.map(name=>'{'+name+'}').join(' ');return [key,metadata.plural?{other:text}:text];})),large=bundle(makeMessages(40));
   const bytes=new TextEncoder().encode(JSON.stringify(large)).length;assert(bytes>32768&&bytes<=65536);assert.equal(Object.keys(validateLocalizationBundle(large).messages).length,Object.keys(localizationKeys).length);
   const oversized=bundle(makeMessages(150));assert(new TextEncoder().encode(JSON.stringify(oversized)).length>65536);invalid(oversized);
   const oldMessages=Object.fromEntries(Object.entries(englishMessages).slice(0,220));assert.equal(Object.keys(validateLocalizationBundle(bundle(oldMessages,'en')).messages).length,220);

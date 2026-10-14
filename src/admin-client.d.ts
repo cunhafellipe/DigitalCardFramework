@@ -1,3 +1,4 @@
+import type { Localization } from './localization.js';
 import type { Client, CommandStorage } from './client.js';
 import type { Schemas, Operations } from './wire-types.js';
 type Draft<T> = T extends object ? Omit<T, 'key' | 'expectedRevision'> : never;
@@ -72,9 +73,10 @@ type StoredReview = {
 };
 type Storage = CommandStorage & Required<Pick<CommandStorage, 'removeItem'>>;
 /** A replaceable operator workflow. Namespace identifies the authenticated operator. */
-export declare function createAdminController({ client, storage, namespace }: {
+export declare function createAdminController({ client, storage, namespace, localization }: {
     client: Client;
     storage: Storage;
     namespace: string;
+    localization?: Localization;
 }): AdminController;
 export {};

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
 import {ApiError} from '../src/client.js';
 import {createAdminController} from '../src/admin-client.js';
-import {mountAdminPanel} from '../src/admin-ui.js';
+import {mountAdminPanel,renderAdminPanel} from '../src/admin-ui.js';
+import {createLocalization} from '../src/localization.js';
 import {fixture} from './helpers.js';
 const settle=async()=>{for(let i=0;i<6;i++)await new Promise(resolve=>setImmediate(resolve));};
 const memory=()=>{const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
@@ -79,4 +80,50 @@ for(const retryStatus of [401,429])test('admin original issuance survives a retr
     controller=createAdminController({client:x.client,storage,namespace:x.alice.userId});await controller.confirm();assert.equal(controller.getState().pending,true);controller.dispose();
     controller=createAdminController({client:x.client,storage,namespace:x.alice.userId});await controller.confirm();assert.equal(controller.getState().pending,false);assert.deepEqual(inputs[0],inputs[2]);assert.equal(x.core.inventory(x.bob).length,1);
   }finally{controller.dispose();x.core.close();}
+});
+
+const adminSpanish={
+  'admin.adminControlPanel':'<b>Control privado</b>','admin.overview':'Resumen','admin.website':'Sitio',
+  'admin.allowed':'Permitido','admin.paused':'Pausado','admin.packPurchases':'Compra de paquetes',
+  'admin.reviewChanges':'Revisar cambios','admin.saveChanges':'Guardar cambios','admin.retrySameChange':'Reintentar el mismo cambio',
+  'admin.reasonOptional':'Motivo (opcional)','admin.changesSaved':'Cambios guardados.',
+  'admin.pendingPrevious':'Confirma el cambio anterior.','admin.unconfirmedResult':'Reintenta el cambio original.',
+  'admin.keepEditing':'Seguir editando','admin.discardDraftAndContinue':'Descartar borrador',
+  'admin.regularPrice':'Precio habitual','admin.buyerPaysPerPack':'Precio por paquete',
+  'admin.cardCount':{one:'{count} tarjeta',other:'{count} tarjetas'},'admin.packCount':{one:'{count} paquete',other:'{count} paquetes'}
+};
+test('standalone administration localizes each instance while keeping authored values and reviewed inputs exact',async()=>{
+  const window=new Window(),x=setup();globalThis.document=window.document;
+  const actualOverview=x.client.adminOverview,actualConfigure=x.client.configureAdmin,commands=[];
+  x.client.adminOverview=async()=>{const value=await actualOverview();value.counts.users=1000;return value;};
+  x.client.configureAdmin=async input=>{commands.push(structuredClone(input));return actualConfigure(input);};
+  const es=createLocalization({locale:'es',messages:adminSpanish}),root=document.createElement('div'),other=document.createElement('div');document.body.append(root,other);
+  const panel=renderAdminPanel({me:{userId:x.alice.userId}},{client:x.client,localization:es}),english=mountAdminPanel(other,{client:x.client,namespace:x.alice.userId,storage:memory()});root.append(panel.node);
+  try{
+    await Promise.all([panel.ready,english.ready]);assert.equal(root.querySelector('.dc-admin').lang,'es');assert.equal(other.querySelector('.dc-admin').lang,'en');
+    assert.equal(root.querySelector('.da-brand strong').textContent,'<b>Control privado</b>');assert.equal(root.querySelector('.da-brand b'),null);assert.match(root.textContent,new RegExp(es.number(1000)));assert.match(other.textContent,/Admin control panel/);
+    root.querySelector('[data-admin-tab="website"]').click();input(root,'Compra de paquetes',false,window);const reason='0007 <audit> é';input(root,'Motivo (opcional)',reason,window);click(root,'Revisar cambios');assert.equal(commands.length,0);assert.match(root.querySelector('.da-review').textContent,/Permitido.*Pausado/s);assert.equal(root.querySelector('.da-review audit'),null);
+    // This wrapper uses the platform storage; provide a durable store explicitly on its owned controller before saving.
+    panel.dispose();const saved=memory(),mounted=mountAdminPanel(root,{client:x.client,namespace:x.alice.userId,storage:saved,locale:'es',messages:adminSpanish});await mounted.ready;
+    try{root.querySelector('[data-admin-tab="website"]').click();input(root,'Compra de paquetes',false,window);input(root,'Motivo (opcional)',reason,window);click(root,'Revisar cambios');click(root,'Guardar cambios');await settle();assert.equal(commands.length,1);assert.deepEqual(commands[0].changes,{packPurchasesPaused:true});assert.equal(commands[0].reason,reason);assert.equal(commands[0].expectedRevision,0);assert.match(root.textContent,/Cambios guardados/);
+      root.querySelector('[data-admin-tab="activity"]').click();await settle();const event=x.core.adminHistory(x.actor,{limit:1}).items[0];assert.match(root.textContent,new RegExp(es.date(event.at).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));assert.match(root.textContent,/0007 <audit> é/);
+    }finally{mounted.dispose();}
+    assert.match(other.textContent,/Admin control panel/);assert(!other.textContent.includes('Control privado'));
+  }finally{panel.dispose();english.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;}
+});
+
+test('localized recovery across a different locale preserves the originally reviewed text and command identity',async()=>{
+  const window=new Window(),x=setup(),storage=memory(),inputs=[],actual=x.client.configureAdmin;globalThis.document=window.document;
+  x.client.configureAdmin=async input=>{inputs.push(structuredClone(input));const receipt=await actual(input);if(inputs.length===1)throw new Error('<provider response lost>');return receipt;};
+  const root=document.createElement('div');document.body.append(root);let panel=mountAdminPanel(root,{client:x.client,namespace:x.alice.userId,storage,locale:'es',messages:adminSpanish});
+  try{
+    await panel.ready;root.querySelector('[data-admin-tab="website"]').click();input(root,'Compra de paquetes',false,window);input(root,'Motivo (opcional)','Exact <reason>',window);click(root,'Revisar cambios');const reviewed=panel.controller.getState().review;click(root,'Guardar cambios');await settle();assert.equal(panel.controller.getState().pending,true);assert.match(root.textContent,/Reintenta el cambio original/);assert.match(root.textContent,/<provider response lost>/);assert.equal(root.querySelector('provider'),null);panel.dispose();
+    panel=mountAdminPanel(root,{client:x.client,namespace:x.alice.userId,storage,locale:'ar',messages:{'admin.retrySameChange':'إعادة المحاولة الأصلية','admin.pendingPrevious':'تأكيد التغيير السابق'}});await panel.ready;assert.equal(root.querySelector('.dc-admin').dir,'rtl');assert.deepEqual(panel.controller.getState().review,{...reviewed,input:{...reviewed.input,key:inputs[0].key}});assert.match(root.textContent,/Permitido.*Pausado/s);click(root,'إعادة المحاولة الأصلية');await settle();assert.equal(panel.controller.getState().pending,false);assert.deepEqual(inputs[0],inputs[1]);assert.equal(x.core.adminOverview(x.actor).revision,1);
+  }finally{panel.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;}
+});
+
+test('a supplied controller retains its message language and lifecycle ownership',async()=>{
+  const window=new Window(),x=setup();globalThis.document=window.document;const controller=createAdminController({client:x.client,namespace:x.alice.userId,storage:memory()}),root=document.createElement('div'),panel=mountAdminPanel(root,{controller,locale:'es',messages:adminSpanish});
+  try{await panel.ready;controller.cancel();assert.match(root.textContent,/Draft discarded\. Saved settings are unchanged/);assert.equal(root.querySelector('.dc-admin').lang,'es');panel.dispose();assert.equal(controller.stage({title:'Authored <title>',input:{scope:'site',changes:{tradingPaused:true},reason:'User reason'},changes:[{label:'Authored field',before:'Original',after:'Updated'}]}),true);
+  }finally{panel.dispose();controller.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;}
 });

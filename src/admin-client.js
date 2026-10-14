@@ -1,19 +1,22 @@
+import { createLocalization } from './localization.js';
 import { validateWireRequest } from './wire-contracts.js';
 import { createCommandRunner } from './client.js';
 const record = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 const canonical = (value) => JSON.stringify(stable(value));
 const stable = (value) => Array.isArray(value) ? value.map(stable) : record(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
 const copy = (value) => structuredClone(value);
-const errors = (error) => { const value = record(error) ? error : {}; return { code: typeof value.code === 'string' ? value.code : 'NETWORK_ERROR', message: typeof value.message === 'string' ? value.message : 'Unable to reach the server.', status: typeof value.status === 'number' ? value.status : undefined }; };
+const describeError = (error, fallback) => { const value = record(error) ? error : {}; return { code: typeof value.code === 'string' ? value.code : 'NETWORK_ERROR', message: typeof value.message === 'string' ? value.message : fallback, status: typeof value.status === 'number' ? value.status : undefined }; };
 const isCommand = (value) => value === 'configureAdmin' || value === 'administerCards';
 /** A replaceable operator workflow. Namespace identifies the authenticated operator. */
-export function createAdminController({ client, storage, namespace }) {
+export function createAdminController({ client, storage, namespace, localization = createLocalization() }) {
+    const t = (key, values) => localization.text(key, values);
+    const errors = (error) => describeError(error, t('admin.serverUnavailable'));
     if (!client || !namespace)
-        throw new Error('An admin client and an operator namespace are required.');
+        throw new Error(t('admin.clientRequired'));
     const storageKey = 'digital-card.admin-command.v1:' + namespace;
     const durable = typeof client.registerCommandIntent === 'function' ? createCommandRunner({ client, storage, namespace }) : null;
     let pending = null, disposed = false, generation = 0, usersGeneration = 0, personGeneration = 0, historyGeneration = 0, publication = 0, active = null;
-    const storageError = () => Object.assign(new Error('Safe command storage is unavailable. Restore storage before retrying this change.'), { code: 'COMMAND_STORAGE_UNAVAILABLE', status: 503 });
+    const storageError = () => Object.assign(new Error(t('admin.storageUnavailable')), { code: 'COMMAND_STORAGE_UNAVAILABLE', status: 503 });
     function readPending() {
         try {
             if (!storage || typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function')
@@ -42,7 +45,7 @@ export function createAdminController({ client, storage, namespace }) {
         pending = readPending();
     }
     catch { }
-    let state = { phase: 'idle', overview: null, users: { items: [], next: null, total: 0 }, person: null, history: { items: [], next: null, total: 0 }, review: pending?.review ?? null, pending: !!pending, error: null, message: pending ? 'A previous save needs confirmation. Retry the same change to recover its result safely.' : '', loadingUsers: false, loadingPerson: false, loadingHistory: false };
+    let state = { phase: 'idle', overview: null, users: { items: [], next: null, total: 0 }, person: null, history: { items: [], next: null, total: 0 }, review: pending?.review ?? null, pending: !!pending, error: null, message: pending ? t('admin.pendingPrevious') : '', loadingUsers: false, loadingPerson: false, loadingHistory: false };
     const listeners = new Set();
     const publish = (patch) => { if (disposed)
         return; state = { ...state, ...patch }; const version = ++publication, snapshot = copy(state); for (const listener of listeners) {
@@ -90,10 +93,10 @@ export function createAdminController({ client, storage, namespace }) {
                     return;
                 const intent = recovered.items.find(row => isCommand(row.command) && !(durable.pending(row.command)?._confirmed && durable.pending(row.command)?.key === row.input.key));
                 if (intent && isCommand(intent.command)) {
-                    const review = { command: intent.command, input: validateWireRequest(intent.command, copy(intent.input)), title: intent.command === 'administerCards' ? 'Recover card change' : 'Recover settings change', description: 'This previously reviewed change still needs confirmation.', changes: [{ label: 'Saved command', before: 'Unconfirmed', after: intent.command === 'administerCards' ? String(intent.input.action) + ' ' + String(intent.input.quantity ?? '') : 'Settings update' }] };
+                    const review = { command: intent.command, input: validateWireRequest(intent.command, copy(intent.input)), title: intent.command === 'administerCards' ? t('admin.recoverCardChange') : t('admin.recoverSettingsChange'), description: t('admin.recoverDescription'), changes: [{ label: t('admin.savedCommand'), before: t('admin.unconfirmed'), after: intent.command === 'administerCards' ? t('admin.recoveryCardCommand', { action: intent.input.action === 'give' ? t('admin.giveAction') : t('admin.removeAction'), quantity: typeof intent.input.quantity === 'number' ? localization.number(intent.input.quantity) : '' }) : t('admin.settingsUpdate') }] };
                     pending = { command: intent.command, input: validateWireRequest(intent.command, copy(intent.input)), review };
                     persist();
-                    publish({ pending: true, review, message: 'Recover the original change before making another one.' });
+                    publish({ pending: true, review, message: t('admin.recoverOriginal') });
                     if (disposed || current !== generation)
                         return;
                 }
@@ -165,16 +168,16 @@ export function createAdminController({ client, storage, namespace }) {
         if (disposed || active || pending)
             return false;
         if (!isCommand(command))
-            throw new Error('Unsupported admin command.');
+            throw new Error(t('admin.unsupportedCommand'));
         if (!state.overview)
-            throw new Error('Load current settings before reviewing a change.');
+            throw new Error(t('admin.loadBeforeReview'));
         if (!Array.isArray(changes) || !changes.length)
-            throw new Error('Make a change before reviewing it.');
+            throw new Error(t('admin.changeBeforeReview'));
         publish({ review: { command, input: copy({ ...input, expectedRevision: state.overview.revision }), title, changes: copy(changes), description }, error: null, message: '' });
         return true;
     }
     function cancel() { if (active || pending || disposed)
-        return false; publish({ review: null, error: null, message: 'Draft discarded. Saved settings are unchanged.' }); return true; }
+        return false; publish({ review: null, error: null, message: t('admin.draftDiscarded') }); return true; }
     function confirm() {
         if (active)
             return active;
@@ -185,7 +188,7 @@ export function createAdminController({ client, storage, namespace }) {
             const saved = readPending();
             if (saved && saved.input.key !== pending?.input.key) {
                 pending = saved;
-                publish({ pending: true, review: copy(saved.review), message: 'Another save needs confirmation. Retry that original change before making a new one.' });
+                publish({ pending: true, review: copy(saved.review), message: t('admin.pendingAnother') });
                 return Promise.resolve(null);
             }
             if (!pending)
@@ -193,7 +196,7 @@ export function createAdminController({ client, storage, namespace }) {
             persist();
         }
         catch (error) {
-            publish({ phase: 'error', pending: !!pending, error: errors(error), message: 'Restore command storage before saving or retrying this change.' });
+            publish({ phase: 'error', pending: !!pending, error: errors(error), message: t('admin.restoreStorage') });
             return Promise.resolve(null);
         }
         if (!pending)
@@ -210,7 +213,7 @@ export function createAdminController({ client, storage, namespace }) {
                     return receipt;
                 pending = null;
                 persist(operation.input.key);
-                publish({ phase: 'ready', pending: false, review: null, error: null, message: 'Changes saved. They apply to new actions immediately.' });
+                publish({ phase: 'ready', pending: false, review: null, error: null, message: t('admin.changesSaved') });
             }
             catch (error) {
                 if (disposed || current !== generation)
@@ -220,7 +223,7 @@ export function createAdminController({ client, storage, namespace }) {
                     pending = null;
                     persist(operation.input.key);
                 }
-                publish({ phase: 'error', pending: !!pending, error: errors(error), message: definite ? '' : 'The result is not confirmed. Retry this same change; it will not run twice.' });
+                publish({ phase: 'error', pending: !!pending, error: errors(error), message: definite ? '' : t('admin.unconfirmedResult') });
                 return null;
             }
             finally {
@@ -230,7 +233,7 @@ export function createAdminController({ client, storage, namespace }) {
                 const selected = state.person?.user.id;
                 await load({ keepReview: false });
                 if (state.error)
-                    publish({ message: 'Your changes were saved, but current settings could not be refreshed. Reload before making another change.' });
+                    publish({ message: t('admin.savedRefreshFailed') });
                 if (!disposed && selected)
                     await person(selected);
             }

@@ -1,8 +1,9 @@
+import {createLocalization} from '@digital-card/framework/localization';
 import {createAdminController} from '@digital-card/framework/admin-client';
 import type {Client,CommandStorage} from '@digital-card/framework/client';
 declare const client:Client;
 declare const storage:CommandStorage&Required<Pick<CommandStorage,'removeItem'>>;
-const controller=createAdminController({client,storage,namespace:'operator'});
+const controller=createAdminController({client,storage,namespace:'operator',localization:createLocalization({locale:'es'})});
 controller.stage({input:{scope:'site',reason:'Maintenance',changes:{packPurchasesPaused:true}},title:'Pause purchases',changes:[{label:'Purchases',before:'Allowed',after:'Paused'}]});
 controller.stage({command:'administerCards',input:{action:'give',userId:'member',variantId:'standard',quantity:1,reason:'Award'},title:'Award a card',changes:[{label:'Copies',before:'0',after:'1'}]});
 // @ts-expect-error Removal requires exact copy identities.

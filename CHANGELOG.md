@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added per-instance administration localization for overview, pricing, people, website settings, activity and review/save workflows.
+
 - Added portable localization for account rewards, private code reveal/history and trading controls, with complete Python/Go Spanish examples.
 
 - Added reviewed full opening views with retained program updates, revealed-only display grants, native fallback and Python/Go examples.

@@ -4,6 +4,7 @@
 
 - Added portable marketplace views with shared native purchase and seller review, stock recovery, order history and Python/Go layouts.
 - Preserved typed shop searches across delayed page updates and kept standalone marketplace purchase completion inline so order history remains accessible.
+- Kept marketplace controls valid when the portable view first connects and when a hidden page becomes visible again.
 
 - Added portable trading views with scoped inventory and offer displays, shared native confirmation, private-inventory support and Python/Go layouts.
 

@@ -1800,6 +1800,18 @@ schemas.ActionJob.additionalProperties=false;
 for(const [name,item]of [['CodeInventoryPage','CodeInventoryRecord'],['ActionJobPage','ActionJob']])schemas[name]={...schemas.ListingPage,properties:{...schemas.ListingPage.properties,items:{...schemas.ListingPage.properties.items,items:ref(item)}}};
 for(const [path,method,schema]of [['/operator/code-pools','post','CodePoolRecord'],['/operator/codes','get','CodeInventoryPage'],['/operator/actions','get','ActionJobPage']])openapi.paths[path][method].responses['200'].content['application/json'].schema=ref(schema);
 openapi.paths['/operator/code-pools'].get.responses['200'].content['application/json'].schema={type:'array',items:ref('CodePoolView')};
+schemas.ProductPityView={type:'object',required:['after','rarityId'],properties:{after:{type:'integer',minimum:1,maximum:1000},rarityId:codeId}};
+schemas.Availability={type:'object',additionalProperties:false,required:['version','variants','products'],properties:{
+  version:{type:'integer',minimum:1,maximum:Number.MAX_SAFE_INTEGER},
+  variants:{type:'array',items:{type:'object',additionalProperties:false,required:['id','issued','remaining'],properties:{id:codeId,issued:{type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER},remaining:{type:['integer','null'],minimum:0,maximum:Number.MAX_SAFE_INTEGER}}}},
+  products:{type:'array',items:{type:'object',additionalProperties:false,required:['id','available','pity'],properties:{id:codeId,available:{type:'boolean'},pity:{anyOf:[ref('ProductPityView'),{enum:[null,false,0,'']}]}}}}
+}};
+schemas.TradingPolicyValues={...schemas.TradingPolicy,required:Object.keys(schemas.TradingPolicy.properties)};
+schemas.TradingPolicyRecord={type:'object',additionalProperties:false,required:['revision','policy'],properties:{revision:{type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER},policy:ref('TradingPolicyValues')}};
+schemas.CardTransferLock={type:'object',additionalProperties:false,required:['reason','until','at','actorId'],properties:{reason:schemas.TransferLock.properties.reason,until:maybeTime,at:{type:'string',format:'date-time'},actorId:{type:['string','null']}}};
+schemas.CardTransferLockReceipt={type:'object',additionalProperties:false,required:['copyId','version','lock'],properties:{copyId:codeId,version:schemas.Copy.properties.version,lock:{anyOf:[ref('CardTransferLock'),{type:'null'}]}}};
+schemas.Copy.properties.transferLock=ref('CardTransferLock');
+for(const [path,method,schema]of [['/availability','get','Availability'],['/trading-policy','get','TradingPolicyRecord'],['/operator/trading','post','TradingPolicyRecord'],['/operator/card-lock','post','CardTransferLockReceipt']])openapi.paths[path][method].responses['200'].content['application/json'].schema=ref(schema);
 const durableCommands=['purchase','openPack','convert','tradeUp','saveAlbum','proposeTrade','acceptTrade','cancelTrade','consumeBinding','counterTrade','preferences','readNotifications','commitImport','reportCodeUsage','createShop','createListing','buyListing','cancelListing','enterRaffle','openCard','configureAdmin','administerCards'];
 const commandOperations=Object.fromEntries(Object.values(openapi.paths).flatMap(item=>Object.values(item).map(operation=>[operation.operationId,operation])));
 const commandSchema=command=>commandOperations[command==='preferences'?'setPreferences':command].requestBody.content['application/json'].schema;

@@ -2019,7 +2019,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/Availability"
                 }
               }
             }
@@ -5154,15 +5154,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "revision": {
-                      "type": "integer"
-                    },
-                    "policy": {
-                      "$ref": "#/components/schemas/TradingPolicy"
-                    }
-                  }
+                  "$ref": "#/components/schemas/TradingPolicyRecord"
                 }
               }
             }
@@ -5283,7 +5275,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/TradingPolicyRecord"
                 }
               }
             }
@@ -5404,7 +5396,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/CardTransferLockReceipt"
                 }
               }
             }
@@ -11850,6 +11842,9 @@
               "string",
               "null"
             ]
+          },
+          "transferLock": {
+            "$ref": "#/components/schemas/CardTransferLock"
           }
         }
       },
@@ -20445,6 +20440,271 @@
           }
         },
         "additionalProperties": false
+      },
+      "ProductPityView": {
+        "type": "object",
+        "required": [
+          "after",
+          "rarityId"
+        ],
+        "properties": {
+          "after": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "rarityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "Availability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "variants",
+          "products"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "issued",
+                "remaining"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "issued": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "remaining": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "available",
+                "pity"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "available": {
+                  "type": "boolean"
+                },
+                "pity": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProductPityView"
+                    },
+                    {
+                      "enum": [
+                        null,
+                        false,
+                        0,
+                        ""
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "TradingPolicyValues": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "defaultDecision": {
+            "enum": [
+              "allow",
+              "deny"
+            ],
+            "default": "allow"
+          },
+          "rules": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/TransferRule"
+            }
+          },
+          "maxCardsPerSide": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 100
+          },
+          "maxCurrenciesPerSide": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "default": 20
+          },
+          "allowGifts": {
+            "type": "boolean",
+            "default": true
+          },
+          "minAccountAgeSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 31536000
+          },
+          "cooldownSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 31536000
+          },
+          "maxExpirySeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800
+          },
+          "allowedCurrencyIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        },
+        "required": [
+          "enabled",
+          "defaultDecision",
+          "rules",
+          "maxCardsPerSide",
+          "maxCurrenciesPerSide",
+          "allowGifts",
+          "minAccountAgeSeconds",
+          "cooldownSeconds",
+          "maxExpirySeconds",
+          "allowedCurrencyIds"
+        ]
+      },
+      "TradingPolicyRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "policy"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "policy": {
+            "$ref": "#/components/schemas/TradingPolicyValues"
+          }
+        }
+      },
+      "CardTransferLock": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "until",
+          "at",
+          "actorId"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CardTransferLockReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "copyId",
+          "version",
+          "lock"
+        ],
+        "properties": {
+          "copyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "lock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardTransferLock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       },
       "CommandIntent": {
         "type": "object",

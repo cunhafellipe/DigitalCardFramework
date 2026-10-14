@@ -391,3 +391,27 @@ test('operator code and action HTTP records exclude secrets while retaining life
   assert.equal((await call('codePools',undefined))[0].counts.allocated,1);
 
 });
+
+
+test('availability and trading HTTP records retain compatibility and immutable lock receipts',async t=>{
+  const x=fixture({change(c){const base=c.products.find(row=>row.id==='common');base.pity={after:2,rarityId:c.variants.find(row=>row.id==='dawn.standard').rarityId,metadata:{label:'authored'}};for(const [index,pity]of [false,0,'',null].entries())c.products.push({...structuredClone(base),id:'pity-sentinel-'+index,pity});c.products.push({...structuredClone(base),id:'future-product',availableFrom:'2026-10-01T00:00:00.000Z'});}}),copy=x.open('unique')[0];let actor={...x.alice,role:'admin'},handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor?.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const available=await call('availability',undefined);assert.equal(available.version,1);assert.equal(available.variants.find(row=>row.id==='solstice.unique').remaining,0);assert.equal(available.variants.find(row=>row.id==='dawn.standard').remaining,null);assert.equal(available.products.find(row=>row.id==='future-product').available,false);
+  assert.deepEqual(available.products.find(row=>row.id==='common').pity.metadata,{label:'authored'});for(const [index,pity]of [false,0,'',null].entries())assert.equal(available.products.find(row=>row.id==='pity-sentinel-'+index).pity,pity);
+  const initial=await call('tradingPolicy',undefined);assert.equal(initial.revision,0);assert.equal(initial.policy.maxCardsPerSide,100);
+  const input={key:'trading-contract',expectedRevision:0,policy:{allowGifts:false,allowedCurrencyIds:['credits'],rules:[{id:'line-rule',decision:'deny',reason:'Line unavailable',match:{lineIds:['sky']}}]}};
+  const configured=await call('configureTrading',input);assert.equal(configured.policy.allowGifts,false);assert.equal(configured.policy.cooldownSeconds,0);assert.deepEqual(await call('configureTrading',input),configured);assert.deepEqual(await call('tradingPolicy',undefined),configured);
+  const lockInput={key:'lock-contract',copyId:copy.id,reason:'Review pending',until:'2026-10-01T00:00:00.000Z'},locked=await call('setCardTransferLock',lockInput);assert.equal(locked.lock.actorId,x.alice.userId);assert.equal(locked.lock.until,lockInput.until);assert.equal(locked.version,copy.version+1);assert.deepEqual(await call('setCardTransferLock',lockInput),locked);
+  const inspected=await call('inspectCard',undefined,{path:{copyId:copy.id}});assert.deepEqual(inspected.transferLock,locked.lock);
+  const unlocked=await call('setCardTransferLock',{key:'unlock-contract',copyId:copy.id,locked:false});assert.equal(unlocked.lock,null);assert.equal(unlocked.version,locked.version+1);assert.deepEqual(await call('setCardTransferLock',lockInput),locked);assert.equal(Object.hasOwn(await call('inspectCard',undefined,{path:{copyId:copy.id}}),'transferLock'),false);
+  const indefinite=await call('setCardTransferLock',{key:'indefinite-contract',copyId:copy.id});assert.equal(indefinite.lock.until,null);
+  actor=x.bob;await assert.rejects(call('configureTrading',{...input,key:'denied-trading'}),error=>error instanceof WireApiError&&error.status===403);await assert.rejects(call('setCardTransferLock',{...lockInput,key:'denied-lock'}),error=>error instanceof WireApiError&&error.status===403);
+  actor=null;assert.deepEqual(await call('availability',undefined),available);
+  for(const mutate of [value=>delete value.variants,value=>value.variants[0].issued=-1,value=>value.variants[0].remaining='1',value=>value.products[0].available=1,value=>value.products[0].pity={after:0,rarityId:'common'},value=>value.products[0].pity=true,value=>value.products[0].pity='unknown',value=>value.accounts=[]]){const invalid=structuredClone(available);mutate(invalid);assert.throws(()=>validateWireResponse('availability',200,invalid),WireContractError);}
+  for(const operation of ['configureTrading','tradingPolicy'])for(const mutate of [value=>delete value.policy.allowGifts,value=>value.revision=-1,value=>value.policy.rules[0].decision='unknown',value=>value.policy.maxCardsPerSide='100',value=>value.private={ }]){const invalid=structuredClone(configured);mutate(invalid);assert.throws(()=>validateWireResponse(operation,200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.lock,value=>value.version=0,value=>delete value.lock.actorId,value=>value.lock.until='invalid',value=>value.lock.reason=1,value=>value.lock.credentials={}]){const invalid=structuredClone(locked);mutate(invalid);assert.throws(()=>validateWireResponse('setCardTransferLock',200,invalid),WireContractError);}
+  validateWireResponse('setCardTransferLock',200,{...indefinite,lock:{...indefinite.lock,actorId:null}});
+});

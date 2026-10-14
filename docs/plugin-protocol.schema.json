@@ -199,6 +199,9 @@
               "string",
               "null"
             ]
+          },
+          "transferLock": {
+            "$ref": "#/components/schemas/CardTransferLock"
           }
         }
       },
@@ -538,6 +541,39 @@
           },
           "metadata": {
             "type": "object"
+          }
+        }
+      },
+      "CardTransferLock": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "until",
+          "at",
+          "actorId"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

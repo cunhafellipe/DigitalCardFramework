@@ -216,3 +216,18 @@ async function operatorReadResponses(){
   return {enabled,metadata};
 }
 void operatorReadResponses;
+
+
+async function tradingAvailabilityResponses(){
+  const available=await call('availability',undefined);
+  for(const variant of available.variants){const issued:number=variant.issued,remaining:number|null=variant.remaining;void [issued,remaining];}
+  for(const product of available.products){const enabled:boolean=product.available;if(product.pity&&typeof product.pity==='object'){const after:number=product.pity.after,rarity:string=product.pity.rarityId;void [after,rarity];}void enabled;}
+  const policy=await call('configureTrading',{key:'policy',expectedRevision:0,policy:{}});
+  const gifts:boolean=policy.policy.allowGifts,max:number=policy.policy.maxCardsPerSide;
+  const receipt=await call('setCardTransferLock',{key:'lock',copyId:'copy'});
+  const version:number=receipt.version;if(receipt.lock){const reason:string=receipt.lock.reason,actor:string|null=receipt.lock.actorId;void [reason,actor];}
+  // @ts-expect-error lock receipts omit private card bindings
+  void receipt.bindings;
+  return {gifts,max,version};
+}
+void tradingAvailabilityResponses;

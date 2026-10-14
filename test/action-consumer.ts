@@ -25,3 +25,16 @@ void opened.data.provenance;
 // @ts-expect-error known opened event requires its nullable pack ID
 const missing:FrameworkEvent<'card.opened'>={id:'event',sequence:1,type:'card.opened',at:'time',data:{copyId:'copy',userId:'user',openedAt:'time'}};
 void [copyId,packId,unknownValue,missing];
+
+const codeUsage=validateFrameworkEvent(incoming,'code.usage-reported');
+const used:boolean=codeUsage.data.used;
+if(known.type==='code.revoked'){
+  const holderCopy:string|null=known.data.copyId,actor:string|null=known.data.actorId;
+  const provider:string=known.data.providerId;
+  // @ts-expect-error Provider confirmation has no usage-report flag.
+  void known.data.used;
+  void [holderCopy,actor,provider];
+}
+// @ts-expect-error Usage reports require a boolean flag.
+const malformedUsage:FrameworkEvent<'code.usage-reported'>={id:'event',sequence:1,type:'code.usage-reported',at:'time',data:{codeId:'code',copyId:'copy',actorId:'user',used:'yes'}};
+void [used,malformedUsage];

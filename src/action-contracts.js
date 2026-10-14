@@ -11,7 +11,19 @@ const eventString={...unicodeString,minLength:1};
 const eventInteger={type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER};
 const eventObject={type:'object',propertyNames,additionalProperties:{$ref:'#/$defs/json'}};
 const eventData=properties=>({type:'object',additionalProperties:false,required:Object.keys(properties),properties});
+const nullableEventString={anyOf:[eventString,{type:'null'}]};
+const codeIdentity={codeId:eventString,copyId:eventString,actorId:eventString};
+const codeConfirmation={codeId:eventString,copyId:nullableEventString,actorId:nullableEventString,providerId:eventString,eventId:eventString,occurredAt:eventString};
 const coreEventData={
+  'code.pool-configured':eventData({poolId:eventString,actorId:nullableEventString}),
+  'code.batch-imported':eventData({batchId:eventString,poolId:eventString,count:eventInteger,actorId:nullableEventString,metadata:eventObject}),
+  'code.keys-rotated':eventData({count:eventInteger,actorId:nullableEventString}),
+  'code.allocated':eventData(codeIdentity),
+  'code.revealed':eventData(codeIdentity),
+  'code.usage-reported':eventData({...codeIdentity,used:{type:'boolean'}}),
+  'code.transferred':eventData({codeId:eventString,copyId:eventString,from:eventString,to:eventString,tradeId:eventString}),
+  'code.redeemed':eventData(codeConfirmation),
+  'code.revoked':eventData(codeConfirmation),
   'catalog.published':eventData({version:{...eventInteger,minimum:1}}),
   'catalog.imported':eventData({version:{...eventInteger,minimum:1},userId:{anyOf:[eventString,{type:'null'}]},digest:{type:'string',pattern:'^[a-f0-9]{64}(?![\\s\\S])'}}),
   'user.registered':eventData({userId:eventString}),

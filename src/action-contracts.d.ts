@@ -10,6 +10,15 @@ export declare function validateActionDelivery(value:unknown):ActionDelivery;
 export declare function validateActionAcknowledgment(value:unknown):ActionAcknowledgment;
 
 export interface KnownEventData {
+  'code.pool-configured':{poolId:string;actorId:string|null};
+  'code.batch-imported':{batchId:string;poolId:string;count:number;actorId:string|null;metadata:Record<string,ActionJson>};
+  'code.keys-rotated':{count:number;actorId:string|null};
+  'code.allocated':{codeId:string;copyId:string;actorId:string};
+  'code.revealed':{codeId:string;copyId:string;actorId:string};
+  'code.usage-reported':{codeId:string;copyId:string;actorId:string;used:boolean};
+  'code.transferred':{codeId:string;copyId:string;from:string;to:string;tradeId:string};
+  'code.redeemed':{codeId:string;copyId:string|null;actorId:string|null;providerId:string;eventId:string;occurredAt:string};
+  'code.revoked':{codeId:string;copyId:string|null;actorId:string|null;providerId:string;eventId:string;occurredAt:string};
   'catalog.published':{version:number};
   'catalog.imported':{version:number;userId:string|null;digest:string};
   'user.registered':{userId:string};

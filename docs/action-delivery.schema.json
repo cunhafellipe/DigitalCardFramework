@@ -128,6 +128,542 @@
           "if": {
             "properties": {
               "type": {
+                "const": "code.pool-configured"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "poolId",
+                  "actorId"
+                ],
+                "properties": {
+                  "poolId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "actorId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.batch-imported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "batchId",
+                  "poolId",
+                  "count",
+                  "actorId",
+                  "metadata"
+                ],
+                "properties": {
+                  "batchId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "poolId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "actorId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "propertyNames": {
+                      "allOf": [
+                        {
+                          "not": {
+                            "enum": [
+                              "__proto__",
+                              "constructor",
+                              "prototype"
+                            ]
+                          }
+                        },
+                        {
+                          "type": "string",
+                          "not": {
+                            "pattern": "[\\uD800-\\uDFFF]"
+                          }
+                        }
+                      ]
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/json"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.keys-rotated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "count",
+                  "actorId"
+                ],
+                "properties": {
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "actorId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.allocated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "actorId"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "actorId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.revealed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "actorId"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "actorId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.usage-reported"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "actorId",
+                  "used"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "actorId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "used": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.transferred"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "from",
+                  "to",
+                  "tradeId"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "from": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "tradeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.redeemed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "actorId",
+                  "providerId",
+                  "eventId",
+                  "occurredAt"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "actorId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "providerId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "code.revoked"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "codeId",
+                  "copyId",
+                  "actorId",
+                  "providerId",
+                  "eventId",
+                  "occurredAt"
+                ],
+                "properties": {
+                  "codeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "copyId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "actorId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "providerId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "eventId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "catalog.published"
               }
             }

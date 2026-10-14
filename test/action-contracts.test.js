@@ -1,3 +1,4 @@
+import {codesFixture} from './codes-fixtures.mjs';
 import {fixture as coreFixture,admin} from './helpers.js';
 import {MemoryStore} from '../src/store.js';
 import test from 'node:test';
@@ -51,5 +52,35 @@ test('opt-in event contract validates actual core events and subscription delive
     const issued=events.find(event=>event.type==='card.issued');const authored=structuredClone(issued);authored.data.provenance.extension={handle:'authored',snapshotId:'authored'};validateFrameworkEvent(authored);
     const invalid=structuredClone(events.find(event=>event.type==='catalog.imported'));invalid.data.digest+='\n';assert.throws(()=>validateFrameworkEvent(invalid));
     for(const data of [{value:NaN},{callback:()=>{}},{value:'x'.repeat(32768)}])assert.throws(()=>validateFrameworkEvent({...unknown,data}),error=>error.code==='PLUGIN_JOB');
+  }finally{x.core.close();}
+});
+
+
+test('code event contracts validate emitted lifecycle and unallocated provider confirmations',()=>{
+  const x=codesFixture({transfer:'follow-unrevealed'});
+  try{
+    const copy=x.openCode(),codeId=copy.codes[0].id;
+    const trade=x.core.proposeTrade(x.alice,{key:'code-gift',toUserId:x.bob.userId,give:{copyIds:[copy.id],currencies:[]},receive:{copyIds:[],currencies:[]}});
+    x.core.acceptTrade(x.bob,{key:'code-accept',tradeId:trade.id});
+    x.core.revealCode(x.bob,{key:'code-reveal',codeId});
+    x.core.reportCodeUsage(x.bob,{key:'code-used',codeId});
+    x.core.reportCodeUsage(x.bob,{key:'code-unused',codeId,used:false});
+    x.core.confirmCodeStatus(admin,{providerId:'example.game',eventId:'redeemed',codeId,status:'redeemed',occurredAt:'2026-09-30T12:01:00Z'});
+    const unallocated=x.store.read(s=>Object.values(s.codes).find(row=>row.copyId===null).id);
+    const serviceActor={...admin};delete serviceActor.userId;
+    x.core.confirmCodeStatus(serviceActor,{providerId:'example.game',eventId:'revoked',codeId:unallocated,status:'revoked',occurredAt:'2026-09-30T12:01:00Z'});
+    x.core.rotateCodeEncryption(serviceActor);
+    const events=x.core.events(admin,{limit:1000}).filter(event=>event.type.startsWith('code.'));
+    const schema=JSON.parse(readFileSync(new URL('../docs/action-delivery.schema.json',import.meta.url),'utf8')),compiler=new Ajv2020({strict:true,allowUnionTypes:true});compiler.addSchema(schema);const published=compiler.compile({$ref:schema.$id+'#/$defs/event'});
+    assert.equal(new Set(events.map(event=>event.type)).size,9);
+    for(const event of events){
+      assert.equal(validateFrameworkEvent(event,event.type),event);assert.equal(published(event),true,JSON.stringify(published.errors));
+      for(const key of Object.keys(event.data)){const invalid=structuredClone(event);delete invalid.data[key];assert.throws(()=>validateFrameworkEvent(invalid));assert.equal(published(invalid),false);}
+      assert.throws(()=>validateFrameworkEvent({...event,data:{...event.data,secret:'not-public'}}));
+    }
+    const revoked=events.find(event=>event.type==='code.revoked');assert.equal(revoked.data.copyId,null);assert.equal(revoked.data.actorId,null);
+    const used=events.find(event=>event.type==='code.usage-reported');assert.throws(()=>validateFrameworkEvent({...used,data:{...used.data,used:'true'}}));
+    assert(events.some(event=>event.type==='code.usage-reported'&&event.data.used===false));
+    assert(!JSON.stringify(events).includes('SECRET-REWARD'));
   }finally{x.core.close();}
 });

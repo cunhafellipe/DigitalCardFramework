@@ -76,3 +76,12 @@ void connectProgram({onOpenerDisplay: snapshot => console.log(snapshot.revealed)
   // @ts-expect-error Browser programs cannot request authoritative pack opening.
   bridge.openerIntent('openPack', 'snapshot');
 });
+
+import {encodePNG} from '@digital-card/framework/presentation/png-encode';
+const png:Promise<Uint8Array>=encodePNG({width:1,height:1,data:new Uint8Array(4)});
+const canvasPNG:Promise<Uint8Array>=encodePNG({width:1,height:1,data:new Uint8ClampedArray(4)});
+// @ts-expect-error RGBA input must provide byte data
+void encodePNG({width:1,height:1,data:'RGBA'});
+// @ts-expect-error dimensions must be numeric
+void encodePNG({width:'1',height:1,data:new Uint8Array(4)});
+void [png,canvasPNG];

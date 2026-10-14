@@ -5,7 +5,7 @@ function options(select,values,value){if(!select)return;const signature=JSON.str
 function clear(record){if(record.url)URL.revokeObjectURL(record.url);record.url=undefined;record.preview=undefined;for(const image of record.node.querySelectorAll('img[data-dc-item-preview]')){image.onerror=null;image.removeAttribute('src');image.hidden=true;}}
 function rememberModalFocus(button){modalInvoker=button;modalAway=false;button.focus();}
 window.addEventListener('blur',()=>{if(modalInvoker)modalAway=true;},{signal:events.signal});
-window.addEventListener('focus',()=>{const invoker=modalInvoker;if(!modalAway)return;modalInvoker=undefined;modalAway=false;queueMicrotask(()=>{if(!disposed&&invoker?.isConnected&&!invoker.disabled&&[document.body,document.documentElement,invoker].includes(document.activeElement))invoker.focus();});},{signal:events.signal});
+window.addEventListener('focus',()=>{const invoker=modalInvoker;if(!modalAway)return;modalInvoker=undefined;modalAway=false;queueMicrotask(()=>{if(!disposed&&invoker?.isConnected&&!invoker.disabled&&[document.body,document.documentElement,invoker].includes(document.activeElement))invoker.focus();});},{signal:events.signal,capture:true});
 document.addEventListener('focusin',event=>{if(modalInvoker&&![document.body,document.documentElement,modalInvoker].includes(event.target))modalInvoker=undefined;},{signal:events.signal});
 const send=(intent,details={})=>{if(!disposed&&current&&!current.busy)bridge?.collectionIntent({intent:'collection-'+intent,snapshotId:current.snapshotId,...details});};
 connectProgram({onCollectionDisplay(snapshot){

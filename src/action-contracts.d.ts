@@ -10,6 +10,20 @@ export declare function validateActionDelivery(value:unknown):ActionDelivery;
 export declare function validateActionAcknowledgment(value:unknown):ActionAcknowledgment;
 
 export interface KnownEventData {
+  'trade.proposed':{userId:string};
+  'trade.accepted':{userId:string};
+  'shop.created':{userId:string};
+  'listing.created':{userId:string};
+  'shop.purchased':{userId:string};
+  'raffle.entered':{userId:string};
+  'trade.countered':{userId:string}|{tradeId:string};
+  'trade.cancelled':{userId:string}|{tradeId:string};
+  'trade.declined':{tradeId:string};
+  'trade.expired':{tradeId:string};
+  'shop.order-created':{orderId:string;userId:string;shopId:string;listingId:string};
+  'listing.canceled':{userId:string}|{listingId:string;userId:string};
+  'listing.expired':{listingId:string;userId:string};
+
   'trading.configured':{userId:string|null};
   'card.transfer-lock':{userId:string|null};
   'admin.configured':{userId:string|null};

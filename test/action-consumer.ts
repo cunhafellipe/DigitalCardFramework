@@ -63,3 +63,16 @@ if(known.type==='card-library.saved'){
   void author;
 }
 void [operatorUser,linkedOperator];
+
+const canceledTrade=validateFrameworkEvent(incoming,'trade.cancelled');
+if('tradeId' in canceledTrade.data){const id:string=canceledTrade.data.tradeId;void id;}
+else {const actor:string=canceledTrade.data.userId;void actor;}
+// @ts-expect-error Command trade cancellation carries only userId.
+void canceledTrade.data.tradeId;
+const canceledListing=validateFrameworkEvent(incoming,'listing.canceled');
+if('listingId' in canceledListing.data){const id:string=canceledListing.data.listingId;void id;}
+const seller:string=canceledListing.data.userId;
+if(known.type==='shop.order-created'){const order:string=known.data.orderId;void order;}
+// @ts-expect-error Order events contain identifiers, not private order records.
+void validateFrameworkEvent(incoming,'shop.order-created').data.items;
+void seller;

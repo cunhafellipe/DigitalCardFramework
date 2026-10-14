@@ -133,3 +133,38 @@ test('operator event contracts retain service actors and validate actual core/ad
     }
   }finally{x.core.close();}
 });
+
+
+test('trade and commerce event contracts preserve command and domain payload alternatives',()=>{
+  let now='2026-10-01T00:00:00Z';const x=coreFixture({clock:()=>now}),operator={...x.alice,role:'admin'};
+  try{
+    const offer=key=>x.core.proposeTrade(x.alice,{key,toUserId:x.bob.userId,expiresInSeconds:1,give:{copyIds:[],currencies:[{currencyId:'credits',amount:10}]},receive:{copyIds:[],currencies:[]}});
+    x.core.acceptTrade(x.bob,{key:'accept-event',tradeId:offer('accepted-event').id});
+    x.core.cancelTrade(x.alice,{key:'cancel-event',tradeId:offer('cancelled-event').id});
+    x.core.cancelTrade(x.bob,{key:'decline-event',tradeId:offer('declined-event').id});
+    x.core.counterTrade(x.bob,{key:'counter-event',tradeId:offer('countered-event').id,give:{copyIds:[],currencies:[{currencyId:'credits',amount:5}]},receive:{copyIds:[],currencies:[]}});
+    offer('expired-event');
+    const shop=x.core.createShop(operator,{key:'shop-event',name:'Events',kind:'admin'});
+    const listing=(key,extra={})=>x.core.createListing(operator,{key,shopId:shop.id,title:'Event stock',price:{currencyId:'credits',amount:1},items:{kind:'mint-card',variantId:'dawn.standard',quantity:1},...extra});
+    x.core.cancelListing(operator,{key:'cancel-listing-event',listingId:listing('cancel-stock-event').id});
+    const purchased=listing('purchased-stock-event');x.core.buyListing(x.bob,{...x.core.quoteListing(x.bob,{listingId:purchased.id}),key:'buy-event'});
+    listing('expired-stock-event',{endsAt:'2026-10-01T00:00:02Z'});
+    const raffle=listing('raffle-stock-event',{raffle:{entryClosesAt:'2026-10-01T01:00:00Z',claimSeconds:60,winners:1}});
+    x.core.enterRaffle(x.bob,{key:'raffle-event',listingId:raffle.id});
+    now='2026-10-01T00:00:03Z';x.core.sweepExpiredTrades(admin);x.core.expireListings(admin);
+    const types=['trade.proposed','trade.accepted','trade.countered','trade.cancelled','trade.declined','trade.expired','shop.created','listing.created','shop.purchased','raffle.entered','shop.order-created','listing.canceled','listing.expired'];
+    const events=x.core.events(admin,{limit:1000}).filter(event=>types.includes(event.type));
+    const schema=JSON.parse(readFileSync(new URL('../docs/action-delivery.schema.json',import.meta.url),'utf8')),compiler=new Ajv2020({strict:true,allowUnionTypes:true});compiler.addSchema(schema);const published=compiler.compile({$ref:schema.$id+'#/$defs/event'});
+    assert.equal(new Set(events.map(event=>event.type)).size,13);
+    for(const event of events){validateFrameworkEvent(event,event.type);assert.equal(published(event),true);
+      for(const data of [{},{userId:null},{...event.data,privateState:{}}]){assert.throws(()=>validateFrameworkEvent({...event,data}));assert.equal(published({...event,data}),false);}
+    }
+    for(const type of ['trade.countered','trade.cancelled']){
+      assert(events.some(event=>event.type===type&&Object.hasOwn(event.data,'tradeId')));assert(events.some(event=>event.type===type&&Object.hasOwn(event.data,'userId')));
+      const event=events.find(event=>event.type===type);assert.throws(()=>validateFrameworkEvent({...event,data:{userId:x.alice.userId,tradeId:'trade'}}));
+    }
+    assert(events.some(event=>event.type==='listing.canceled'&&Object.hasOwn(event.data,'listingId')));
+    assert(events.some(event=>event.type==='listing.canceled'&&!Object.hasOwn(event.data,'listingId')));
+    const order=events.find(event=>event.type==='shop.order-created');for(const key of Object.keys(order.data)){const invalid=structuredClone(order);delete invalid.data[key];assert.throws(()=>validateFrameworkEvent(invalid));}
+  }finally{x.core.close();}
+});

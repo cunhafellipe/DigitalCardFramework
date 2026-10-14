@@ -128,6 +128,483 @@
           "if": {
             "properties": {
               "type": {
+                "const": "trade.proposed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trade.accepted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "shop.created"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "listing.created"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "shop.purchased"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "raffle.entered"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trade.countered"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "userId"
+                    ],
+                    "properties": {
+                      "userId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "tradeId"
+                    ],
+                    "properties": {
+                      "tradeId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trade.cancelled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "userId"
+                    ],
+                    "properties": {
+                      "userId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "tradeId"
+                    ],
+                    "properties": {
+                      "tradeId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trade.declined"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tradeId"
+                ],
+                "properties": {
+                  "tradeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "trade.expired"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "tradeId"
+                ],
+                "properties": {
+                  "tradeId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "shop.order-created"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "orderId",
+                  "userId",
+                  "shopId",
+                  "listingId"
+                ],
+                "properties": {
+                  "orderId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "shopId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "listingId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "listing.canceled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "userId"
+                    ],
+                    "properties": {
+                      "userId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "listingId",
+                      "userId"
+                    ],
+                    "properties": {
+                      "listingId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      },
+                      "userId": {
+                        "type": "string",
+                        "not": {
+                          "pattern": "[\\uD800-\\uDFFF]"
+                        },
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "listing.expired"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "listingId",
+                  "userId"
+                ],
+                "properties": {
+                  "listingId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  },
+                  "userId": {
+                    "type": "string",
+                    "not": {
+                      "pattern": "[\\uD800-\\uDFFF]"
+                    },
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "trading.configured"
               }
             }

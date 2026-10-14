@@ -15,6 +15,20 @@ const nullableEventString={anyOf:[eventString,{type:'null'}]};
 const codeIdentity={codeId:eventString,copyId:eventString,actorId:eventString};
 const codeConfirmation={codeId:eventString,copyId:nullableEventString,actorId:nullableEventString,providerId:eventString,eventId:eventString,occurredAt:eventString};
 const coreEventData={
+  'trade.proposed':eventData({userId:eventString}),
+  'trade.accepted':eventData({userId:eventString}),
+  'shop.created':eventData({userId:eventString}),
+  'listing.created':eventData({userId:eventString}),
+  'shop.purchased':eventData({userId:eventString}),
+  'raffle.entered':eventData({userId:eventString}),
+  'trade.countered':{oneOf:[eventData({userId:eventString}),eventData({tradeId:eventString})]},
+  'trade.cancelled':{oneOf:[eventData({userId:eventString}),eventData({tradeId:eventString})]},
+  'trade.declined':eventData({tradeId:eventString}),
+  'trade.expired':eventData({tradeId:eventString}),
+  'shop.order-created':eventData({orderId:eventString,userId:eventString,shopId:eventString,listingId:eventString}),
+  'listing.canceled':{oneOf:[eventData({userId:eventString}),eventData({listingId:eventString,userId:eventString})]},
+  'listing.expired':eventData({listingId:eventString,userId:eventString}),
+
   'trading.configured':eventData({userId:nullableEventString}),
   'card.transfer-lock':eventData({userId:nullableEventString}),
   'admin.configured':eventData({userId:nullableEventString}),

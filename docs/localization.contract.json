@@ -1,7 +1,7 @@
 {
   "protocol": "digital-card-localization@1",
   "maximumBytes": 65536,
-  "maximumMessages": 512,
+  "maximumMessages": 1024,
   "maximumTextLength": 2048,
   "pluralCategories": [
     "zero",
@@ -2164,6 +2164,270 @@
       "plural": false
     },
     "shop.feasibleTickets": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.rewards": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.codes": {
+      "placeholders": [],
+      "plural": false
+    },
+    "nav.tradingControls": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.reveal": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.redemptionCode": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.private": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.loading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.revealed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.peelHint": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.scratchHint": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.openLoading": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.invalidResponse": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.search": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.searchPlaceholder": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.more": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.usedMarker": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.noUsedMarker": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.summary": {
+      "placeholders": [
+        "marker",
+        "provider",
+        "status"
+      ],
+      "plural": false
+    },
+    "codes.clearMarker": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.markUsed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.checkProvider": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.providerUnverified": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.providerConfirmed": {
+      "placeholders": [
+        "status"
+      ],
+      "plural": false
+    },
+    "codes.redeemWebsite": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.unavailable": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.origin": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.total": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "codes.empty": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.searchButton": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.status.available": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.status.allocated": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.status.expired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.status.redeemed": {
+      "placeholders": [],
+      "plural": false
+    },
+    "codes.status.revoked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.history": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.own": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.queue": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.more": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.refresh": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.reference": {
+      "placeholders": [
+        "id"
+      ],
+      "plural": false
+    },
+    "rewards.retry": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.total": {
+      "placeholders": [
+        "count"
+      ],
+      "plural": true
+    },
+    "rewards.status.pending": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.status.running": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.status.succeeded": {
+      "placeholders": [],
+      "plural": false
+    },
+    "rewards.status.dead": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.title": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.description": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.policyJSON": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.apply": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.saved": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.copyId": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.reason": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.defaultReason": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.expiry": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.lock": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.unlock": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.locked": {
+      "placeholders": [],
+      "plural": false
+    },
+    "tradingControls.unlocked": {
       "placeholders": [],
       "plural": false
     }

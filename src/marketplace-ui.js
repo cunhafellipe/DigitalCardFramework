@@ -476,14 +476,16 @@ export function renderMarketplace(
     },
   };
 }
-export function renderFulfillments(model, { client } = {}) {
+export function renderFulfillments(model, { client,locale='en',messages={},localization=createLocalization({locale,messages}) } = {}) {
+  const t=localization.text,enumLabel=value=>Object.hasOwn(localizationKeys,'rewards.status.'+value)?t('rewards.status.'+value):value;
   const button=(label,callback,...options)=>baseButton(label,(...args)=>{if(disposed)return;return callback(...args)},...options);
   const node = section(
-      "Account rewards",
-      "Opening actions are delivered to your account. Pending deliveries retry without opening another pack.",
+      t('rewards.title'),
+      t('rewards.description'),
     ),
     list = el("div"),
     status = el("p", "dc-muted");
+  node.setAttribute('lang',localization.locale);node.setAttribute('dir',localization.dir);status.setAttribute('role','status');
   let disposed = false,
     cursor = null,
     generation = 0;
@@ -492,17 +494,17 @@ export function renderFulfillments(model, { client } = {}) {
       model.me.permissions?.includes("actions.manage"),
     scope = select(
       node,
-      "Reward history",
+      t('rewards.history'),
       operator
         ? [
-            { id: "own", name: "My rewards" },
-            { id: "all", name: "Operator delivery queue" },
+            { id: "own", name:t('rewards.own') },
+            { id: "all", name:t('rewards.queue') },
           ]
-        : [{ id: "own", name: "My rewards" }],
+        : [{ id: "own", name:t('rewards.own') }],
     ),
-    more = button("Load more rewards", () => load(false), "dc-quiet");
+    more = button(t('rewards.more'), () => load(false), "dc-quiet");
   node.append(
-    button("Refresh rewards", () => load(true), "dc-quiet"),
+    button(t('rewards.refresh'), () => load(true), "dc-quiet"),
     status,
     list,
     more,
@@ -524,13 +526,13 @@ export function renderFulfillments(model, { client } = {}) {
         const item = el("article", "dc-form-panel");
         item.append(
           el("h3", "", job.handler),
-          el("p", "", job.status),
+          el("p", "", enumLabel(job.status)),
           el("p", "dc-muted", job.error ?? ""),
-          el("p", "dc-muted", "Reference: " + job.id),
+          el("p", "dc-muted",t('rewards.reference',{id:job.id})),
         );
         if (operator && scope.value === "all" && job.status === "dead")
           item.append(
-            button("Retry delivery", async () => {
+            button(t('rewards.retry'), async () => {
               try {
                 await client.retryAction({
                   key: client.requestKey(),
@@ -546,7 +548,7 @@ export function renderFulfillments(model, { client } = {}) {
       }
       cursor = result.next;
       more.hidden = !cursor;
-      status.textContent = result.total + " rewards";
+      status.textContent = t('rewards.total',{count:result.total});
     } catch (error) {
       if (!disposed) status.textContent = error.message;
     } finally {
@@ -566,13 +568,15 @@ export function renderFulfillments(model, { client } = {}) {
   };
 }
 
-export function renderTradingControls(model, { client } = {}) {
+export function renderTradingControls(model, { client,locale='en',messages={},localization=createLocalization({locale,messages}) } = {}) {
+  const t=localization.text;
   const button=(label,callback,...options)=>baseButton(label,(...args)=>{if(disposed)return;return callback(...args)},...options);
   const node = section(
-      "Trading controls",
-      "Deployment policy applies again at completion. Ownership and code restrictions always remain in force.",
+      t('tradingControls.title'),
+      t('tradingControls.description'),
     ),
     status = el("p", "dc-muted");
+  node.setAttribute('lang',localization.locale);node.setAttribute('dir',localization.dir);status.setAttribute('role','status');
   node.append(status);
   let disposed = false;
   async function load() {
@@ -580,13 +584,13 @@ export function renderTradingControls(model, { client } = {}) {
     try {
       const current = await client.tradingPolicy();
       if (disposed) return;
-      const json = field(node, "Trading policy JSON", {
+      const json = field(node,t('tradingControls.policyJSON'), {
         type: "textarea",
         value: JSON.stringify(current.policy, null, 2),
       });
       json.rows = 18;
       node.append(
-        button("Apply trading policy", async () => {
+        button(t('tradingControls.apply'), async () => {
           try {
             const result = await client.configureTrading({
               key: client.requestKey(),
@@ -595,20 +599,20 @@ export function renderTradingControls(model, { client } = {}) {
             });
             if(disposed)return;
             current.revision = result.revision;
-            status.textContent = "Trading policy saved.";
+            status.textContent = t('tradingControls.saved');
           } catch (error) {
-            status.textContent = error.message;
+            if(!disposed)status.textContent = error.message;
           }
         }),
       );
-      const copyId = field(node, "Individual copy ID"),
-        reason = field(node, "Lock reason", {
-          value: "This card cannot be transferred",
+      const copyId = field(node,t('tradingControls.copyId')),
+        reason = field(node,t('tradingControls.reason'), {
+          value:t('tradingControls.defaultReason'),
         }),
-        until = field(node, "Lock expiry (ISO, optional)");
+        until = field(node,t('tradingControls.expiry'));
       for (const locked of [true, false])
         node.append(
-          button(locked ? "Lock this card" : "Remove lock", async () => {
+          button(t(locked?'tradingControls.lock':'tradingControls.unlock'), async () => {
             try {
               await client.setCardTransferLock({
                 key: client.requestKey(),
@@ -617,9 +621,7 @@ export function renderTradingControls(model, { client } = {}) {
                 reason: reason.value,
                 until: until.value || null,
               });
-              status.textContent = locked
-                ? "Card locked."
-                : "Card lock removed.";
+              if(!disposed)status.textContent = t(locked?'tradingControls.locked':'tradingControls.unlocked');
             } catch (error) {
               if(!disposed)status.textContent = error.message;
             }

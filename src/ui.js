@@ -408,7 +408,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
   const context=()=>({client,inspect,inspectTogether,refresh,mutate,action,navigate,cardRenderer:renderer,albumRenderer,codeRevealRenderer,listingRenderer,layouts,state:viewState,localization});
   const views={wallet,shop,packs,marketplace:()=>renderMarketplace(model,context()),rewards:()=>renderFulfillments(model,context()),tradingControls:()=>renderTradingControls(model,context()),codes:()=>renderCodeHistory(model,context()),collection:()=>renderCollection(model,context()),albums:()=>renderAlbums(model,context()),trades:()=>renderTrading(model,context()),...Object.fromEntries(Object.entries(customViews).map(([id,view])=>[id,()=>view(model,context())]))};
   if(!customViews.admin)views.admin=()=>renderAdminPanel(model,context());
-  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:'Trading controls',admin:'Administration',marketplace:t('nav.marketplace'),rewards:'Account rewards',codes:'Code history',albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};
+  const labels={wallet:t('nav.wallet'),shop:t('nav.shop'),packs:t('nav.packs'),collection:t('nav.collection'),tradingControls:t('nav.tradingControls'),admin:'Administration',marketplace:t('nav.marketplace'),rewards:t('nav.rewards'),codes:t('nav.codes'),albums:t('nav.albums'),trades:t('nav.trades'),...viewLabels};
   function renderView() {
     if(!model||disposed)return;viewLeave=null;openerDispose?.();openerDispose=null;viewDisposers.forEach(fn=>fn());viewDisposers=[];content.replaceChildren();nav.replaceChildren();dashboard.replaceChildren();
     root.classList.toggle('dc-with-nav',navigation==='tabs');

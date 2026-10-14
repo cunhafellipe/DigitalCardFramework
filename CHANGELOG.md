@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added portable localization for account rewards, private code reveal/history and trading controls, with complete Python/Go Spanish examples.
+
 - Added reviewed full opening views with retained program updates, revealed-only display grants, native fallback and Python/Go examples.
 
 - Added offline editor transform jobs with host grants, visual review, atomic Apply/Undo/Redo, and independent Python/Go layout-and-decoration tools.

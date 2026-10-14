@@ -182,3 +182,20 @@ async function bindingResponses(){
   return {cardId,name,state,usedAt,ok,privateValue};
 }
 void bindingResponses;
+
+
+async function accountReadResponses(){
+  const directory=await call('directory',undefined,{query:{limit:1}});
+  for(const user of directory.items){const name:string=user.name,visible:boolean=user.inventoryVisible;void [name,visible];
+    // @ts-expect-error directory projections omit identity-provider subjects
+    void user.subject;
+  }
+  const notifications=await call('notifications',undefined);
+  for(const notice of notifications.items){const owner:string=notice.userId,read:boolean=notice.read,data:unknown=notice.data?.custom;void [owner,read,data];}
+  for(const entry of await call('history',undefined)){const delta:number=entry.delta,balance:number=entry.balance,reference:string=entry.reference;void [delta,balance,reference];}
+  for(const album of await call('publicAlbums',undefined)){const name:string=album.ownerName,count:number=album.cardCount;void [name,count];
+    // @ts-expect-error public summaries omit card placements and private copies
+    void album.placements;
+  }
+}
+void accountReadResponses;

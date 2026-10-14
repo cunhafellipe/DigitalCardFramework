@@ -1237,7 +1237,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "$ref": "#/components/schemas/LedgerEntry"
                   }
                 }
               }
@@ -1566,7 +1566,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object"
+                    "$ref": "#/components/schemas/PublicAlbumSummary"
                   }
                 }
               }
@@ -2247,7 +2247,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/DirectoryPage"
                 }
               }
             }
@@ -2636,7 +2636,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page"
+                  "$ref": "#/components/schemas/NotificationPage"
                 }
               }
             }
@@ -12103,7 +12103,8 @@
           "id",
           "type",
           "at",
-          "read"
+          "read",
+          "userId"
         ],
         "properties": {
           "id": {
@@ -12121,8 +12122,12 @@
           },
           "data": {
             "type": "object"
+          },
+          "userId": {
+            "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ReadNotifications": {
         "type": "object",
@@ -19919,6 +19924,160 @@
             "const": true
           }
         }
+      },
+      "DirectoryEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "createdAt",
+          "inventoryVisible"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "inventoryVisible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LedgerEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "userId",
+          "currencyId",
+          "delta",
+          "balance",
+          "type",
+          "reference",
+          "at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "currencyId": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "balance": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "type": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicAlbumSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "ownerName",
+          "cardCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "cardCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "DirectoryPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "next"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/DirectoryEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "next"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "CommandIntent": {
         "type": "object",

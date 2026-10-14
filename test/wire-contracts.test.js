@@ -321,3 +321,31 @@ test('binding, owned-card and notification HTTP contracts preserve provider data
   for(const mutate of [value=>delete value.id,value=>value.state='unknown',value=>value.definition.name=1,value=>value.bindings['demo.code'].data=null]){const invalid=structuredClone(inspected);mutate(invalid);assert.throws(()=>validateWireResponse('inspectCard',200,invalid),WireContractError);}
   for(const invalid of [{},{ok:false},{ok:'true'},{ok:true,ids}])assert.throws(()=>validateWireResponse('readNotifications',200,invalid),WireContractError);
 });
+
+
+test('directory, notifications, ledger and public-album HTTP projections retain privacy and pagination',async t=>{
+  const x=fixture(),admin={role:'admin'};let actor=x.alice,handler;
+  const carol=x.core.registerUser(admin,{provider:'test',subject:'directory-carol',displayName:'Carol'}),blocked=x.core.registerUser(admin,{provider:'test',subject:'directory-hidden',displayName:'Hidden'});
+  x.core.setPreferences(x.alice,{key:'directory-block',blockedUserIds:[blocked.id]});x.core.setPreferences(x.bob,{key:'directory-private',inventoryVisibility:'private'});
+  const copies=[...x.open(),...x.open()];x.open('common',x.bob);
+  const shared=x.core.saveAlbum(x.alice,{key:'album-shared',name:'Public <edition>',visibility:'public',placements:[{copyId:copies[0].id}]}),privateAlbum=x.core.saveAlbum(x.alice,{key:'album-private',name:'Private',visibility:'private',placements:[{copyId:copies[1].id}]});
+  const empty=x.core.saveAlbum(x.bob,{key:'album-empty',name:'Empty',visibility:'public',placements:[]});
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  const first=await call('directory',undefined,{query:{limit:1}});assert.equal(first.total,2);assert.equal(first.items[0].id,x.bob.userId);assert.equal(first.items[0].inventoryVisible,false);assert.equal(typeof first.next,'string');
+  const second=await call('directory',undefined,{query:{limit:1,after:first.next}});assert.equal(second.items[0].id,carol.id);assert.equal(second.next,null);
+  assert.equal((await call('directory',undefined,{query:{search:'absent'}})).items.length,0);assert(!JSON.stringify(first).includes('subject'));
+  const notices=await call('notifications',undefined,{query:{limit:1}});assert.equal(notices.total,2);assert.equal(notices.items[0].userId,x.alice.userId);assert.equal(notices.items[0].type,'pack.opened');assert.equal(typeof notices.items[0].data.packId,'string');assert.equal(notices.items[0].read,false);
+  const more=await call('notifications',undefined,{query:{limit:1,after:notices.next}});assert.equal(more.items.length,1);assert.notEqual(more.items[0].id,notices.items[0].id);assert.equal(more.next,null);
+  await call('readNotifications',{key:'read-page',ids:[notices.items[0].id]});assert.equal((await call('notifications',undefined)).items.find(row=>row.id===notices.items[0].id).read,true);
+  const history=await call('history',undefined);assert(history.every(row=>row.userId===x.alice.userId));assert(history.some(row=>row.delta<0));assert(history.some(row=>row.delta>0));assert.equal(history.at(-1).balance,9980);
+  const albums=await call('publicAlbums',undefined);assert.equal(albums.length,2);assert.equal(albums.find(row=>row.id===shared.id).cardCount,1);assert.equal(albums.find(row=>row.id===empty.id).cardCount,0);assert.equal(albums.some(row=>row.id===privateAlbum.id),false);assert.equal(albums.find(row=>row.id===shared.id).name,'Public <edition>');
+  actor={userId:carol.id};assert.deepEqual((await call('notifications',undefined)).items,[]);assert.deepEqual(await call('history',undefined),[]);
+  for(const mutate of [value=>delete value.items[0].inventoryVisible,value=>value.items[0].createdAt='invalid',value=>value.items[0].subject='private',value=>value.total=-1,value=>value.next=1]){const invalid=structuredClone(first);mutate(invalid);assert.throws(()=>validateWireResponse('directory',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value.items[0].userId,value=>value.items[0].read='false',value=>value.items[0].data=null,value=>value.items[0].credentials={},value=>value.total='2']){const invalid=structuredClone(notices);mutate(invalid);assert.throws(()=>validateWireResponse('notifications',200,invalid),WireContractError);}
+  const optionalData=structuredClone(notices);delete optionalData.items[0].data;validateWireResponse('notifications',200,optionalData);optionalData.items[0].data={custom:{nested:[null,true,1]}};validateWireResponse('notifications',200,optionalData);
+  for(const mutate of [value=>delete value[0].reference,value=>value[0].delta=0.5,value=>value[0].balance=-1,value=>value[0].at='invalid',value=>value[0].credentials={}]){const invalid=structuredClone(history);mutate(invalid);assert.throws(()=>validateWireResponse('history',200,invalid),WireContractError);}
+  for(const mutate of [value=>delete value[0].ownerName,value=>value[0].cardCount=-1,value=>value[0].cardCount='1',value=>value[0].placements=[]]){const invalid=structuredClone(albums);mutate(invalid);assert.throws(()=>validateWireResponse('publicAlbums',200,invalid),WireContractError);}
+});

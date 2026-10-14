@@ -85,3 +85,35 @@ void encodePNG({width:1,height:1,data:'RGBA'});
 // @ts-expect-error dimensions must be numeric
 void encodePNG({width:'1',height:1,data:new Uint8Array(4)});
 void [png,canvasPNG];
+
+import {exportStatsCSV, parseStatsCSV, importStatsCSV} from '@digital-card/framework/presentation/stats-csv';
+import type {StatsCSVDocument, StatsCSVRow, StatsCSVValue} from '@digital-card/framework/presentation/stats-csv';
+interface CSVPresentationDraft extends StatsCSVDocument {
+  manifest: StatsCSVDocument['manifest'] & {title: string; faces: {front: {scene: string}}};
+  scenes: Map<string, {nodes: unknown[]}>;
+  assets: Map<string, Uint8Array>;
+}
+declare const csvProject: CSVPresentationDraft & {edit(callback: (draft: CSVPresentationDraft) => void): void; getRevision(): number};
+const csvText: string = exportStatsCSV(csvProject);
+const changedRows: number = importStatsCSV(csvProject, csvText);
+const csvRows: StatsCSVRow[] = parseStatsCSV(csvText);
+for (const row of csvRows) {
+  const scope: 'card' | 'variant' = row.scope;
+  const value: StatsCSVValue | undefined = row.value;
+  if (value === undefined) console.log('absent', scope);
+  else if (value === null) console.log('explicit null', scope);
+  // @ts-expect-error Parsed JSON values are not necessarily numbers.
+  const numeric: number = row.value;
+  void numeric;
+}
+exportStatsCSV({manifest:{authoring:{values:{card:{zero:0,nullable:null},variant:{tags:['rare'],metadata:{active:false}}}}}});
+exportStatsCSV({manifest:{}});
+// @ts-expect-error CSV input is text.
+parseStatsCSV(new Uint8Array());
+// @ts-expect-error CSV import requires the project's edit transaction.
+importStatsCSV({manifest:{}}, csvText);
+// @ts-expect-error Stored stat values must be JSON, not functions.
+exportStatsCSV({manifest:{authoring:{values:{card:{bad:()=>0}}}}});
+// @ts-expect-error CSV scopes exclude per-copy stats.
+const copyCSVRow: StatsCSVRow = {scope:'copy',key:'count',value:1};
+void [changedRows,csvRows,copyCSVRow];

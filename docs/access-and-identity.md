@@ -47,7 +47,7 @@ Creators can inspect/cancel their own jobs; `art.review` can inspect/cancel all 
 
 At the HTTP boundary supply `resolveIdentity(request)` to `createApiHandler`. Verify the existing website's server session or token, resolve its stable account ID, map `(issuer, subject)` to a framework user, then return a trusted principal. Ignore request-body roles. Use the same authenticated principal for artwork APIs.
 
-The default auth host also accepts synchronous `resolveAccess({issuer, subject, userId})`, evaluated on **every** request. Return `{role, permissions}` or null/`{disabled:true}`. This supports immediate grant revocation without waiting for a session to expire. If your source is asynchronous, use a custom asynchronous HTTP identity resolver or a securely refreshed local policy store. A Promise is rejected by the synchronous default callback.
+The default auth host accepts synchronous or asynchronous `resolveAccess({issuer, subject, userId}, {signal})`, evaluated on **every** request. Return `{role, permissions}` or null/`{disabled:true}`. This supports grant revocation without waiting for a session to expire. The host awaits a returned Promise and denies access if the resolver throws, rejects, returns no grant or finishes after the request is aborted. Pass the supplied abort signal to remote access lookups.
 
 `HOST_MODULE` can supply `identityProvider` and `resolveAccess`; a custom identity provider no longer needs dummy OIDC environment settings. Legacy `OPERATOR_SUBJECTS` is an explicit admin bootstrap list for the single configured provider. With multiple providers, use `resolveAccess` and match issuer **and** subject; never promote by display name or unverified email. No first-visitor-becomes-admin behavior exists.
 

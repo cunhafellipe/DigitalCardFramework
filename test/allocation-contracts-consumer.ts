@@ -149,3 +149,28 @@ const catalogExternalReply:ExternalAllocationStrategyV4Response=planned;
 // @ts-expect-error External planned replies do not carry request context.
 const externalContextReply:ExternalAllocationStrategyV4Response={...externalPlanned,context:externalV4.context};
 void [remoteStockScope,remoteStockSupports,externalAllocationStrategySchema,externalAllocationStrategyV2Schema,externalAllocationStrategyV3Schema,externalAllocationStrategyV4Schema,externalMode,externalError,missingPreparation,stockExternal,mixedExternal,catalogExternalReply,externalContextReply];
+
+import {createRemoteExternalAllocationStrategy, externalAllocationStrategyV4Protocol as remoteExternalV4Protocol} from '@digital-card/framework/remote-external-allocation-strategy';
+const remoteExternal=createRemoteExternalAllocationStrategy({algorithm:'weighted-deck@4',scope:'external-fulfillment',providerId:'example.allocator',url:'https://allocator.example/external',token:'example-provider-token'});
+remoteExternal.assertGrant(remoteExternal.grant());
+const remoteExternalScope:'external-fulfillment'=remoteExternal.setEnabled(true).scope;
+const remoteExternalSupports:boolean=remoteExternal.supportsAlgorithm(input);
+remoteExternal.evaluate(externalV4,{signal:new AbortController().signal}).then(reply=>{
+  const protocol:typeof remoteExternalV4Protocol=reply.protocol;
+  const status:'planned'=reply.status;
+  reply.allocations.map(row=>row.variantIds);
+  // @ts-expect-error Error frames reject instead of resolving.
+  reply.errorCode;
+  void [protocol,status];
+});
+remoteExternal.evaluate(externalV1).then(reply=>{const protocol:typeof externalAllocationStrategyProtocol=reply.protocol;void protocol;});
+remoteExternal.close();
+// @ts-expect-error External adapters require external-fulfillment scope.
+createRemoteExternalAllocationStrategy({algorithm:'weighted-deck@4',scope:'commerce-stock',providerId:'example.allocator',url:'https://allocator.example',token:'example-provider-token'});
+// @ts-expect-error External adapters require a supported algorithm selector.
+createRemoteExternalAllocationStrategy({algorithm:'weighted-deck@5',scope:'external-fulfillment',providerId:'example.allocator',url:'https://allocator.example',token:'example-provider-token'});
+// @ts-expect-error External adapters accept external preparation envelopes.
+remoteExternal.evaluate(v4);
+// @ts-expect-error Stock envelopes cannot be sent to the external adapter.
+remoteExternal.evaluate(stockV4);
+void [remoteExternalScope,remoteExternalSupports];

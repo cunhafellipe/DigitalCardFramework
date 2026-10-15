@@ -1,6 +1,7 @@
 import {codeProviderProtocol, codeProviderSchema, validateCodeProviderRequest, validateCodeProviderResponse, type CodeProviderRequest, type CodeProviderResponse} from '@digital-card/framework/code-provider-contracts';
 import {currencyProviderProtocol, currencyProviderSchema, validateCurrencyProviderRequest, validateCurrencyProviderResponse, type CurrencyProviderRequest, type CurrencyProviderResponse} from '@digital-card/framework/currency-provider-contracts';
 import {codeIssuanceProtocol, codeIssuanceSchema, validateCodeIssuanceRequest, validateCodeIssuanceResponse, matchCodeIssuanceResults, type CodeIssuanceRequest, type CodeIssuanceResponse, type CodeIssuanceEntry, type CodeIssuanceResult} from '@digital-card/framework/code-issuance-contracts';
+import {bindingFactoryProtocol, bindingFactorySchema, bindingFactoryInputDigest, bindingFactoryIdentity, validateBindingFactoryRequest, validateBindingFactoryResponse, matchBindingFactoryResults, type BindingFactoryCopy, type BindingFactoryRequestEntry, type BindingFactoryRequest, type BindingFactoryResult, type BindingFactoryResponse} from '@digital-card/framework/binding-factory-contracts';
 
 const identity = {providerId: 'example.provider', requestId: '00000000-0000-4000-8000-000000000001'};
 const lookup: CodeProviderRequest = {...identity, protocol: codeProviderProtocol, codeId: 'example.code', operation: 'lookup', externalId: null, code: 'EXAMPLE-CODE'};
@@ -53,6 +54,40 @@ const wrongEntryError: CodeIssuanceResult = {...entry, state: 'error', errorCode
 // @ts-expect-error Result matching requires a complete request context.
 matchCodeIssuanceResults(identity, input);
 void [codeReply, resolved, settled, codeProviderSchema, currencyProviderSchema, codeIssuanceSchema, missingCode, unknownCode, numericSettlement, wrongOperation, missingResult, executableResult, wrongEntryError];
+
+const factoryCopy:BindingFactoryCopy={id:identity.requestId,ownerId:'collector',cardId:'reward',variantId:'reward.standard',lineId:'basic',rarityId:'common',state:'sealed',serialNumber:null,editionTotal:null,createdAt:'2026-01-01T00:00:00Z',openedAt:null,openedBy:null,acquiredAt:'2026-01-01T00:00:00Z',version:1,source:{},definition:{},variant:{},bindings:{},metadata:{}};
+const factoryEntry:BindingFactoryRequestEntry={invocationId:identity.requestId,inputDigest:entry.inputDigest,attemptId:identity.requestId,copyId:factoryCopy.id,userId:factoryCopy.ownerId,namespace:'example.reward',factoryName:'reward',factoryRevision:1,kind:'pure',packIndex:0,slotId:'reward',slotOrdinal:0,input:{copy:factoryCopy,user:{id:'collector'},spec:{factory:'reward',visibility:'owner',transfer:'retain'}}};
+factoryEntry.inputDigest=bindingFactoryInputDigest(factoryEntry);
+const factoryRequest:BindingFactoryRequest={...issuance,protocol:bindingFactoryProtocol,operation:'produce',context:{entries:[{...factoryEntry,kind:'pure'}]}};
+const factoryDigest:string=bindingFactoryInputDigest(factoryEntry);
+const factoryId:string=bindingFactoryIdentity(factoryEntry).invocationId;
+const factoryResult:BindingFactoryResult={...bindingFactoryIdentity(factoryEntry),state:'ready',data:{reward:'example',attributes:{count:1},tags:['reward'],unused:null}};
+const {context:factoryContext,...factoryResponseIdentity}=factoryRequest;
+const factoryResponse:BindingFactoryResponse={...factoryResponseIdentity,status:'processed',results:[factoryResult]};
+const parsedFactory=validateBindingFactoryRequest(input);
+if(parsedFactory.operation==='activate'){for(const row of parsedFactory.context.entries){const kind:'activation'=row.kind;void kind;}}
+const parsedFactoryResponse=validateBindingFactoryResponse(input);
+if(parsedFactoryResponse.status==='error')parsedFactoryResponse.errorCode.toUpperCase();
+for(const row of matchBindingFactoryResults(factoryRequest,factoryResponse)){
+  if(row.state==='ready')Object.keys(row.data);
+  else if(row.state==='error')row.errorCode.toUpperCase();
+  else if(row.state==='not-activated'){const kind:'activation'=row.kind;void kind;}
+}
+// @ts-expect-error Factory snapshots represent sealed copies.
+const openedFactoryCopy:BindingFactoryCopy={...factoryCopy,state:'opened'};
+// @ts-expect-error Factory variant snapshots omit binding definitions.
+const factoryVariantBindings:BindingFactoryCopy={...factoryCopy,variant:{bindings:{}}};
+// @ts-expect-error Production operations require pure entries.
+const activationProduction:BindingFactoryRequest={...factoryRequest,operation:'produce',context:{entries:[{...factoryEntry,kind:'activation'}]}};
+// @ts-expect-error Activation entries cannot be cancelled.
+const cancelledActivation:BindingFactoryResult={...factoryEntry,kind:'activation',state:'cancelled'};
+// @ts-expect-error A ready result requires JSON data.
+const missingFactoryData:BindingFactoryResult={...factoryEntry,state:'ready'};
+// @ts-expect-error Factory data cannot contain executable values.
+const executableFactoryData:BindingFactoryResult={...factoryEntry,state:'ready',data:{run:()=>true}};
+// @ts-expect-error Per-entry errors exclude authentication failures.
+const authenticationFactoryError:BindingFactoryResult={...factoryEntry,state:'error',errorCode:'unauthenticated'};
+void [bindingFactorySchema,factoryDigest,factoryId,openedFactoryCopy,factoryVariantBindings,activationProduction,cancelledActivation,missingFactoryData,executableFactoryData,authenticationFactoryError];
 
 import {createRemoteCodeProvider, createCodeProviderRegistry, codeProviderProtocol as remoteCodeProtocol} from '@digital-card/framework/remote-code-provider';
 import {createRemoteCurrencyProvider, createCurrencyProviderRegistry, currencyProviderProtocol as remoteCurrencyProtocol} from '@digital-card/framework/remote-currency-provider';

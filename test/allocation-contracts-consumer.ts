@@ -92,3 +92,60 @@ createRemoteAllocationStrategy({scope:'catalog-purchase',providerId:'example.all
 // @ts-expect-error Stock scope is not accepted by this adapter.
 createRemoteAllocationStrategy({algorithm:'weighted-deck@4',scope:'commerce-stock',providerId:'example.allocator',url:'https://allocator.example',token:'example-token'});
 void [stockAllocationStrategySchema,stockAllocationStrategyV2Schema,stockAllocationStrategyV3Schema,stockAllocationStrategyV4Schema,stockMode,stockPlanned,enabled,supported,missingShop,personalizedStock,mixedStock];
+
+import {createRemoteStockAllocationStrategy, stockAllocationStrategyV4Protocol as remoteStockV4Protocol} from '@digital-card/framework/remote-stock-allocation-strategy';
+const remoteStock=createRemoteStockAllocationStrategy({algorithm:'weighted-deck@4',scope:'commerce-stock',providerId:'example.allocator',url:'https://allocator.example/stock',token:'example-provider-token'});
+remoteStock.assertGrant(remoteStock.grant());
+const remoteStockScope:'commerce-stock'=remoteStock.setEnabled(true).scope;
+const remoteStockSupports:boolean=remoteStock.supportsAlgorithm(input);
+remoteStock.evaluate(stockV4,{signal:new AbortController().signal}).then(reply=>{
+  const protocol:typeof remoteStockV4Protocol=reply.protocol;
+  const status:'planned'=reply.status;
+  reply.allocations.map(row=>row.variantIds);
+  // @ts-expect-error Error frames reject instead of resolving.
+  reply.errorCode;
+  void [protocol,status];
+});
+remoteStock.evaluate(stockV1).then(reply=>{const protocol:typeof stockAllocationStrategyProtocol=reply.protocol;void protocol;});
+remoteStock.close();
+// @ts-expect-error Stock adapters require commerce-stock scope.
+createRemoteStockAllocationStrategy({algorithm:'weighted-deck@4',scope:'catalog-purchase',providerId:'example.allocator',url:'https://allocator.example',token:'example-provider-token'});
+// @ts-expect-error Stock adapters require a supported algorithm selector.
+createRemoteStockAllocationStrategy({algorithm:'weighted-deck@5',scope:'commerce-stock',providerId:'example.allocator',url:'https://allocator.example',token:'example-provider-token'});
+// @ts-expect-error Stock adapters accept stock protocol envelopes.
+remoteStock.evaluate(v4);
+
+import {
+  externalAllocationStrategyProtocol, externalAllocationStrategyV2Protocol, externalAllocationStrategyV3Protocol, externalAllocationStrategyV4Protocol,
+  externalAllocationStrategySchema, externalAllocationStrategyV2Schema, externalAllocationStrategyV3Schema, externalAllocationStrategyV4Schema,
+  validateExternalAllocationStrategyRequest, validateExternalAllocationStrategyV2Request, validateExternalAllocationStrategyV3Request, validateExternalAllocationStrategyV4Request,
+  validateExternalAllocationStrategyResponse, validateExternalAllocationStrategyV2Response, validateExternalAllocationStrategyV3Response, validateExternalAllocationStrategyV4Response,
+  type ExternalAllocationStrategyRequest, type ExternalAllocationStrategyV2Request, type ExternalAllocationStrategyV3Request, type ExternalAllocationStrategyV4Request,
+  type ExternalAllocationStrategyV4Response, type AnyExternalAllocationStrategyRequest,
+} from '@digital-card/framework/external-allocation-strategy-contracts';
+const preparationId='ep_'+digest;
+const externalV1:ExternalAllocationStrategyRequest={...v1,protocol:externalAllocationStrategyProtocol,scope:'external-fulfillment',context:{...v1.context,preparationId}};
+const externalV2:ExternalAllocationStrategyV2Request={...v2,protocol:externalAllocationStrategyV2Protocol,scope:'external-fulfillment',context:{...v2.context,preparationId}};
+const externalV3:ExternalAllocationStrategyV3Request={...v3,protocol:externalAllocationStrategyV3Protocol,scope:'external-fulfillment',context:{...v3.context,preparationId}};
+const externalV4:ExternalAllocationStrategyV4Request={...v4,protocol:externalAllocationStrategyV4Protocol,scope:'external-fulfillment',context:{...v4.context,preparationId}};
+const externalRequests:AnyExternalAllocationStrategyRequest[]=[externalV1,externalV2,externalV3,externalV4];
+for(const request of externalRequests){if(request.protocol===externalAllocationStrategyV4Protocol){const version:4=request.context.product.strategy.version;request.context.codePools.map(pool=>pool.available);void version;}}
+validateExternalAllocationStrategyRequest(input).context.preparationId.toUpperCase();
+const externalMode:'personalized'=validateExternalAllocationStrategyV2Request(input).context.mode;
+validateExternalAllocationStrategyV3Request(input).context.variants.map(variant=>variant.codeDemand);
+validateExternalAllocationStrategyV4Request(input).context.codePools.map(pool=>pool.available);
+const externalReplies=[validateExternalAllocationStrategyResponse(input),validateExternalAllocationStrategyV2Response(input),validateExternalAllocationStrategyV3Response(input),validateExternalAllocationStrategyV4Response(input)];
+for(const reply of externalReplies){if(reply.status==='planned')reply.allocations.map(row=>row.variantIds);else reply.errorCode.toUpperCase();}
+const externalPlanned:ExternalAllocationStrategyV4Response={...planned,protocol:externalAllocationStrategyV4Protocol,scope:'external-fulfillment'};
+const externalError:ExternalAllocationStrategyV4Response={...externalPlanned,status:'error',errorCode:'unavailable'};
+// @ts-expect-error External preparation snapshots require a preparation identity.
+const missingPreparation:ExternalAllocationStrategyRequest={...externalV1,context:v1.context};
+// @ts-expect-error External eligibility snapshots require personalized mode.
+const stockExternal:ExternalAllocationStrategyV2Request={...externalV2,context:{...externalV2.context,mode:'stock'}};
+// @ts-expect-error External protocol and strategy versions must agree.
+const mixedExternal:ExternalAllocationStrategyV4Request={...externalV4,context:externalV3.context};
+// @ts-expect-error External responses require the external protocol envelope.
+const catalogExternalReply:ExternalAllocationStrategyV4Response=planned;
+// @ts-expect-error External planned replies do not carry request context.
+const externalContextReply:ExternalAllocationStrategyV4Response={...externalPlanned,context:externalV4.context};
+void [remoteStockScope,remoteStockSupports,externalAllocationStrategySchema,externalAllocationStrategyV2Schema,externalAllocationStrategyV3Schema,externalAllocationStrategyV4Schema,externalMode,externalError,missingPreparation,stockExternal,mixedExternal,catalogExternalReply,externalContextReply];

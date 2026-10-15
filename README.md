@@ -62,13 +62,7 @@ Define your artwork, card data, rarities, currencies, pack rules, and trading po
 
 The reference website provides basic collecting workflows. Major layout changes, custom effects, and connections to identity, payment, or game services require developer work. This is a collection framework, not a ready-made card battle game or a drag-and-drop website builder. You supply the artwork and hosting; blockchain is not required.
 
-## Planned
-
-- Simpler setup with independently selectable collecting, pack, trading, and shop capabilities.
-- A more complete artist workflow spanning cards, pack artwork, and albums.
-- Broader plugin support across programming languages, clearer extension contracts, improved storage and performance, and release hardening.
-
-These are development goals, not yet supported features.
+Choose the collecting, pack, trading and shop features your host needs through [capability configuration](docs/capabilities.md). Studio supports card and pack artwork; album tools arrange owned cards and edit album artwork. See the [content-authoring guide](docs/content-authoring.md) for publication and handoff procedures.
 
 ## Documentation
 

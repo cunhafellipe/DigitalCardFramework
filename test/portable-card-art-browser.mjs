@@ -71,10 +71,29 @@ try{
       window.artistPanel=studio;return {node,dispose(){studio.dispose();}};
     }}});await window.artistView.ready;await window.artistView.shellReady;await window.artistPanel.ready;
   },{archive:Array.from(await readFile(packagePath)),editorContribution});
+  await page.evaluate(()=>{
+    const events=[],identities=new WeakMap();let nextIdentity=0;
+    const identity=node=>{if(!node)return null;if(!identities.has(node))identities.set(node,++nextIdentity);return identities.get(node);};
+    const record=(type,target)=>{
+      const input=target?.matches?.('[data-editor-contribution] input')?target:document.querySelector('[data-editor-contribution] input');
+      events.push({at:performance.now(),type,input:input?{identity:identity(input),label:input.getAttribute('aria-label'),value:input.value,valid:input.validity.valid,connected:input.isConnected,focused:document.activeElement===input}:null,selected:[...document.querySelectorAll('button.is-selected')].map(button=>button.textContent),busy:document.querySelector('.dcard-studio')?.getAttribute('aria-busy'),nodes:window.artistPanel.getProject().scenes.get('scenes/front.json').nodes.map(node=>({id:node.id,x:node.x,y:node.y,locked:node.locked}))});
+      if(events.length>64)events.shift();
+    };
+    const controller=new AbortController();for(const type of ['input','change','blur','focus','keydown'])document.addEventListener(type,event=>{if(event.target?.matches?.('[data-editor-contribution] input'))record(type,event.target);},{capture:true,signal:controller.signal});
+    const observer=new MutationObserver(()=>record('action-queue-busy',null));observer.observe(document.querySelector('.dcard-studio'),{attributes:true,attributeFilter:['aria-busy']});
+    window.artistPanelTrace={events,stop(){controller.abort();observer.disconnect();},snapshot(){record('failure-snapshot',null);return {events,inputs:[...document.querySelectorAll('[data-editor-contribution] input')].map(input=>({identity:identity(input),label:input.getAttribute('aria-label'),value:input.value,valueAsNumber:input.valueAsNumber,min:input.min,max:input.max,step:input.step,valid:input.validity.valid,disabled:input.disabled,focused:document.activeElement===input})),status:[...document.querySelectorAll('[role="status"],.dcs-status')].map(node=>node.textContent)};}};
+    record('before-selection',null);
+  });
+  const panel=page.locator('[data-editor-contribution="example.print-layout"]');
+  try{
   await page.getByRole('button',{name:'Front emblem',exact:true}).click();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Front emblem'&&button.classList.contains('is-selected'))&&document.querySelector('.dcard-studio')?.getAttribute('aria-busy')!=='true');
-  const panel=page.locator('[data-editor-contribution="example.print-layout"]');await panel.getByLabel('Horizontal position',{exact:true}).fill('17');await panel.getByLabel('Horizontal position',{exact:true}).press('Tab');
+  await panel.getByLabel('Horizontal position',{exact:true}).fill('17');await panel.getByLabel('Horizontal position',{exact:true}).press('Tab');
   await page.waitForFunction(()=>window.artistPanel.getProject().scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x===17);
+  }catch(error){
+    const diagnostic={engine,language,editorContribution,grants:{x:{minimum:-100,maximum:100}},trace:await page.evaluate(()=>window.artistPanelTrace.snapshot()).catch(()=>null)};
+    await writeFile(resolve(output,'panel-edit-failure.json'),JSON.stringify(diagnostic,null,2)+'\n').catch(()=>{});console.error(JSON.stringify({panelEditFailure:diagnostic}));throw error;
+  }finally{await page.evaluate(()=>window.artistPanelTrace.stop()).catch(()=>{});}
   const panelDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Save project',exact:true}).click();const panelArchive=await panelDownload,panelPath=resolve(temp,'panel-edited.dcproject');await panelArchive.saveAs(panelPath);
   const panelSaved=await importPackage(new Uint8Array(await readFile(panelPath)));assert.equal(panelSaved.scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x,17);
   await page.evaluate(async()=>{window.artistPanelInput=document.querySelector('[data-editor-contribution] input');window.artistPanelMode=false;await window.artistView.refresh();});

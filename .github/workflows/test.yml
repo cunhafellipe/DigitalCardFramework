@@ -110,6 +110,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir src/presentation install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/portable-card-art-browser.mjs test-results/portable-card-art
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/presentation-audit-browser.mjs ./node_modules/playwright/index.mjs test-results ${{ matrix.engine }}
         env:
           HEADED: '1'
@@ -190,11 +195,6 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
-      - run: xvfb-run --auto-servernum node test/portable-card-art-browser.mjs test-results/portable-card-art
-        env:
-          HEADED: '1'
-          BROWSER_ENGINE: ${{ matrix.engine }}
-          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/portable-card-art-browser.mjs test-results/portable-card-art-go
         env:
           HEADED: '1'
@@ -204,6 +204,11 @@ jobs:
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: node test/prepare-rive-fixture.mjs test-results/rive-fixture
+      - run: xvfb-run --auto-servernum node test/presentation-advanced-browser.mjs --gltf-rive test-results/advanced-media
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          RIVE_FIXTURE: test-results/rive-fixture/ball.riv
       - run: xvfb-run --auto-servernum node test/portable-lottie-browser.mjs test-results/portable-lottie
         env:
           HEADED: '1'

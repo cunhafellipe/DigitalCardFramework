@@ -14,8 +14,13 @@ import {demoArt} from './art.js';
 import {serveReference,securityHeaders} from '../src/static.js';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const portText=process.env.PORT??'4317';
+if(!/^\d+$/.test(portText)||Number(portText)<1||Number(portText)>65535){
+  console.error('Cannot start: PORT must be a whole number from 1 to 65535. Unset PORT to use 4317.');
+  process.exit(1);
+}
+const port=Number(portText), origin='http://127.0.0.1:'+port;
 mkdirSync(resolve(root,'data'),{recursive:true});
-const port=Number(process.env.PORT??4317), origin='http://127.0.0.1:'+port;
 const framework=new CardFramework({store:new SQLiteStore(resolve(root,'data/demo.sqlite')),
   bindings:{'demo.code':()=>({code:'DEMO-'+randomUUID(),description:'Example attached data, not a game redemption code'})}});
 const admin={role:'admin'};
@@ -68,6 +73,12 @@ const server=createServer(async(request,response)=>{
     response.setHeader('Content-Type',file.endsWith('.js')?'text/javascript; charset=utf-8':'text/html; charset=utf-8');
     response.setHeader('X-Content-Type-Options','nosniff');response.end(readFileSync(resolve(root,file)));
   }catch{response.statusCode=500;response.end('Demo request failed');}
+});
+server.on('error',async error=>{
+  console.error(error.code==='EADDRINUSE'
+    ? 'Cannot start: port '+port+' is already in use. Stop the other server or set PORT to another number from 1 to 65535.'
+    : 'Cannot start the local server: '+error.message);
+  await presentations.close();framework.close();process.exitCode=1;
 });
 server.listen(port,'127.0.0.1',()=>console.log('Digital Card Framework demo: '+origin+' (fictional accounts, local only)'));
 function shutdown(){server.close(async()=>{await presentations.close();framework.close();process.exit(0);});}

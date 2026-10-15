@@ -10,6 +10,21 @@ Digital Card Framework is a self-hosted backend for creating, distributing, and 
 
 *A 30 fps loop from the player, showing two cards in a connected scene. Artwork is hosted separately.*
 
+## Run locally
+
+For version 0.2.0, install **Node.js 24.14.0 or newer** and **pnpm 11.19.0**, then download or clone this repository. In its root directory, run:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm start
+```
+
+Open **http://127.0.0.1:4317** in your browser. Rowan is the fictional operator account, with **Administration** and **Creator studio** tabs; Morgan is a fictional collector. Use the account selector and **Switch** to try either role. Sample cards and starting balances are included, so you can buy and open packs, browse your collection, and try the other tabs without editing code.
+
+Progress is saved in `data/demo.sqlite`, and presentations in `data/presentations/`. Stop the server with Ctrl+C; restarting keeps that local data. If port 4317 is occupied, stop the other server or set the `PORT` environment variable before starting, then open the URL printed by the server.
+
+This launch binds only to your computer's loopback interface. The fictional accounts are for local exploration. A shared deployment uses the production host and an external identity provider; see [access and identity](docs/access-and-identity.md) and the configuration fields in [`.env.example`](.env.example). Domain, HTTPS, hosting and identity-provider setup are separate deployment tasks.
+
 ## What it does today
 
 | Area | Features |

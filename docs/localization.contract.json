@@ -5775,6 +5775,30 @@
       "placeholders": [],
       "plural": false
     },
+    "studioShell.newLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newLineName": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newLineDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.previewNewLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.cancelNewLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newLineNameRequired": {
+      "placeholders": [],
+      "plural": false
+    },
     "studioShell.newCard": {
       "placeholders": [],
       "plural": false

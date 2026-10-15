@@ -265,7 +265,7 @@ test('new card form previews without mutation and publishes a selectable artwork
 test('new card form explains missing line or rarity prerequisites',async()=>{
  for(const section of ['lines','rarities']){const x=setup();let mounted;try{
   x.model.catalog[section]=[];mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-card');
-  assert(form.textContent.includes('Import at least one card line and rarity'));assert(form.querySelector('button').disabled);
+  assert(form.textContent.includes('A card line and rarity are required'));assert(form.querySelector('button').disabled);
  }finally{mounted?.dispose();x.close();}}
 });
 
@@ -294,4 +294,45 @@ test('new card review cannot publish without catalog publication permission',asy
   const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);
   publish.dispatchEvent(new x.window.Event('click'));await settle();assert.equal(x.calls.length,0);
  }finally{mounted?.dispose();x.close();}
+});
+
+test('new line form publishes into an empty catalog and refreshes card prerequisites',async()=>{
+ for(const withRarity of [false,true]){const x=setup(),core=new x.core.constructor();let mounted;try{
+  const actor={role:'admin'};core.publishCatalog(actor,{version:1,currencies:[],lines:[],rarities:withRarity?[{id:'common',name:'Common',rank:0}]:[],cards:[],variants:[],products:[]});
+  let previews=0,commits=0;const client={...x.client,previewImport:async input=>{previews++;return core.previewImport(actor,input);}};
+  mounted=renderStudio({...x.model,catalog:core.catalog()},{...x.context,client,mutate:async(name,input)=>{commits++;return core.commitImport(actor,{...input,key:'create-line'});}});
+  const view=x.mount(mounted),form=view.querySelector('.dc-new-line'),name=field(form,'Line name'),submit=()=>form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));
+  submit();await settle();assert.equal(previews,0);name.value='  ';submit();await settle();assert.equal(previews,0);
+  name.value='  Moon garden  ';name.dispatchEvent(new x.window.Event('input',{bubbles:true}));field(form,'Line description (optional)').value='A quiet collection';submit();await settle();
+  assert.equal(previews,1);assert.equal(commits,0);assert.equal(core.catalog().lines.length,0);assert.equal(field(view,'Import content').value,'');
+  const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);
+  const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));publish.click();publish.click();await settle();
+  assert.equal(commits,1);const line=core.catalog().lines[0];assert.equal(line.name,'Moon garden');assert.equal(line.description,'A quiet collection');
+  const cardForm=view.querySelector('.dc-new-card');assert.equal(cardForm.querySelector('[aria-label="Card line"]').value,line.id);
+  assert.equal(cardForm.querySelector('button').disabled,!withRarity);assert.equal(cardForm.querySelector('.dc-muted').hidden,withRarity);assert(publish.disabled);
+ }finally{mounted?.dispose();core.close();x.close();}}
+});
+
+test('new line form preserves draft IDs and fences edited and cancelled previews with translated labels',async()=>{
+ const x=setup();let mounted;try{
+  let finish,request;const localization=createLocalization({locale:'es',messages:{'studioShell.newLine':'Nueva colección','studioShell.newLineName':'Nombre de colección','studioShell.cancelNewLine':'Cancelar colección','studioShell.newLineNameRequired':'Escribe un nombre.'}});
+  x.client.previewImport=input=>{request=input;return new Promise(resolve=>finish=resolve);};
+  mounted=renderStudio(x.model,{...x.context,localization});const view=x.mount(mounted),form=view.querySelector('.dc-new-line'),name=field(form,'Nombre de colección'),submit=()=>form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));
+  assert(form.textContent.includes('Nueva colección'));submit();assert.equal(name.validationMessage,'Escribe un nombre.');
+  name.value='First';submit();const firstId=request.source.lines[0].id;assert(!Object.hasOwn(request.source.lines[0],'description'));
+  name.value='Changed';name.dispatchEvent(new x.window.Event('input',{bubbles:true}));finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(view.querySelector('.dc-import-preview').children.length,0);
+  submit();assert.equal(request.source.lines[0].id,firstId);click(form,'Cancelar colección');finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(view.querySelector('.dc-import-preview').children.length,0);assert.equal(name.value,'');
+  name.value='Second';submit();assert.notEqual(request.source.lines[0].id,firstId);finish(x.core.previewImport({role:'admin'},request));await settle();
+ }finally{mounted?.dispose();x.close();}
+});
+
+test('new line form respects preview and publication permissions',async()=>{
+ for(const canPreview of [false,true]){const x=setup();let mounted;try{
+  x.model.me={...x.model.me,role:'player',permissions:['catalog.read',...(canPreview?['catalog.preview']:[])]};let previews=0;
+  x.client.previewImport=async input=>{previews++;return x.core.previewImport({role:'admin'},input);};
+  mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-line');assert.equal(form.querySelector('button').disabled,!canPreview);
+  field(form,'Line name').value='Review only';form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));await settle();assert.equal(previews,canPreview?1:0);
+  const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));
+  const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);publish.dispatchEvent(new x.window.Event('click'));await settle();assert.equal(x.calls.length,0);
+ }finally{mounted?.dispose();x.close();}}
 });

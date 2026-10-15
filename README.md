@@ -46,7 +46,7 @@ This launch binds only to your computer's loopback interface. The fictional acco
 
 Layered imports report compatibility limits. Advanced motion can require code or JSON. The reference site connects visual editing to reviewed catalog publication; exporting a card does not issue an owned copy.
 
-To add a catalog card, open **Creator studio**, enter its name and optional description under **New card**, and choose an existing card line and rarity. Select **Preview new card**, review the changes, check the review box, then select **Publish reviewed revision**. The new card is selected for visual artwork editing. Creating new card lines or pack definitions still uses catalog import.
+To add a catalog card, open **Creator studio**, enter its name and optional description under **New card**, and choose an existing card line and rarity. Select **Preview new card**, review the changes, check the review box, then select **Publish reviewed revision**. The new card is selected for visual artwork editing. To create a line first, use **New card line**, enter a name and optional description, and follow the same preview and publication steps. The published line becomes selectable in **New card**. Creating pack definitions or rarities still uses catalog import.
 
 ## Default administration panel
 

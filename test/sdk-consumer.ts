@@ -300,3 +300,61 @@ const httpExtensionBoolean:boolean=httpQuoteSchema.dcUniquePageIds;
 // @ts-expect-error The exported OpenAPI version is 3.1.0.
 const oldHTTPDocumentVersion:'3.0.3'=openapi.openapi;
 void [httpDocumentVersion,httpDocumentTitle,httpSessionLocation,httpRequiredFields,httpQuantityType,httpSchemaExtension,httpQuoteRequest,httpExtensionBoolean,oldHTTPDocumentVersion];
+
+import {CardFramework} from '../src/core.js';
+import {validateCatalog, FrameworkError} from '../src/catalog.js';
+import type {CoreUserActor, CoreCatalog, CorePreferences} from '../src/core-operations.js';
+const hostCore=new CardFramework({clock:()=>new Date().toISOString(),random:maximum=>Math.floor(maximum/2),raffleRandom:maximum=>maximum-1,limits:{users:1000,copiesPerUser:100,completionBytes:1048576}});
+const hostAuthority={role:'admin'};
+declare const hostCatalogInput:Schemas['CatalogManifest'];
+const hostCatalog:CoreCatalog=validateCatalog(hostCatalogInput);
+const hostPublished=hostCore.publishCatalog(hostAuthority,hostCatalog);
+const hostSitePaused:boolean=hostPublished.adminStatus.site.packPurchasesPaused;
+const hostPublishedVersion:number=hostCore.catalogVersion();
+const hostOperatorCatalog:CoreCatalog=hostCore.operatorCatalog(hostAuthority);
+const hostUser=hostCore.registerUser(hostAuthority,{provider:'host',subject:'account',displayName:'Collector'});
+const hostActor:CoreUserActor={userId:hostUser.id};
+const hostKnownUser=hostCore.userByIdentity(hostAuthority,{provider:'host',subject:'account'});
+const hostLookupId:string|undefined=hostKnownUser?.id;
+const hostIdentity=hostCore.providerIdentity(hostAuthority,hostUser.id);
+const hostProvider:string|undefined=hostIdentity?.provider;
+const hostGrant=hostCore.grantCurrency(hostAuthority,{key:'grant',userId:hostUser.id,currencyId:'credits',amount:10,reason:'Opening balance'});
+const hostBalance:number=hostGrant.balance;
+const hostMe=hostCore.me(hostActor);
+const hostRestrictions:boolean=hostMe.adminStatus.restrictions.tradingBlocked;
+const hostPreferences:CorePreferences=hostCore.setPreferences(hostActor,{key:'preferences',inventoryVisibility:'private'});
+const hostCapabilities:Schemas['CapabilityAvailability']=hostCore.capabilities(hostActor);
+const hostWallet:Record<string,number>=hostCore.wallet(hostActor);
+const hostLedger:Schemas['LedgerEntry'][]=hostCore.history(hostActor);
+const hostQuote=hostCore.quote(hostActor,{productId:'sample'});
+const hostPurchase=hostCore.purchase(hostActor,{...hostQuote,key:'purchase'});
+const hostAsyncPurchase:Promise<Operations['purchase']['response']>=hostCore.purchaseAsync(hostActor,{...hostQuote,key:'async-purchase'},{signal:new AbortController().signal});
+const hostPacks:Schemas['PackView'][]=hostCore.packs(hostActor);
+const hostCopies:Schemas['InventoryCopy'][]=hostCore.inventory(hostActor);
+const hostReceipt:Schemas['Receipt']=hostCore.openPack(hostActor,{key:'open',packId:hostPacks[0]!.id});
+const hostCopy:Schemas['Copy']=hostCore.inspectCard(hostActor,hostCopies[0]!.id);
+const hostOpened:Schemas['Copy']=hostCore.openCard(hostActor,{key:'reveal',copyId:hostCopy.id});
+const hostUsed:Schemas['BindingUseReceipt']=hostCore.consumeBinding(hostActor,{key:'use',copyId:hostCopy.id,namespace:'example'});
+const hostHeld:Schemas['HeldBinding'][]=hostCore.bindings(hostActor);
+const hostEvents=hostCore.events(hostAuthority,{after:0,limit:20});
+const hostSequence:number|undefined=hostEvents[0]?.sequence;
+const hostEventData:unknown=hostEvents[0]?.data;
+const hostErrorStatus:number=new FrameworkError('EXAMPLE','Example',409).status;
+// @ts-expect-error The core returns identity data without the HTTP adapter's role field.
+hostMe.role;
+// @ts-expect-error Account-bound operations require a principal user ID.
+hostCore.wallet({role:'player'});
+// @ts-expect-error Identity lookup can return null.
+const requiredHostUserId:string=hostCore.userByIdentity(hostAuthority,{provider:'host',subject:'missing'}).id;
+// @ts-expect-error Reviewed product revision and catalog version are required for purchase.
+hostCore.purchase(hostActor,{key:'purchase',productId:'sample'});
+// @ts-expect-error Core inventory returns an array, not the paged HTTP union.
+hostCore.inventory(hostActor).items;
+// @ts-expect-error Async purchase returns a promise.
+const immediateHostPurchase:Operations['purchase']['response']=hostCore.purchaseAsync(hostActor,{...hostQuote,key:'later'});
+// @ts-expect-error Installation limit names are checked.
+new CardFramework({limits:{unboundedRequests:100}});
+// @ts-expect-error Clock callbacks return ISO date strings.
+new CardFramework({clock:()=>Date.now()});
+hostCore.close();
+void [hostSitePaused,hostPublishedVersion,hostOperatorCatalog,hostLookupId,hostProvider,hostBalance,hostRestrictions,hostPreferences,hostCapabilities,hostWallet,hostLedger,hostPurchase,hostAsyncPurchase,hostReceipt,hostOpened,hostUsed,hostHeld,hostSequence,hostEventData,hostErrorStatus,requiredHostUserId,immediateHostPurchase];

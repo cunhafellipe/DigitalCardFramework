@@ -535,3 +535,40 @@ publishPackage(AuthBuffer.alloc(0),{contentRoot:'content',limits:{entries:'100'}
 // @ts-expect-error Performance modes use the supported policy modes.
 publishPackage(AuthBuffer.alloc(0),{contentRoot:'content',performance:{mode:'allow'}});
 void [compilerRead,synchronousCompilation];
+
+import {DEFAULT_LIMITS, crc32, writeZip, readZip, sniff, validatePackage, buildPackage, importPackage, browserResolver, type ValidatedPackage, type BuiltPackage} from '@digital-card/framework/presentation/package';
+const packageCompressedLimit:number=DEFAULT_LIMITS.compressed;
+const packageCRC:number=crc32(AuthBuffer.alloc(0));
+const packageFiles=new Map<string,Uint8Array>([['card.json',AuthBuffer.alloc(0)]]);
+const packageZip:Uint8Array=writeZip(packageFiles);
+const packageEntries:Promise<Map<string,Uint8Array>>=readZip(packageZip,{compressed:1024,inflated:2048,entries:20,entry:512,ratio:10,sourceArchive:true});
+sniff({mediaType:'image/png',width:1,height:1},AuthBuffer.alloc(0));
+const packageValidation:Promise<ValidatedPackage>=validatePackage(packageFiles,{verifyMedia:false});
+const packageImport:Promise<ValidatedPackage>=importPackage(AuthBuffer.alloc(0),{limits:{entries:100},verifyMedia:false});
+packageValidation.then(pkg=>{
+  const rebuilt:Promise<BuiltPackage>=buildPackage(pkg.manifest,pkg.scenes,pkg.files,{verifyMedia:false});
+  rebuilt.then(built=>{const archive:Uint8Array=built.archive;void archive;});
+  const resolver=browserResolver(pkg);
+  const sceneMap:ValidatedPackage['scenes']=resolver.scenes;
+  const objectURLs:number=resolver.diagnostics().objectURLs;
+  resolver.asset('poster').then(asset=>{const url:string=asset.url;const mediaType:string=asset.mediaType;void [url,mediaType];});
+  resolver.dispose();
+  // @ts-expect-error Validation does not add archive bytes.
+  pkg.archive;
+  void [rebuilt,sceneMap,objectURLs];
+});
+// @ts-expect-error Default archive limits are immutable.
+DEFAULT_LIMITS.entries=10;
+// @ts-expect-error CRC inputs are bytes.
+crc32('bytes');
+// @ts-expect-error ZIP writing requires a Map rather than a file object.
+writeZip({'card.json':AuthBuffer.alloc(0)});
+// @ts-expect-error ZIP reading is asynchronous.
+const synchronousZip:Map<string,Uint8Array>=readZip(packageZip);
+// @ts-expect-error Media validation is a boolean option.
+validatePackage(packageFiles,{verifyMedia:'false'});
+// @ts-expect-error Import limits belong in the limits option.
+importPackage(packageZip,{entries:10});
+// @ts-expect-error Asset resolution accepts string IDs.
+browserResolver({} as ValidatedPackage).asset(1);
+void [packageCompressedLimit,packageCRC,packageEntries,packageImport,synchronousZip];

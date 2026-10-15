@@ -583,3 +583,59 @@ hostCore.settleAction(hostAuthority,{jobId:'job',succeeded:true});
 // @ts-expect-error Audit may return the no-catalog branch without counters.
 const requiredAuditCount:number=hostCore.audit(hostAuthority).counts.copies;
 void [hostPurchasePolicyScope,hostTransferPolicyScope,hostTradePolicyScope,hostListingPolicyScope,hostFulfillments,hostActionCreatedAt,hostRetriedAction,hostCodePool,hostCodeImportPool,hostCodeImportTime,hostCodePools,hostCodeInventory,hostCustodyPlaintext,hostCustodyHolder,hostCodeHistoryName,hostRevealedPlaintext,hostCodeReported,hostConfirmedStatus,hostLookupPlaintext,hostRotatedCount,hostVerifiedCount,hostBackfilledCount,hostIssuance,hostIssuanceRecovery,hostWorkerActions,hostCompletionCount,hostExternalAllocationScope,hostAllocation,hostAllocationAcknowledgement,hostAllocationScope,hostStockAllocationScope,hostStockQuote,hostStockAllocation,hostFactory,hostFactoryRecovery,requiredActionLease,immediateDispatch,immediateIssuance,requiredAuditCount];
+
+import type {CodeVault} from '@digital-card/framework/code-vault';
+import type {FrameworkOptions} from '../src/core.js';
+declare const hostVault:CodeVault;
+const hostIntegrationOptions:FrameworkOptions={
+  bindings:{receipt:({copy,user,spec})=>{const copyId:string=copy.id;const source:unknown=copy.source;const name:string=user.displayName;const factory:string=spec.factory;void [source,factory];return {copyId,name};}},
+  policies:{
+    canList:({actor,shop,listing})=>{const actorId:string|undefined=actor.userId;const shopId:string=shop.id;const price:number=listing.price.amount;void [actorId,shopId,price];return true;},
+    canPurchase:({user,shop,listing})=>{const userId:string=user.id;void [userId,shop,listing];return 'Account is not eligible';},
+    canTransfer:(copy,fromUserId,context)=>{const channel:'sale'|'trade'=context.channel;const to:string|null=context.toUserId;void [copy,fromUserId,channel,to];return true;},
+    canTrade:context=>{const copyIds:string[]=context.give.copyIds;const channel:'sale'|'trade'=context.channel;void [copyIds,channel];return true;},
+  },
+  codeVault:hostVault,codeLimits:{maxCodes:1000,maxRequests:10000},
+  codeGenerators:{serial:({copy,pool})=>{const id:string=copy.id;const provider:string=pool.providerId;void provider;return {code:id,externalId:'reference',metadata:{issued:true}};}},
+  allocationCodeIssuers:{local:{kind:'pure',providerId:'issuer',generate:entry=>({code:entry.issuanceId})},remote:{providerId:'issuer',url:'https://provider.example/issue',token:'example-token'}},
+  allocationBindingFactories:{local:{kind:'pure',providerId:'factory',revision:1,userFields:['id'],produce:entry=>({owner:entry.userId})},remote:{kind:'activation',providerId:'factory',revision:1,url:'https://provider.example/bind',token:'example-token'}},
+  actionHandlers:{
+    immediate:job=>{const key:string=job.idempotencyKey;job.signal.throwIfAborted();void key;},
+    asynchronous:async job=>{const data:unknown=job.params;const userId:string|null=job.userId;void [data,userId];return {received:true};},
+  },
+  actionOptions:{maxAttempts:5,leaseMs:60000,timeoutMs:10000,retryMs:1000},
+  eventSubscriptions:[{id:'events',handler:'asynchronous',events:['pack.opened','*']}],
+  externalPurchaseProviders:{payments:{
+    validateIntent:({intent,user})=>{const transaction:string=intent.transactionId;const userId:string=user.id;void transaction;return userId===intent.userId;},
+    verifyProof:({proof,intent,preparationId,operation})=>{const kind:'debit'|'no_debit'|'refund'=proof.kind;const mode:'debit'|'no_debit'|'refund'|'resolve_legacy'=operation;void [kind,mode,preparationId];return proof.fingerprint.length>0&&proof.userId===intent.userId;},
+  }},
+  externalPurchaseLimits:{pendingPerUser:20,pendingPerProvider:1000,records:100000},
+  remotePolicies:{
+    canPurchase:{scope:'listing',providerId:'purchase',url:'https://provider.example/purchase',token:'example-token'},
+    canList:{scope:'listing',providerId:'listing',url:'https://provider.example/list',token:'example-token'},
+    canTransfer:{scope:'transfer',providerId:'transfer',url:'https://provider.example/transfer',token:'example-token'},
+    canTrade:{scope:'exchange',providerId:'trade',url:'https://provider.example/trade',token:'example-token'},
+  },
+  remoteAllocation:{scope:'catalog-purchase',algorithm:'weighted-deck@4',providerId:'allocation',url:'https://provider.example/allocate',token:'example-token'},
+  remoteStockAllocation:{scope:'commerce-stock',algorithm:'weighted-deck@4',providerId:'stock',url:'https://provider.example/stock',token:'example-token'},
+  remoteExternalAllocation:{scope:'external-fulfillment',algorithm:'weighted-deck@4',providerId:'external',url:'https://provider.example/external',token:'example-token'},
+};
+const hostIntegratedCore=new CardFramework(hostIntegrationOptions);
+new CardFramework({remoteAllocation:null,remoteStockAllocation:null,remoteExternalAllocation:null});
+// @ts-expect-error Legacy binding factories must return synchronous JSON objects.
+new CardFramework({bindings:{asyncReceipt:async()=>({receipt:true})}});
+// @ts-expect-error Legacy code generators must return synchronously.
+new CardFramework({codeGenerators:{asyncCode:async()=>({code:'example'})}});
+// @ts-expect-error Host policy callbacks are synchronous decisions.
+new CardFramework({policies:{canPurchase:async()=>true}});
+// @ts-expect-error External evidence attestations must be synchronous.
+new CardFramework({externalPurchaseProviders:{payments:{validateIntent:async()=>true,verifyProof:()=>true}}});
+// @ts-expect-error Typed remote hooks preserve their required scope.
+new CardFramework({remotePolicies:{canTrade:{scope:'transfer',providerId:'trade',url:'https://provider.example/trade',token:'example-token'}}});
+// @ts-expect-error External purchase limits have three supported names.
+new CardFramework({externalPurchaseLimits:{pending:20}});
+// @ts-expect-error Code capacity settings do not accept arbitrary option names.
+new CardFramework({codeLimits:{capacity:1000}});
+// @ts-expect-error Subscriptions require the target handler name.
+new CardFramework({eventSubscriptions:[{id:'events',events:['pack.opened']}]});
+void hostIntegratedCore;

@@ -16,19 +16,11 @@ const pw = await import(
 const base = fileURLToPath(new URL("../", import.meta.url));
 const pkg = await build(fixture());
 const { gifFixture } = await import("./gif-fixture.mjs");
-const { build: bundle } =
-  await import("../src/presentation/node_modules/esbuild/lib/main.js");
-const workerBundle = await bundle({
-  entryPoints: [path.join(base, "src/presentation/layered-worker.js")],
-  bundle: true,
-  format: "esm",
-  platform: "browser",
-  external: ["node:*"],
-  write: false,
-});
+const { maskedPsdFixture } = await import("./presentation-layered-fixtures.mjs");
 const special = new Map([
   ["/synthetic.gif", gifFixture(3)],
-  ["/worker.js", workerBundle.outputFiles[0].contents],
+  ["/real-mask.psd", maskedPsdFixture({}, { left: 2, top: 3,
+    imageData: { width: 2, height: 1, data: Uint8ClampedArray.from([0, 0, 0, 255, 0, 0, 0, 255]) } })],
 ]);
 const server = createServer(async (req, res) => {
   try {
@@ -564,7 +556,14 @@ try {
       "test.gif",
       { type: "image/gif" },
     );
-    const converted = await importLayeredFile(gif, { workerURL: "/worker.js" });
+    const realMask = await importLayeredFile(new File(
+      [await (await fetch("/real-mask.psd")).arrayBuffer()], "real-mask.psd",
+    ));
+    results.push(check(
+      realMask.report.issues.some(issue => issue.code === "REAL_MASK" && issue.message.includes("bake")),
+      "default shipped layered worker reports unsupported real-mask coverage",
+    ));
+    const converted = await importLayeredFile(gif);
     const animated = await converted.build();
     const gr = browserResolver(animated),
       gs = createPlayerStage({ root });

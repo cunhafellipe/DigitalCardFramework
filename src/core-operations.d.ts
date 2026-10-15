@@ -2,6 +2,7 @@ import type {Schemas, Operations} from './wire-types.js';
 import type {PermissionActor} from './access.js';
 import type {ExternalCreditInput} from './currency-gateway.js';
 import type {fontDiagnostics} from './presentation/text.js';
+import type {DurableCommand} from './client.js';
 
 export type CoreActor = PermissionActor;
 export type CoreUserActor = PermissionActor & {userId: string};
@@ -51,7 +52,52 @@ export interface CoreTradeExpiration {
   failed: {tradeId: string; code: string}[];
 }
 export interface CoreListingExpiration {count: number; failed?: {listingId: string; code: string}[]}
+export interface CoreIndexedPageOptions {
+  limit?: number; after?: string; search?: string; sort?: 'newest' | 'name' | 'ordinal' | 'id';
+  cardId?: string; variantId?: string; lineId?: string; rarityId?: string;
+}
+export interface CorePackPage {items: Schemas['PackView'][]; total: number; next: string | null}
+export interface CoreCollectionSummary {
+  items: {variantId: string; count: number; card: Schemas['InventoryCopy'] | undefined}[];
+  totalCards: number; uniqueCards: number; total: number; next: string | null;
+}
+export interface CoreCommandOptions {operators?: boolean; requireTradeReview?: boolean}
+/** Input is retained before command-specific validation occurs during execution. */
+export interface CoreCommandRegistration {command: DurableCommand; input: Record<string, unknown> & {key?: string}}
+export type CoreCommandHead = Pick<Schemas['CommandIntent'], 'id' | 'userId' | 'command' | 'state'>;
+export type CoreSettlementActor = CoreActor & {settlementProviderId: string};
+export type CoreSettlementOperator = CoreSettlementActor & ({userId: string} | {id: string});
 export interface CoreOperations {
+  directory(actor: CoreUserActor, options?: CorePageOptions): Schemas['DirectoryPage'];
+  tradeInventory(actor: CoreUserActor, userId: string, options?: CorePageOptions): Schemas['TradeInventoryPage'];
+  inventoryPage(actor: CoreUserActor, options?: CoreIndexedPageOptions): Schemas['InventoryPage'];
+  collectionSummary(actor: CoreUserActor, options?: {limit?: number; after?: string; excludeTypes?: string[]}): CoreCollectionSummary;
+  packsPage(actor: CoreUserActor, options?: CoreIndexedPageOptions): CorePackPage;
+  packPage(actor: CoreUserActor, options?: CoreIndexedPageOptions): CorePackPage;
+  convert(actor: CoreUserActor, input: Operations['convert']['request']): Operations['convert']['response'];
+  tradeUp(actor: CoreUserActor, input: Operations['tradeUp']['request']): Schemas['Copy'];
+  notifications(actor: CoreUserActor, options?: CorePageOptions): Schemas['NotificationPage'];
+  readNotifications(actor: CoreUserActor, input: Operations['readNotifications']['request']): Schemas['NotificationReadReceipt'];
+  commandIntent(actor: CoreUserActor, input: {id: string; command: DurableCommand}, options?: CoreCommandOptions): CoreCommandHead;
+  commandIntents(actor: CoreUserActor, options?: {command?: DurableCommand; operators?: boolean}): {items: Schemas['CommandIntent'][]};
+  registerCommandIntent(actor: CoreUserActor, input: CoreCommandRegistration, options?: CoreCommandOptions): Schemas['CommandIntent'];
+  executeCommandIntent(actor: CoreUserActor, input: Schemas['CommandIntentId'], options?: CoreCommandOptions): Schemas['CommandExecution'];
+  executeCommandIntentAsync(actor: CoreUserActor, input: Schemas['CommandIntentId'], options?: CoreCommandOptions & CoreAsyncOptions): Promise<Schemas['CommandExecution']>;
+  acknowledgeCommandIntent(actor: CoreUserActor, input: Schemas['CommandIntentId'], options?: CoreCommandOptions): {id: string; state: 'acknowledged'};
+  saveAlbum(actor: CoreUserActor, input: Operations['saveAlbum']['request']): Schemas['AlbumRecord'];
+  albums(actor: CoreUserActor): Schemas['AlbumRecord'][];
+  viewAlbum(actor: CoreActor | null | undefined, albumId: string): Schemas['AlbumView'];
+  publicAlbums(): Schemas['PublicAlbumSummary'][];
+  prepareExternalPurchase(actor: CoreSettlementActor, input: Schemas['PrepareExternalPurchase']): Schemas['ExternalPurchaseProjection'];
+  commitExternalPurchase(actor: CoreSettlementActor, input: Schemas['CommitExternalPurchase']): Schemas['ExternalPurchaseProjection'];
+  commitExternalPurchaseAsync(actor: CoreSettlementActor, input: Schemas['CommitExternalPurchase'], options?: CoreAsyncOptions): Promise<Schemas['ExternalPurchaseProjection']>;
+  cancelExternalPurchase(actor: CoreSettlementActor, input: Schemas['CancelExternalPurchase']): Schemas['ExternalPurchaseProjection'];
+  confirmExternalCompensation(actor: CoreSettlementActor, input: Schemas['ConfirmExternalCompensation']): Schemas['ExternalPurchaseProjection'];
+  externalPurchaseStatus(actor: CoreUserActor | CoreSettlementActor, input: Schemas['ExternalPurchaseStatus']): Schemas['ExternalPurchaseProjection'];
+  lookupExternalPurchase(actor: CoreUserActor | CoreSettlementActor, input: Schemas['LookupExternalPurchase']): Schemas['ExternalPurchaseProjection'];
+  pendingExternalPurchases(actor: CoreSettlementActor, input: Schemas['PendingExternalPurchases']): Schemas['ExternalPurchasePage'];
+  reconcileLegacyExternalPurchase(actor: CoreSettlementActor, input: Schemas['ReconcileLegacyExternalPurchase']): Schemas['ExternalPurchaseProjection'];
+  resolveLegacyExternalPurchase(actor: CoreSettlementOperator, input: Schemas['ResolveLegacyExternalPurchase']): Schemas['ExternalPurchaseProjection'];
   adminOverview(actor: CoreActor): Schemas['AdminOverview'];
   configureAdmin(actor: CoreActor, input: Operations['configureAdmin']['request']): Schemas['AdminMutation'];
   adminUsers(actor: CoreActor, options?: CorePageOptions): Schemas['AdminUsersPage'];

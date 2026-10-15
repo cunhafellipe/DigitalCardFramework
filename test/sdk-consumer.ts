@@ -444,3 +444,67 @@ hostCore.createShop(hostActor,{name:'Collector shop'});
 // @ts-expect-error Listing purchase requires the reviewed listing digest.
 hostCore.buyListing(hostActor,{key:'buy',listingId:hostListing.id});
 void [hostOverview,hostAdminMutation,hostAdminCardMutation,hostUsersPage,hostUserDetail,hostAdminChanges,hostPolicies,hostPolicyRevision,hostPolicySaved,hostPolicyImpact,hostPolicyActivated,hostPolicyRetired,hostPolicyRestored,hostResourceSaved,hostResourceRetired,hostResourceRestored,hostStatsVersion,hostTradingPolicy,hostAccepted,hostCanceled,hostTradeAsync,hostCounterAsync,hostAcceptAsync,hostReviewAsync,hostExpiredTradeId,hostNamedTrader,hostCommerce,hostCommerceConfigured,hostShopPage,hostListingAsync,hostListingPage,hostListingQuote,hostOrder,hostListingQuoteAsync,hostOrderAsync,hostOrders,hostListingExpirationCount,hostRaffle,hostDraw,hostAutomaticDraws,immediateHostPresentation,immediateHostReview];
+
+const hostDirectory:Schemas['DirectoryPage']=hostCore.directory(hostActor,{search:'Collector',limit:20});
+const hostPartnerInventory:Schemas['TradeInventoryPage']=hostCore.tradeInventory(hostActor,hostUser.id,{sort:'name'});
+const hostInventoryPage:Schemas['InventoryPage']=hostCore.inventoryPage(hostActor,{sort:'ordinal',lineId:'sample',limit:20});
+const hostPackPage=hostCore.packsPage(hostActor,{sort:'id',after:'cursor'});
+const hostPackCursor:string|null=hostCore.packPage(hostActor).next;
+const hostVariantSummary=hostCore.collectionSummary(hostActor,{excludeTypes:['reward'],after:'variant',limit:20});
+const hostVariantCount:number|undefined=hostVariantSummary.items[0]?.count;
+const hostVariantCard:Schemas['InventoryCopy']|undefined=hostVariantSummary.items[0]?.card;
+const hostTotalCards:number=hostVariantSummary.totalCards;
+declare const hostConversionInput:Operations['convert']['request'];
+declare const hostTradeUpInput:Operations['tradeUp']['request'];
+const hostConverted:Operations['convert']['response']=hostCore.convert(hostActor,hostConversionInput);
+const hostTradeUpCopy:Schemas['Copy']=hostCore.tradeUp(hostActor,hostTradeUpInput);
+const hostNotifications:Schemas['NotificationPage']=hostCore.notifications(hostActor,{limit:20});
+const hostNotificationsRead:Schemas['NotificationReadReceipt']=hostCore.readNotifications(hostActor,{key:'notifications',ids:[]});
+const hostIntent=hostCore.registerCommandIntent(hostActor,{command:'purchase',input:{productId:'draft'}},{operators:false});
+const hostIntentKey:string=hostIntent.input.key;
+const hostCommandHead=hostCore.commandIntent(hostActor,{id:hostIntent.id,command:'purchase'});
+const hostCommandState:Schemas['CommandIntent']['state']=hostCommandHead.state;
+const hostPendingCommands:{items:Schemas['CommandIntent'][]}=hostCore.commandIntents(hostActor,{command:'purchase',operators:false});
+const hostExecuted:Schemas['CommandExecution']=hostCore.executeCommandIntent(hostActor,{id:hostIntent.id},{requireTradeReview:true});
+const hostExecutedAsync:Promise<Schemas['CommandExecution']>=hostCore.executeCommandIntentAsync(hostActor,{id:hostIntent.id},{operators:false,signal:new AbortController().signal});
+const hostAcknowledged:'acknowledged'=hostCore.acknowledgeCommandIntent(hostActor,{id:hostIntent.id}).state;
+const hostAlbum:Schemas['AlbumRecord']=hostCore.saveAlbum(hostActor,{key:'album',name:'Collection'});
+const hostAlbums:Schemas['AlbumRecord'][]=hostCore.albums(hostActor);
+const hostPublicAlbum:Schemas['AlbumView']=hostCore.viewAlbum(null,hostAlbum.id);
+hostCore.viewAlbum(undefined,hostAlbum.id);
+const hostPublicAlbums:Schemas['PublicAlbumSummary'][]=hostCore.publicAlbums();
+const hostSettlement={role:'admin',settlementProviderId:'payments',id:'operator'};
+declare const hostPrepareExternal:Schemas['PrepareExternalPurchase'];
+declare const hostCommitExternal:Schemas['CommitExternalPurchase'];
+declare const hostCancelExternal:Schemas['CancelExternalPurchase'];
+declare const hostCompensateExternal:Schemas['ConfirmExternalCompensation'];
+declare const hostLegacyExternal:Schemas['ReconcileLegacyExternalPurchase'];
+declare const hostResolveExternal:Schemas['ResolveLegacyExternalPurchase'];
+const hostPreparation:Schemas['ExternalPurchaseProjection']=hostCore.prepareExternalPurchase(hostSettlement,hostPrepareExternal);
+const hostExternalCommit:Schemas['ExternalPurchaseProjection']=hostCore.commitExternalPurchase(hostSettlement,hostCommitExternal);
+const hostExternalCommitAsync:Promise<Schemas['ExternalPurchaseProjection']>=hostCore.commitExternalPurchaseAsync(hostSettlement,hostCommitExternal,{signal:new AbortController().signal});
+const hostExternalCancel:Schemas['ExternalPurchaseProjection']=hostCore.cancelExternalPurchase(hostSettlement,hostCancelExternal);
+const hostExternalCompensation:Schemas['ExternalPurchaseProjection']=hostCore.confirmExternalCompensation(hostSettlement,hostCompensateExternal);
+const hostExternalStatus:Schemas['ExternalPurchaseProjection']=hostCore.externalPurchaseStatus(hostActor,{preparationId:hostPreparation.preparationId});
+const hostExternalLookup:Schemas['ExternalPurchaseProjection']=hostCore.lookupExternalPurchase(hostSettlement,{providerId:'payments',transactionId:'transaction'});
+const hostExternalPage:Schemas['ExternalPurchasePage']=hostCore.pendingExternalPurchases(hostSettlement,{providerId:'payments',after:null,limit:20});
+const hostExternalNext:string|null=hostExternalPage.nextCursor;
+const hostLegacyReconciled:Schemas['ExternalPurchaseProjection']=hostCore.reconcileLegacyExternalPurchase(hostSettlement,hostLegacyExternal);
+const hostLegacyResolved:Schemas['ExternalPurchaseProjection']=hostCore.resolveLegacyExternalPurchase(hostSettlement,hostResolveExternal);
+// @ts-expect-error A recovery head has no retained command input field.
+hostCommandHead.input;
+// @ts-expect-error Registered commands must use a supported durable command name.
+hostCore.registerCommandIntent(hostActor,{command:'custom',input:{}});
+// @ts-expect-error Command input keys must be strings when supplied.
+hostCore.registerCommandIntent(hostActor,{command:'purchase',input:{key:123}});
+// @ts-expect-error Async command execution returns a promise.
+const immediateHostExecution:Schemas['CommandExecution']=hostCore.executeCommandIntentAsync(hostActor,{id:hostIntent.id});
+// @ts-expect-error Settlement writes require a provider-scoped actor.
+hostCore.prepareExternalPurchase(hostAuthority,hostPrepareExternal);
+// @ts-expect-error Legacy resolution also requires an attributed operator ID.
+hostCore.resolveLegacyExternalPurchase({settlementProviderId:'payments'},hostResolveExternal);
+// @ts-expect-error Variant summary cards are optional when narrowing a projected row.
+const requiredHostVariantCard:Schemas['InventoryCopy']=hostVariantSummary.items[0]!.card;
+// @ts-expect-error Core pagination retains nullable next cursors.
+const requiredHostPackCursor:string=hostCore.packPage(hostActor).next;
+void [hostDirectory,hostPartnerInventory,hostInventoryPage,hostPackPage,hostPackCursor,hostVariantCount,hostVariantCard,hostTotalCards,hostConverted,hostTradeUpCopy,hostNotifications,hostNotificationsRead,hostIntentKey,hostCommandState,hostPendingCommands,hostExecuted,hostExecutedAsync,hostAcknowledged,hostAlbums,hostPublicAlbum,hostPublicAlbums,hostExternalCommit,hostExternalCommitAsync,hostExternalCancel,hostExternalCompensation,hostExternalStatus,hostExternalLookup,hostExternalNext,hostLegacyReconciled,hostLegacyResolved,immediateHostExecution,requiredHostVariantCard,requiredHostPackCursor];

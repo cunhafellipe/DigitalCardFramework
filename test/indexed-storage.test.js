@@ -189,6 +189,47 @@ test('inventory free-text and locale-name compatibility uses account records and
   const inventory=x.core.inventory(x.alice),before=store.diagnostics();for(const options of [{sort:'name',limit:2},{search:'visible-description-needle',limit:1},{search:'alpha',sort:'name'}])assert.deepEqual(x.core.inventoryPage(x.alice,options),page(inventory,options));assert.equal(store.diagnostics().compatibilityMaterializations,before.compatibilityMaterializations);
 });
 
+test('encrypted inventory pages omit catalog reads while retaining fresh private projections',t=>{
+  const store=new SQLiteStore(':memory:',{encryptionKey:randomBytes(32)}),x=codesFixture({store});t.after(()=>x.core.close());
+  x.openCode();x.open('common',x.bob);
+  const fields=['public','owner','operator'].map(visibility=>({key:visibility,label:visibility,type:'integer',visibility}));
+  let fallbackId;
+  store.transact(s=>{
+    const copies=Object.values(s.copies).filter(copy=>copy.ownerId===x.alice.userId);
+    fallbackId=copies.find(copy=>!copy.codeIds?.length).id;
+    for(const [index,copy]of copies.entries()){
+      copy.definition.name='Projection '+index;copy.definition.description='visible-inventory-needle';
+      copy.definition.stats={public:1,owner:2,operator:3};copy.cardPolicy={...copy.cardPolicy,fields};
+    }
+    delete s.copies[fallbackId].cardPolicy.fields;
+    s.cardAuthoring={revision:1,documents:[{state:'active',document:{schemaVersion:1,id:'inventory',revision:1,name:'Inventory',fields}}],assignments:[{scope:'installation',policy:'inventory@1'}],resources:[]};
+  });
+  const query=store.query.bind(store);let reads=[];
+  store.query=fn=>query(q=>fn({...q,value:field=>{reads.push(field);return q.value(field);}}));
+  function verify(){
+    reads=[];const reference=x.core.inventory(x.alice);assert.equal(reads.filter(field=>field==='catalog').length,1);
+    const expected=new Map(reference.map(copy=>[copy.id,copy])),before=store.diagnostics();
+    const check=options=>{
+      reads=[];const result=x.core.inventoryPage(x.alice,options);
+      assert.equal(reads.filter(field=>field==='catalog').length,0);
+      for(const field of ['adminControls','cardAuthoring','cardValidation','tradingPolicy'])assert.equal(reads.filter(value=>value===field).length,1);
+      assert.equal(result.total,reference.length);
+      for(const copy of result.items){assert.deepEqual(copy,expected.get(copy.id));assert.equal(copy.ownerId,x.alice.userId);assert.equal(copy.definition.stats.operator,undefined);}
+      assert(!JSON.stringify(result).includes('SECRET-REWARD-'));
+      return result;
+    };
+    const first=check({limit:2});assert.equal(first.items.length,2);assert(first.next);
+    const next=check({limit:2,after:first.next});assert.equal(next.items.length,1);assert(!next.items.some(copy=>first.items.some(previous=>previous.id===copy.id)));
+    for(const options of [{sort:'name',limit:2},{search:'visible-inventory-needle',limit:2}])assert.deepEqual(check(options),page(reference,options));
+    assert.equal(store.diagnostics().compatibilityMaterializations,before.compatibilityMaterializations);assert.equal(store.diagnostics().recordWrites,before.recordWrites);
+    return expected;
+  }
+  assert.equal(verify().get(fallbackId).definition.stats.owner,2);
+  store.transact(s=>{s.cardAuthoring.documents[0].document.fields.find(field=>field.key==='owner').visibility='operator';});
+  x.core.configureAdmin(admin,{key:'pause-inventory-trading',expectedRevision:x.core.adminOverview(admin).revision,reason:'Maintenance',scope:'site',changes:{tradingPaused:true}});
+  const refreshed=verify();assert.equal(refreshed.get(fallbackId).definition.stats.owner,undefined);assert([...refreshed.values()].every(copy=>copy.untradableReason==='Direct trading is paused'));
+});
+
 function notificationV3(path,state,key){
  const codec=createStateCodec(key),db=new DatabaseSync(path),hash=(collection,id)=>createHmac('sha256',key).update(JSON.stringify(['digital-card.record-key.v1',collection,id])).digest('hex');
  try{db.exec(schemaSqlV3);db.prepare('INSERT INTO framework_meta VALUES(1,3,?)').run(codec.encode({format:'digital-card.indexed-state',version:3,recordKeys:'blind-v1'}));

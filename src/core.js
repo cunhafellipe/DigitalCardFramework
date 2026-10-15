@@ -321,10 +321,10 @@ export class CardFramework {
   #preferences(user){return {inventoryVisibility:'traders',favoriteCopyIds:[],wishlistCardIds:[],blockedUserIds:[],...user.preferences};}
   #query(fn){return this.#store.query?this.#store.query(fn):this.#store.read(s=>fn(memoryQueries(s)));}
   #queryUser(q,actor){check(actor?.disabled!==true&&typeof actor?.userId==='string','UNAUTHENTICATED','A verified framework user is required',401);const user=q.get('users',actor.userId);check(user,'UNAUTHENTICATED','A verified framework user is required',401);return user;}
-  #viewState(q,copies=[],userIds=[]){
+  #viewState(q,copies=[],userIds=[],{catalog=true}={}){
     const ids=[...new Set([...userIds,...copies.flatMap(copy=>[copy.ownerId,copy.openedBy])].filter(Boolean))],codeIds=[...new Set(copies.flatMap(copy=>copy.codeIds??[]))];
     const records=(field,keys)=>{const result={};for(let i=0;i<keys.length;i+=2000)Object.assign(result,q.records(field,{ids:keys.slice(i,i+2000)}));return result;};
-    return {catalog:q.value('catalog'),adminControls:q.value('adminControls'),cardAuthoring:q.value('cardAuthoring'),cardValidation:q.value('cardValidation'),tradingPolicy:q.value('tradingPolicy'),users:records('users',ids),copies:Object.fromEntries(copies.map(copy=>[copy.id,copy])),codes:records('codes',codeIds)};
+    return {...(catalog?{catalog:q.value('catalog')}:{}),adminControls:q.value('adminControls'),cardAuthoring:q.value('cardAuthoring'),cardValidation:q.value('cardValidation'),tradingPolicy:q.value('tradingPolicy'),users:records('users',ids),copies:Object.fromEntries(copies.map(copy=>[copy.id,copy])),codes:records('codes',codeIds)};
   }
   #inventoryViews(s,copies,userId){return copies.map(copy=>{check(copy.ownerId===userId&&copy.state==='owned','INVALID_STATE','Indexed card ownership differs',500);const reason=this.#inventoryTradeReason(copy,userId,s);return {...this.#copyView(s,copy,userId),tradable:!reason&&!this.#remoteTransferPolicy&&!this.#remoteTradePolicy,untradableReason:reason,...(!reason&&(this.#remoteTransferPolicy||this.#remoteTradePolicy)?{remoteReviewRequired:true}:{})};});}
   me(actor){return this.#query(q=>{const u=this.#queryUser(q,actor),s={adminControls:q.value('adminControls')};return {userId:u.id,displayName:u.displayName,preferences:this.#preferences(u),adminStatus:{site:adminSite(s),restrictions:adminRestrictions(s,u.id)}};});}
@@ -369,9 +369,9 @@ export class CardFramework {
       // Legacy free-text and locale-name semantics operate on public projections.
       // This optional path loads the matching account inventory, not all state.
       const copies=[];let after='';do{const result=q.pageCopies({...options,search:'',sort:'ordinal',ownerId:user.id,state:'owned',limit:200,after});copies.push(...result.items);after=result.next;}while(after);
-      return page(this.#inventoryViews(this.#viewState(q,copies,[user.id]),copies,user.id),options);
+      return page(this.#inventoryViews(this.#viewState(q,copies,[user.id],{catalog:false}),copies,user.id),options);
     }
-    const result=q.pageCopies({...options,ownerId:user.id,state:'owned'}),s=this.#viewState(q,result.items,[user.id]);return {...result,items:this.#inventoryViews(s,result.items,user.id)};
+    const result=q.pageCopies({...options,ownerId:user.id,state:'owned'}),s=this.#viewState(q,result.items,[user.id],{catalog:false});return {...result,items:this.#inventoryViews(s,result.items,user.id)};
   });}
   collectionSummary(actor,options={}){return this.#query(q=>{const user=this.#queryUser(q,actor),result=q.variantCounts({...options,ownerId:user.id}),copies=Object.values(q.records('copies',{ids:result.items.map(row=>row.copyId)})),s=this.#viewState(q,copies,[user.id]),views=new Map(this.#inventoryViews(s,copies,user.id).map(copy=>[copy.id,copy]));return {...result,items:result.items.map(({copyId,...row})=>({...row,card:views.get(copyId)}))};});}
   notifications(actor,options={}){return this.#query(q=>{const user=this.#queryUser(q,actor);return page(q.notifications(user.id),options);});}

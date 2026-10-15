@@ -224,3 +224,37 @@ const uncheckedState:{version:number}=encryptedCodec.decode(encodedState);
 // @ts-expect-error Encoded state is text, not bytes.
 plainCodec.decode(new Uint8Array());
 void [absentStateKey,omittedStateKey,uncheckedState];
+
+import {externalPurchaseDefinitions, externalPurchaseSchema, type ExternalPurchaseDefinitionName} from '@digital-card/framework/external-purchase-contracts';
+import {createCodeVault, type CodeEnvelope} from '@digital-card/framework/code-vault';
+const externalDefinitions=externalPurchaseDefinitions('#/components/schemas/');
+const definitionName:ExternalPurchaseDefinitionName='ExternalRefundProof';
+const externalObjectType:'object'=externalDefinitions[definitionName].type;
+const externalAdditionalProperties:false=externalPurchaseSchema.$defs.ExternalPurchaseQuote.additionalProperties;
+externalDefinitions.ExternalPurchaseProjection.allOf?.map(constraint=>Object.keys(constraint));
+externalDefinitions.ExternalPurchaseIntent.required.map(name=>name.toUpperCase());
+const defaultDefinitions=externalPurchaseDefinitions();
+// @ts-expect-error Schema reference prefixes must be strings.
+externalPurchaseDefinitions(42);
+// @ts-expect-error Only declared host purchase definitions are returned.
+externalDefinitions.ExternalPurchaseUnknown;
+const vault=createCodeVault({activeKeyId:'current',keys:{current:Buffer.alloc(32)},indexKey:Buffer.alloc(32)});
+const fingerprint:string=vault.fingerprint({providerId:'example',metadata:{b:2,a:1},entries:[true,null]});
+const envelope:CodeEnvelope=vault.seal('EXAMPLE-CODE','code:example');
+const envelopeVersion:1=envelope.version;
+const decryptedCode:string=vault.open(envelope,'code:example');
+// @ts-expect-error Vault key rings require actual Node.js Buffers.
+createCodeVault({activeKeyId:'current',keys:{current:new Uint8Array(32)},indexKey:Buffer.alloc(32)});
+// @ts-expect-error Fingerprint index keys must be Buffers.
+createCodeVault({activeKeyId:'current',keys:{current:Buffer.alloc(32)},indexKey:'ab'.repeat(32)});
+// @ts-expect-error Vault plaintext codes are strings.
+vault.seal(123,'context');
+// @ts-expect-error Vault operations require an associated context.
+vault.open(envelope);
+// @ts-expect-error Envelopes use the supported version literal.
+vault.open({...envelope,version:2},'context');
+// @ts-expect-error Envelopes require authentication tags.
+vault.open({version:1,keyId:'current',iv:'example',data:'example'},'context');
+// @ts-expect-error Fingerprint inputs must be JSON-compatible.
+vault.fingerprint({run:()=>true});
+void [externalObjectType,externalAdditionalProperties,defaultDefinitions,fingerprint,envelopeVersion,decryptedCode];

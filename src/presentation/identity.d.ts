@@ -1,5 +1,3 @@
-import type {BigNumberish, ContractRunner, Provider} from 'ethers';
-
 export interface WalletNonce {nonce: string; expires: number}
 export interface WalletChallenge {
   domain: string;
@@ -47,7 +45,7 @@ export interface OwnershipProvider {
   getBlockNumber(): Promise<number>;
   getBlock(height: number): Promise<{hash: string | null} | null>;
   readToken(identity: TokenIdentity, account: string, blockTag: number): Promise<{
-    owner?: string; balance?: BigNumberish;
+    owner?: string; balance?: string | number | bigint;
   }>;
 }
 export interface OwnershipSnapshotBase {
@@ -70,8 +68,21 @@ export type ExternalOwnershipState<T extends {checkedAt: number; state: string}>
 export function externalOwnershipState<T extends {checkedAt: number; state: string}>(snapshot: T,
   options?: {maxAgeMs?: number; clock?: () => number},
 ): ExternalOwnershipState<T>;
-/** Requires the optional ethers presentation dependency used by the runtime. */
-export function ethersOwnershipProvider(provider: Pick<Provider, 'getNetwork' | 'getBlockNumber' | 'getBlock'> & ContractRunner): OwnershipProvider;
+export interface OwnershipContractCall {
+  to: string;
+  data: string;
+  blockTag: number;
+}
+export interface OwnershipContractCaller {
+  call(transaction: OwnershipContractCall): Promise<string>;
+}
+/** Read-only calls can be supplied by the runner itself or its attached provider. */
+export type EthersOwnershipRunner = Pick<OwnershipProvider, 'getNetwork' | 'getBlockNumber' | 'getBlock'> & (
+  (OwnershipContractCaller & {provider: OwnershipContractCaller | null}) |
+  {provider: OwnershipContractCaller; call?: OwnershipContractCaller['call']}
+);
+/** Importing this module at runtime requires the optional ethers and siwe presentation dependencies. */
+export function ethersOwnershipProvider(provider: EthersOwnershipRunner): OwnershipProvider;
 export function marketplaceMetadata<A = unknown>(options: {
   title: string; description: string; posterURL: string; viewerURL: string; attributes?: A[];
 }): {

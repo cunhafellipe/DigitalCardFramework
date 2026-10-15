@@ -795,3 +795,22 @@ new SQLiteStore('encrypted.sqlite',{encryptionKey:'key'});
 // @ts-expect-error Snapshot-only stores do not support all command/custody workflows.
 new CardFramework({store:{read:hostMemory.read.bind(hostMemory),transact:hostMemory.transact.bind(hostMemory),close:()=>{}}});
 void [sqliteRevision,sqliteWrite,sqliteRecordRevision,sqliteCapacity,sqliteDueActions,sqliteDiagnostics,sqliteIntegrity,sqliteBackup];
+
+import {ethersOwnershipProvider, type OwnershipProvider, type OwnershipContractCaller} from '@digital-card/framework/presentation/identity';
+const identityChain={getNetwork:async()=>({chainId:1n}),getBlockNumber:async()=>100,getBlock:async()=>({hash:'block-hash'})};
+const identityCaller:OwnershipContractCaller={async call(transaction){
+  const address:string=transaction.to,calldata:string=transaction.data,height:number=transaction.blockTag;
+  void [address,calldata,height];return '0x';
+}};
+const identityDirect:OwnershipProvider=ethersOwnershipProvider({...identityChain,...identityCaller,provider:null});
+const identityDelegated:OwnershipProvider=ethersOwnershipProvider({...identityChain,provider:identityCaller});
+const identityBalance:ReturnType<OwnershipProvider['readToken']>=Promise.resolve({balance:10n});
+// @ts-expect-error Network and block readers alone cannot execute ownership contract calls.
+ethersOwnershipProvider({...identityChain,provider:null});
+// @ts-expect-error The adapter needs confirmed block access as well as contract calls.
+ethersOwnershipProvider({...identityCaller,provider:null,getNetwork:identityChain.getNetwork,getBlockNumber:identityChain.getBlockNumber});
+// @ts-expect-error Contract calls return ABI-encoded strings.
+ethersOwnershipProvider({...identityChain,provider:null,call:async()=>123});
+// @ts-expect-error Ownership balances must be accepted integer representations.
+const invalidIdentityBalance:ReturnType<OwnershipProvider['readToken']>=Promise.resolve({balance:{value:10}});
+void [identityDirect,identityDelegated,identityBalance,invalidIdentityBalance];

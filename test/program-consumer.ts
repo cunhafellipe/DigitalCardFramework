@@ -147,3 +147,17 @@ analyzePerformance(performanceInput,{decoders:'1'});
 // @ts-expect-error Scenes must provide a map lookup, not a plain dictionary.
 analyzePerformance({...performanceProject,scenes:{'front.json':performanceScene}});
 void sameReport;
+
+import * as documentBootstrap from '@digital-card/framework/presentation/program-bootstrap';
+import * as albumBootstrap from '@digital-card/framework/presentation/program-album-bootstrap';
+import * as openerBootstrap from '@digital-card/framework/presentation/program-opener-bootstrap';
+const documentBootstrapHasNoExports:keyof typeof documentBootstrap extends never?true:false=true;
+const albumBootstrapHasNoExports:keyof typeof albumBootstrap extends never?true:false=true;
+const openerBootstrapHasNoExports:keyof typeof openerBootstrap extends never?true:false=true;
+// @ts-expect-error The document bootstrap initializes on import and exports no callable API.
+documentBootstrap.connectProgram();
+// @ts-expect-error Album bootstrap cleanup is handled by pagehide, not an exported method.
+albumBootstrap.dispose();
+// @ts-expect-error Opener bootstrap cleanup is handled by pagehide, not an exported method.
+openerBootstrap.dispose();
+void [documentBootstrapHasNoExports,albumBootstrapHasNoExports,openerBootstrapHasNoExports];

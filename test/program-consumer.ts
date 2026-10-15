@@ -565,3 +565,81 @@ projectState.undoEdit();
 // @ts-expect-error Draft loading may find no saved project and is asynchronous.
 const immediateDraft:Project=loadDraft();
 void [projectRevision,edited,undone,redone,previousState,nextState,updatedPosters,savedProject,openedProject,blankProjectPackage,glitterKind,bloomCenter,immediateDraft];
+
+import {imagePackage, createAuthoring, type AuthoringCatalog, type AuthoringPackage} from '@digital-card/framework/presentation/authoring';
+import type {BuiltPackage as AuthoringImagePackage} from '@digital-card/framework/presentation/package';
+const authoringImage={bytes:new Uint8Array(16),mediaType:'image/png' as const};
+const imageArchive:Promise<AuthoringImagePackage>=imagePackage({...authoringImage,id:'example',title:'Example',back:authoringImage});
+interface ExampleAuthoringCatalog extends AuthoringCatalog {version:number}
+const authoring=createAuthoring<ExampleAuthoringCatalog,Promise<{revision:number}>>({
+  performance:{mode:'warn',drawLayers:20},
+  importers:{custom:async(source,context)=>{
+    const input:Uint8Array|undefined=source.bytes;
+    const requestTitle:string|undefined=context.request.title;
+    context.signal?.throwIfAborted();
+    void [input,requestTitle];
+    return projectValidatedPackage;
+  }},
+  effects:{duplicate:(node,parameters,context)=>{
+    const title:string=context.manifest.title;
+    const side:'front'|'back'=context.side;
+    const parameter:unknown=parameters.amount;
+    void [title,side,parameter];
+    return [node,{...node,id:node.id+'.copy'}];
+  }},
+  transform:async(project,context)=>{project.edit(p=>{p.manifest.title=context.request.title??'Example';});},
+  publish:async(pkg,options)=>{
+    const accepted:boolean=pkg.performance.accepted;
+    const key:string=options.key;
+    options.signal?.throwIfAborted();
+    void [accepted,key];
+    return {contract:'digital-card@0.1',digest:pkg.digest,baseURL:'https://assets.example/'};
+  },
+  validateCatalog:async catalog=>{const version:number=catalog.version;void version;},
+  commitCatalog:async(catalog,options)=>{options.signal?.throwIfAborted();return {revision:catalog.version};},
+  onEvent:async event=>{
+    if(event.type==='build.completed'){const accepted:boolean=event.performance.accepted;void accepted;}
+    if(event.type==='build.failed'){const message:string=event.message;const code:string=event.code;void [message,code];}
+    if(event.type==='build.started'){const operation:string=event.operationId;void operation;}
+    if(event.type==='presentation.published'){const id:string=event.id;const digest:string=event.digest;void [id,digest];}
+    if(event.type==='catalog.committed'){const digests:string[]=event.digests;void digests;}
+    // @ts-expect-error Observer event objects are frozen at the top level.
+    event.type='build.started';
+  },
+});
+const authoringRequest={id:'example',source:{...authoringImage,format:'image'},effects:[{id:'duplicate',node:'art',parameters:{amount:2}}]};
+const builtAuthoring:Promise<AuthoringPackage>=authoring.build(authoringRequest,{signal:artworkAbort.signal});
+const batchAuthoring:Promise<AuthoringPackage[]>=authoring.buildBatch([authoringRequest]);
+authoring.publishPack({cards:[authoringRequest],catalog:{version:1,cards:[{id:'example',name:'Example'}]},key:'publication-1'}).then(publication=>{
+  const revision:number=publication.result.revision;
+  const version:number=publication.catalog.version;
+  const digests:string[]=publication.digests;
+  void [revision,version,digests];
+});
+const authoringDescription=authoring.describe();
+const authoringVersion:'0.1.0'=authoringDescription.apiVersion;
+const authoringImporters:string[]=authoringDescription.importers;
+const authoringEffects:string[]=authoringDescription.effects;
+const authoringPublication:boolean=authoringDescription.publication;
+createAuthoring({effects:{identity:node=>node},transform:()=>{},onEvent:()=>{}}).describe();
+// @ts-expect-error Image packaging consumes bytes.
+imagePackage({bytes:'png',mediaType:'image/png'});
+// @ts-expect-error Flat images support JPEG, PNG and WebP media types.
+imagePackage({bytes:new Uint8Array(0),mediaType:'image/gif'});
+// @ts-expect-error Image packaging produces its archive asynchronously.
+const immediateAuthoringImage:AuthoringImagePackage=imagePackage(authoringImage);
+// @ts-expect-error Builds produce packages asynchronously.
+const immediateAuthoringPackage:AuthoringPackage=authoring.build(authoringRequest);
+// @ts-expect-error Batch cards require stable IDs.
+authoring.buildBatch([{source:authoringImage}]);
+// @ts-expect-error Cancellation uses an AbortSignal.
+authoring.build(authoringRequest,{signal:true});
+// @ts-expect-error Effect recipes must return nodes synchronously.
+createAuthoring({effects:{invalid:async node=>node}});
+// @ts-expect-error Importers must return validated package data.
+createAuthoring({importers:{invalid:()=>new Uint8Array(0)}});
+// @ts-expect-error Publishers return a presentation reference.
+createAuthoring({publish:()=>({digest:'digest'})});
+// @ts-expect-error Publication requires an idempotency key.
+authoring.publishPack({cards:[authoringRequest],catalog:{version:1,cards:[{id:'example'}]}});
+void [imageArchive,builtAuthoring,batchAuthoring,authoringVersion,authoringImporters,authoringEffects,authoringPublication,immediateAuthoringImage,immediateAuthoringPackage];

@@ -208,6 +208,10 @@ jobs:
       - run: node test/codes-browser.mjs test-results/codes
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: node test/codes-shell-browser.mjs test-results/codes-shell
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: node test/command-recovery-browser.mjs
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}

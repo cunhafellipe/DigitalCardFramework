@@ -249,7 +249,7 @@ export interface Operations {
   "configureCodePool": { request: { "key": string; "pool": Schemas["CodePool"]; [key: string]: unknown; }; response: Schemas["CodePoolRecord"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "codeInventory": { request: undefined; response: Schemas["CodeInventoryPage"]; path: Record<string, never>; query: { "limit"?: number | null; "after"?: string | null; "search"?: string | null; "sort"?: "newest" | "name" | null; }; method: "GET" };
   "importCodes": { request: Schemas["CodeImport"]; response: { "batchId": string; "count": number; "ids": Array<string>; [key: string]: unknown; }; path: Record<string, never>; query: Record<string, never>; method: "POST" };
-  "confirmCodeStatus": { request: Schemas["CodeConfirmation"]; response: { "codeId"?: string; "status"?: "redeemed" | "revoked"; [key: string]: unknown; }; path: Record<string, never>; query: Record<string, never>; method: "POST" };
+  "confirmCodeStatus": { request: Schemas["CodeConfirmation"]; response: { "codeId": string; "status": "redeemed" | "revoked"; }; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "tradingPolicy": { request: undefined; response: Schemas["TradingPolicyRecord"]; path: Record<string, never>; query: Record<string, never>; method: "GET" };
   "configureTrading": { request: Schemas["TradingSettings"]; response: Schemas["TradingPolicyRecord"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "setCardTransferLock": { request: Schemas["TransferLock"]; response: Schemas["CardTransferLockReceipt"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
@@ -283,7 +283,7 @@ export interface Operations {
   "saveCardResource": { request: Schemas["CardLibrarySave"]; response: Schemas["CardResourceSaveReceipt"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "retireCardResource": { request: Schemas["CardLibraryLifecycle"]; response: Schemas["CardResourceRetireReceipt"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "restoreCardResource": { request: Schemas["CardLibraryLifecycle"]; response: Schemas["CardResourceRestoreReceipt"]; path: Record<string, never>; query: Record<string, never>; method: "POST" };
-  "updateCopyStats": { request: Schemas["CardCopyStats"]; response: { "copyId"?: string; "version"?: number; [key: string]: unknown; }; path: Record<string, never>; query: Record<string, never>; method: "POST" };
+  "updateCopyStats": { request: Schemas["CardCopyStats"]; response: { "copyId": string; "version": number; }; path: Record<string, never>; query: Record<string, never>; method: "POST" };
   "adminOverview": { request: undefined; response: Schemas["AdminOverview"]; path: Record<string, never>; query: Record<string, never>; method: "GET" };
   "adminUsers": { request: undefined; response: Schemas["AdminUsersPage"]; path: Record<string, never>; query: { "limit"?: number | null; "after"?: string | null; "search"?: string | null; "sort"?: "newest" | "name" | null; }; method: "GET" };
   "adminUser": { request: undefined; response: Schemas["AdminUserDetail"]; path: Record<string, never>; query: { "limit"?: number | null; "after"?: string | null; "search"?: string | null; "sort"?: "newest" | "name" | null; "userId": string; }; method: "GET" };

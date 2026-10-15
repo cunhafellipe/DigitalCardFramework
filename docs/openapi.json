@@ -5458,6 +5458,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "codeId",
+                    "status"
+                  ],
                   "properties": {
                     "codeId": {
                       "type": "string",
@@ -10044,6 +10049,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "copyId",
+                    "version"
+                  ],
                   "properties": {
                     "copyId": {
                       "type": "string"

@@ -11,6 +11,18 @@ async function acquisition(){
   return {price,state};
 }
 void acquisition;
+async function operatorReceipts(){
+  const confirmed=await call('confirmCodeStatus',{providerId:'issuer',eventId:'event',codeId:'code',status:'redeemed',occurredAt:new Date().toISOString()});
+  const codeId:string=confirmed.codeId,status:'redeemed'|'revoked'=confirmed.status;
+  const updated=await call('updateCopyStats',{key:'stats',copyId:'copy',expectedVersion:1,values:{level:2}});
+  const copyId:string=updated.copyId,version:number=updated.version;
+  // @ts-expect-error provider confirmation receipts exclude private fields
+  confirmed.credentials;
+  // @ts-expect-error stat update receipts exclude copy contents
+  updated.stats;
+  return {codeId,status,copyId,version};
+}
+void operatorReceipts;
 // Deliberate contract drift must continue to fail the strict consumer check.
 // @ts-expect-error quantity is an integer JSON number, not a string
 void call('quote',{productId:'sample',quantity:'1'});

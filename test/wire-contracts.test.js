@@ -470,6 +470,28 @@ test('audit and import HTTP contracts preserve diagnostics, preview warnings and
 });
 
 
+test('code confirmation and copy-stat HTTP receipts require exact replayable fields',async t=>{
+  const x=codesFixture({stock:2}),manager={...x.alice,role:'admin'};let actor=manager,handler;
+  const server=createServer((request,response)=>handler(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+  handler=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:origin,requirePrincipal:true,exposeOperators:true});
+  t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();x.core.close();}));
+  const call=createWireTransport({baseUrl:origin+'/api',principal:()=>actor.userId,fetch:(url,options)=>fetch(url,{...options,headers:{...options.headers,Origin:origin}})});
+  for(const status of ['redeemed','revoked']){
+    const codeId=x.openCode().codes[0].id,input={providerId:'example.game',eventId:'receipt-'+status,codeId,status,occurredAt:'2026-09-30T12:01:00Z'},receipt=await call('confirmCodeStatus',input);
+    assert.deepEqual(receipt,{codeId,status});assert.deepEqual(await call('confirmCodeStatus',input),receipt);
+    for(const mutate of [value=>delete value.codeId,value=>delete value.status,value=>value.codeId=1,value=>value.status='allocated',value=>value.credentials={}]){const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('confirmCodeStatus',200,invalid),WireContractError);}
+  }
+  const document={schemaVersion:1,id:'receipt.stats',revision:1,name:'Receipt stats',fields:[{key:'level',label:'Level',type:'integer',scope:'copy',source:'provider',required:true,default:1,maximum:10}]};
+  x.core.saveCardPolicy(manager,{key:'receipt-stats-save',expectedRevision:x.core.cardPolicies(manager).revision,document});
+  const policy=x.core.previewCardPolicy(manager,{expectedRevision:x.core.cardPolicies(manager).revision,policy:'receipt.stats@1',assignments:[{scope:'installation',policy:'receipt.stats@1'}]});x.core.activateCardPolicy(manager,{...policy,key:'receipt-stats-activate'});
+  const card=x.core.operatorCatalog(manager).cards.find(card=>card.id==='dawn'),preview=x.core.previewImport(manager,{expectedVersion:x.core.catalog().version,source:{cards:[{...card,name:card.name+' revised'}]}});x.core.commitImport(manager,{...preview,key:'receipt-stats-publish'});
+  const copy=x.open()[0],input={key:'receipt-stats-update',copyId:copy.id,expectedVersion:copy.version,values:{level:2}},receipt=await call('updateCopyStats',input);
+  assert.deepEqual(receipt,{copyId:copy.id,version:copy.version+1});assert.deepEqual(await call('updateCopyStats',input),receipt);
+  const later=await call('updateCopyStats',{...input,key:'receipt-stats-later',expectedVersion:receipt.version,values:{level:3}});assert.equal(later.version,receipt.version+1);assert.deepEqual(await call('updateCopyStats',input),receipt);
+  const inspected=x.core.inspectCard(x.alice,copy.id);assert.equal(inspected.stats.level,3);assert.equal(inspected.issuedStats.level,1);
+  for(const mutate of [value=>delete value.copyId,value=>delete value.version,value=>value.copyId=1,value=>value.version='2',value=>value.version=1.5,value=>value.credentials={}]){const invalid=structuredClone(receipt);mutate(invalid);assert.throws(()=>validateWireResponse('updateCopyStats',200,invalid),WireContractError);}
+});
+
 test('default wire error contract preserves extension errors and redacts unexpected HTTP failures',async t=>{
   let failure=new Error('private provider detail'),handler;
   const server=createServer((request,response)=>handler(request,response));

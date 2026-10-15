@@ -63,6 +63,14 @@ jobs:
       - run: node test/plugin-purchase-conformance.mjs "$RUNNER_TEMP/plugin-client" python3
       - run: go -C examples/plugins/go-transfer-policy build -mod=readonly -buildvcs=false -trimpath -o "$RUNNER_TEMP/transfer-policy" .
       - run: node test/go-transfer-policy-conformance.mjs "$RUNNER_TEMP/transfer-policy"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: node test/java-conformance.mjs
+        env:
+          JAVA: java
+          JAVAC: javac
       - run: node --test test/editor-panel-examples.mjs
         env:
           PYTHON: python3

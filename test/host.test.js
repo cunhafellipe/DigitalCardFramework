@@ -56,3 +56,29 @@ test('production storage budget is validated and applied before admission',async
     try{const status=await new Promise((resolveExit,reject)=>{const timer=setTimeout(()=>{child.kill();reject(Error('Host configuration was not rejected'));},10000);child.once('error',error=>{clearTimeout(timer);reject(error);});child.once('exit',status=>{clearTimeout(timer);resolveExit(status);});});assert.notEqual(status,0);assert.match(output,expected);}finally{if(child.exitCode===null){child.kill();await new Promise(r=>child.once('exit',r));}rmSync(dir,{recursive:true,force:true});}
   }
 });
+
+test('production SIGTERM drains an accepted request and preserves original-key replay',{skip:process.platform==='win32',timeout:30000},async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'host-drain-')),extension=join(dir,'host.mjs'),catalog=join(dir,'catalog.json'),database=join(dir,'state.sqlite'),children=[];
+  const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));
+  writeFileSync(catalog,JSON.stringify(sampleCatalog));
+  writeFileSync(extension,`export function createFrameworkOptions(){return {bindings:{'demo.code':()=>({code:'SYNTHETIC'})}};}
+export const identityProvider={begin:async()=>({url:'https://issuer.test/authorize',data:{}}),finish:async()=>({issuer:'https://issuer.test',subject:'fixture'})};
+export async function handleStatic(req,res,{framework}){if(!['/fixture/write','/fixture/replay'].includes(req.url))return false;
+ const user=await framework.registerUser({role:'admin'},{provider:'shutdown-fixture',subject:'collector',displayName:'Collector'});
+ if(req.url==='/fixture/write'){console.log('fixture request accepted');await new Promise(r=>setTimeout(r,150));}
+ const result=await framework.setPreferences({userId:user.id},{key:'drain-original',inventoryVisibility:'private'});
+ const audit=await framework.audit({role:'admin'});res.setHeader('Content-Type','application/json');res.end(JSON.stringify({result,audit}));return true;}`);
+  const env={...process.env,SITE_ORIGIN:'https://cards.test',STATE_ENCRYPTION_KEY:randomBytes(32).toString('hex'),STATE_ENCRYPTION_KEY_FILE:'',CODE_VAULT_KEYS:'',CODE_VAULT_KEYS_FILE:'',CODE_INDEX_KEY:'',CODE_INDEX_KEY_FILE:'',CATALOG_FILE:catalog,DATABASE_PATH:database,HOST_MODULE:extension,OPERATOR_SUBJECTS:'[]',PORT:String(port),BIND_ADDRESS:'127.0.0.1'};
+  t.after(async()=>{for(const child of children)if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await Promise.all(children.map(child=>child.done));assert(resolve(dir).startsWith(join(resolve(tmpdir()),'host-drain-')));rmSync(dir,{recursive:true,force:true});});
+  async function start(){
+    const child=spawn(process.execPath,[resolve('host/server.js')],{env,stdio:['ignore','pipe','pipe']});children.push(child);child.output='';child.done=new Promise(r=>child.once('exit',(code,signal)=>r({code,signal})));child.stdout.on('data',b=>child.output+=b);child.stderr.on('data',b=>child.output+=b);
+    child.wait=marker=>new Promise((yes,no)=>{if(child.output.includes(marker))return yes();const timer=setTimeout(()=>finish(Error('Host did not reach '+marker+': '+child.output)),10000);const data=()=>{if(child.output.includes(marker))finish();},exit=()=>finish(Error('Host exited before '+marker+': '+child.output));function finish(error){clearTimeout(timer);child.stdout.off('data',data);child.off('exit',exit);error?no(error):yes();}child.stdout.on('data',data);child.once('exit',exit);});
+    await child.wait('production host ready');return child;
+  }
+  const base='http://127.0.0.1:'+port,first=await start();
+  const pending=fetch(base+'/fixture/write').then(async response=>{assert.equal(response.status,200);return response.json();});pending.catch(()=>{});
+  await first.wait('fixture request accepted');assert(first.kill('SIGTERM'));const written=await pending;assert.equal(written.audit.ok,true);assert.deepEqual(await first.done,{code:0,signal:null});
+  await assert.rejects(fetch(base+'/healthz',{signal:AbortSignal.timeout(1000)}));
+  const second=await start(),response=await fetch(base+'/fixture/replay');assert.equal(response.status,200);const replay=await response.json();assert.deepEqual(replay,written);assert(second.kill('SIGTERM'));assert.deepEqual(await second.done,{code:0,signal:null});
+});
+

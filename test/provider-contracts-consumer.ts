@@ -621,3 +621,22 @@ const invalidHttpService:HttpFramework={...httpService,wallet:()=> 'balance'};
 // @ts-expect-error The handler result must be awaited.
 const immediateHandled:boolean=hostHandler(handlerHttpRequest,handlerHttpResponse);
 void [hostServer,handledRequest,invalidHttpService,immediateHandled];
+
+import * as rootFramework from '@digital-card/framework';
+const rootCore=new rootFramework.CardFramework();
+const rootMemory=new rootFramework.MemoryStore();
+const rootRevision:number=rootMemory.read(state=>state.revision);
+const rootCatalog=rootFramework.validateCatalog({});
+const rootCatalogVersion:number=rootCatalog.version;
+const rootError:Error=new rootFramework.FrameworkError('INVALID_INPUT','Invalid catalog',400);
+const rootErrorStatus:number=new rootFramework.FrameworkError('INVALID_INPUT','Invalid catalog').status;
+const rootWallet=rootCore.wallet({userId:'collector'});
+const rootDefaults:boolean=rootFramework.tradingDefaults.enabled;
+const rootFactoryExports=[rootFramework.createCurrencyGateway,rootFramework.createCodeVault,rootFramework.createCodeGateway,rootFramework.cardBehavior,rootFramework.createRemoteActionHandler,rootFramework.externalPurchaseFingerprint,rootFramework.externalPurchaseId];
+// @ts-expect-error The root entry preserves structured constructor options.
+new rootFramework.CardFramework({unsupported:true});
+// @ts-expect-error Store callbacks remain synchronous through the root entry.
+rootMemory.transact(async state=>state.revision);
+// @ts-expect-error Catalog validation returns a structured catalog.
+const rootInvalidCatalog:string=rootFramework.validateCatalog({});
+void [rootRevision,rootCatalogVersion,rootError,rootErrorStatus,rootWallet,rootDefaults,rootFactoryExports,rootFramework.cardTypeDefaults,rootFramework.commerceDefaults,rootInvalidCatalog];

@@ -894,3 +894,80 @@ entryView.setVisibility('offscreen');
 entryCard.setPresentationInputs({});
 entryView.dispose();entryStage.dispose();entryResolver.dispose();
 void [entryContract,entryCapabilities,entryAssetHash,entryCaps,entryNodeCount,entryOperations,entryErrorCode,entryErrorPath,entryReady,entrySide,entryQuality,entryInputs,entrySceneUpdate,entrySnapshot,entryBudget,entryActiveViews,entryResolutionWidth,entryMounted,entryDefaultMounted,immediateEntryReady,requiredEntryQuality];
+
+import {element as uiElement,installStyles as installUIStyles,renderPack as renderUIPack,renderCard as renderUICard,renderInspector as renderUIInspector,renderTiltInspector,renderAlbum as renderUIAlbum,mountOpener,mountFramework,albumAppearance,validateAlbumAppearance,defaultCSS,type UICardRenderer,type UIFrameworkMounted,type UIFrameworkSectionView} from '@digital-card/framework/ui';
+import {albumArtwork,applyAlbumAppearance,validateAlbumArtwork,validateAlbumPageAssignments,validateAlbumPageSize,type AlbumLayout} from '../src/album-appearance.js';
+declare const uiCopy:import('@digital-card/framework/wire-types').Schemas['Copy'];
+declare const uiClient:import('@digital-card/framework/client').Client;
+declare const uiReveal:import('@digital-card/framework/client').RevealController;
+const uiButton:HTMLButtonElement=uiElement('button','example','Choose');
+const uiCustomElement:HTMLElement=uiElement('example-card');
+const removeUIStyles:()=>void=installUIStyles(uiButton,{theme:{'--dc-bg':'black','--dc-radius':4},css:'.example { color: inherit; }'});
+const uiPack=renderUIPack({name:'Pack',lineId:'line',artwork:{front:'/pack.png'}},{side:'back',previewCards:[uiButton]});
+const uiPackNode:HTMLDivElement=uiPack.node;uiPack.setSide('front');uiPack.dispose();
+const uiCard=renderUICard(uiCopy,{presentationMode:'interactive',onSelect:copy=>{const id:string=copy.id;void id;},backRenderer:copy=>uiElement('span','',copy.rarityId)});
+const uiInspector:HTMLElement=renderUIInspector(uiCopy);
+const uiTilt:HTMLElement=renderTiltInspector(uiCopy,{metadataRenderer:(copy,{localization})=>uiElement('span','',localization.date(copy.openedAt??0)),onClose:event=>event?.preventDefault()});
+const uiLayout:AlbumLayout={id:'custom',columns:3,gap:10,pageSize:4,appearance:{background:'#fff',radius:2},artwork:{cover:{src:'/cover.png'},pages:[{id:'first',title:'First'}]}};
+const uiNormalized=albumAppearance(uiLayout),uiValidated=validateAlbumAppearance({padding:12});applyAlbumAppearance(uiButton,uiNormalized);validateAlbumPageAssignments(uiLayout,[{data:{pageId:'first'}}]);
+const uiPageSize:number=validateAlbumPageSize(4),uiArtwork=albumArtwork(uiLayout),uiArtworkValidated=validateAlbumArtwork({pages:[{id:'first'}]});
+const uiAlbum=renderUIAlbum({layout:uiLayout,cards:[{copy:uiCopy,placement:{data:{pageId:'first'}}}]});uiAlbum.setPage?.(0);uiAlbum.dispose();
+const uiCustomAlbum=renderUIAlbum({cards:[{copy:uiCopy}]},{layouts:{custom:(model,{cardRenderer,onSelect,localization})=>({node:cardRenderer(model.cards[0]!.copy,{onSelect,localization}),dispose(){}})}});
+const stopUIOpener:()=>void=mountOpener(uiButton,{controller:uiReveal,view:(state,controller,context)=>{
+  const receipt:import('@digital-card/framework/wire-types').Schemas['Receipt']|null=state.receipt;
+  const loaded:Promise<void>=controller.load('pack');context.packArtwork?.('pack');void [receipt,loaded];
+  return {node:uiElement('section'),update(next){const phase:import('@digital-card/framework/client').RevealState['phase']=next.phase;void phase;},dispose(){}};
+}});
+const uiInlineSection:UIFrameworkSectionView=(model,context)=>{const principal:string=model.me.userId;const refreshed:Promise<void>=context.refresh();void [principal,refreshed];return uiElement('section');};
+const uiMounted:UIFrameworkMounted=mountFramework(uiButton,{client:uiClient,navigation:'tabs',sections:['collection',uiInlineSection],shell:Promise.resolve(null),
+  cardRenderer:(copy,options)=>renderUICard(copy,options),packRenderer:(product,options)=>renderUIPack(product,options),
+  albumRenderer:(model,options)=>renderUIAlbum(model,options),
+  inspectorRenderer:(copy,options)=>renderUIInspector(copy,options),
+  comparisonRenderer:(copies,options)=>renderUIInspector(copies[0]!,options),
+  layouts:{custom:(model,{cardRenderer})=>cardRenderer(model.cards[0]!.copy)},
+  views:{custom:(model,context)=>{
+    const awaiting:import('@digital-card/framework/wire-types').Schemas['CommandIntent'][]=model.recoverable;
+    const wallet:Awaited<ReturnType<typeof uiClient.wallet>>=model.wallet;
+    const changed:Promise<number|undefined>=context.action(async()=>3,{message:amount=>String(amount)});
+    const command:Promise<import('@digital-card/framework/client').CommandResult<'openPack'>>=context.mutate('openPack',{packId:'pack'});
+    const current:boolean=context.isCurrentModel(model),busy:boolean=context.isActionBusy();context.navigate('custom');context.state.selected='copy';void [awaiting,wallet,changed,command,current,busy];
+    return {node:uiElement('section'),dispose(){},requestLeave(proceed){proceed();}};
+  }},
+});
+const uiReady:Promise<void>=uiMounted.ready,uiShellReady:Promise<boolean>=uiMounted.shellReady,uiRefresh:Promise<void>=uiMounted.refresh(),uiSetShell:Promise<boolean>=uiMounted.setShell(null);
+uiMounted.inspect(uiCopy);uiMounted.inspectTogether([uiCopy]);uiMounted.dispose();stopUIOpener();removeUIStyles();
+// @ts-expect-error UI tags have their concrete DOM element types.
+const wrongUIButton:HTMLInputElement=uiElement('button');
+// @ts-expect-error Pack artwork sides are front or back.
+uiPack.setSide('inside');
+// @ts-expect-error Default pack rendering does not invoke selection callbacks.
+renderUIPack({name:'Pack',lineId:'line'},{onSelect:()=>{}});
+// @ts-expect-error Card selections receive the original copy type.
+renderUICard(uiCopy,{onSelect:(copy:string)=>{void copy;}});
+// @ts-expect-error Card rendering returns an element rather than a node wrapper.
+uiCard.node;
+// @ts-expect-error Book pagination is optional on the default album element.
+uiAlbum.setPage(0);
+// @ts-expect-error Openers require a reveal controller.
+mountOpener(uiButton,{});
+// @ts-expect-error Opener disposal is a function, not a mounted view object.
+stopUIOpener.dispose();
+// @ts-expect-error Framework mounts require a host client.
+mountFramework(uiButton,{});
+// @ts-expect-error Async readiness is not an immediately available boolean.
+const immediateUIReady:boolean=uiMounted.shellReady;
+// @ts-expect-error Mounts own the supplied root and expose no node wrapper.
+uiMounted.node;
+// @ts-expect-error Custom views return DOM content or a concrete node lifecycle wrapper.
+mountFramework(uiButton,{client:uiClient,views:{invalid:()=>({dispose(){}})}});
+// @ts-expect-error Inline section callbacks receive the narrower section context.
+const invalidUISection:UIFrameworkSectionView=(_model,context)=>{context.isActionBusy();return uiElement('section');};
+// @ts-expect-error Async action failures may resolve undefined.
+const requiredUIAction:Promise<number>=({} as import('@digital-card/framework/ui').UIFrameworkViewContext).action(()=>1);
+// @ts-expect-error Appearance dimensions are numbers, not CSS strings.
+const invalidUIAppearance:import('../src/album-appearance.js').AlbumAppearance={padding:'4px'};
+void [uiCustomElement,uiPackNode,uiInspector,uiTilt,uiValidated,uiPageSize,uiArtwork,uiArtworkValidated,uiCustomAlbum,uiReady,uiShellReady,uiRefresh,uiSetShell,wrongUIButton,immediateUIReady,invalidUISection,requiredUIAction,invalidUIAppearance,defaultCSS];
+const composedUI=mountFramework(uiButton,{client:uiClient,cardRenderer:renderer,packRenderer:packs,albumRenderer:albums,openerView:opener});
+composedUI.dispose();
+const standaloneUICardRenderer:UICardRenderer=renderer;
+void standaloneUICardRenderer;

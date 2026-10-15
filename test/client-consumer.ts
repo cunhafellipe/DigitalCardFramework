@@ -245,3 +245,53 @@ shopProductInformation(shopModel,{id:'starter'});
 // @ts-expect-error Product rate weights remain numeric.
 const invalidShopProduct:ShopProduct={...shopProduct,slots:[{count:1,pool:[{variantId:'variant',weight:'1'}]}]};
 void [collectionNode,albumsView,savedAlbum,nativeShop,shopDisposed,deckVersion,cardCount,rateSupply,publicRateLabel,rateNote,promisedShop,invalidShopProduct];
+
+import {renderMarketplace,renderFulfillments,renderTradingControls,type MarketplaceUIModel,type MarketplaceUIContext,type MarketplaceUIClient,type MarketplaceUIView} from '@digital-card/framework/marketplace-ui';
+import type {MarketplaceSession} from '@digital-card/framework/marketplace-session';
+import {mountCardPolicyAdmin,type CardPolicyAdmin} from '@digital-card/framework/card-policy-ui';
+declare const marketplaceUIModel:MarketplaceUIModel;
+declare const sharedMarketplaceSession:MarketplaceSession;
+const marketplaceUIContext:MarketplaceUIContext={client,mutate:runner,storage:sessionStorage,locale:'en',messages:{'marketplace.title':'Marketplace'},getPrincipal:()=> 'collector',isCurrentModel:model=>model.me.userId==='collector',isActionBusy:()=>false,refresh:async()=>{},
+  listingRenderer:(listing,options)=>{const title:string=listing.title;const price:number=listing.price.amount;const locale:string=options.localization.locale;const clientKey:string|undefined=options.client?.requestKey();const purchase:Promise<unknown>=options.purchase(listing,{newPurchase:true});const fallback:HTMLElement=options.defaultRenderer(listing);void [title,price,locale,clientKey,purchase,fallback];return {node:document.createElement('article'),dispose(){}};},
+  cardRenderer:(copy,options)=>{const id:string=copy.id;const interactive:false=options.interactive;const locale:string=options.localization.locale;void [id,interactive,locale];return {node:document.createElement('article'),dispose(){}};},
+};
+const nativeMarketplace:MarketplaceUIView=renderMarketplace(marketplaceUIModel,marketplaceUIContext);
+const nativeMarketplaceReady:Promise<void>=nativeMarketplace.ready;
+document.body.append(nativeMarketplace.node);nativeMarketplace.dispose();
+const marketplaceClientSubset:MarketplaceUIClient=client;
+renderMarketplace(marketplaceUIModel,{client:marketplaceClientSubset,mutate:runner}).dispose();
+const sharedMarketplaceView=renderMarketplace({catalog:{currencies:[]}},{listingRenderer:(listing,options)=>options.defaultRenderer(listing)},sharedMarketplaceSession);
+const sharedMarketplaceReady:Promise<unknown>=sharedMarketplaceView.ready;
+sharedMarketplaceView.dispose();
+const fulfillments:MarketplaceUIView=renderFulfillments({me:{role:'admin',permissions:['actions.manage']}},{client,locale:'en'});
+const fulfillmentsReady:Promise<void>=fulfillments.ready;
+document.body.append(fulfillments.node);fulfillments.dispose();
+const tradingControls:MarketplaceUIView=renderTradingControls(null,{client,messages:{'tradingControls.apply':'Apply'}});
+const tradingControlsReady:Promise<void>=tradingControls.ready;
+tradingControls.dispose();
+const cardPolicyRoot=document.createElement('div');
+const policyAdmin:CardPolicyAdmin=mountCardPolicyAdmin(cardPolicyRoot,{client,locale:'en',messages:{'policyUI.working':'Working'}});
+const policyAdminReady:Promise<void|string>=policyAdmin.ready;
+policyAdmin.ready.then(result=>{if(typeof result==='string'){const errorMessage:string=result;void errorMessage;}});
+policyAdmin.dispose();
+// @ts-expect-error A narrowed marketplace client needs a supplied command runner.
+renderMarketplace(marketplaceUIModel,{client:marketplaceClientSubset});
+// @ts-expect-error Marketplace listing renderers return DOM nodes or node wrappers.
+renderMarketplace(marketplaceUIModel,{client,listingRenderer:()=> 'listing'});
+// @ts-expect-error Custom shared sessions may carry a non-void readiness result.
+const narrowedSharedMarketplaceReady:Promise<void>=sharedMarketplaceView.ready;
+// @ts-expect-error Marketplace returns its lifecycle object synchronously.
+const promisedMarketplace:Promise<MarketplaceUIView>=renderMarketplace(marketplaceUIModel,marketplaceUIContext);
+// @ts-expect-error Fulfillments require the host client.
+renderFulfillments({me:{}},{});
+// @ts-expect-error Trading controls require checked trading policy operations.
+renderTradingControls(null,{client:{requestKey:client.requestKey}});
+// @ts-expect-error Policy administration mounts into an HTML root.
+mountCardPolicyAdmin('root',{client});
+// @ts-expect-error Policy administration requires all used policy/resource methods.
+mountCardPolicyAdmin(cardPolicyRoot,{client:{cardPolicies:client.cardPolicies}});
+// @ts-expect-error Policy mount returns a handle, without a node property.
+policyAdmin.node;
+// @ts-expect-error A handled initial policy error can resolve its displayed string.
+const voidPolicyReady:Promise<void>=policyAdmin.ready;
+void [nativeMarketplace,nativeMarketplaceReady,sharedMarketplaceReady,fulfillmentsReady,tradingControlsReady,policyAdminReady,narrowedSharedMarketplaceReady,promisedMarketplace,voidPolicyReady];

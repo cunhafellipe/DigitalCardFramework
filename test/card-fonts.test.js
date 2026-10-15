@@ -328,6 +328,30 @@ test("wrapped bidi keeps LTR words and digits in their logical order after the f
   }
 });
 
+test("embedded tracking measures and draws adjacent styled spans with the same width", () => {
+  const { font } = inspectFont(testFont(), "font/ttf"),
+    node = {
+      type: "text", width: 29, height: 20,
+      typography: { size: 20, lineHeight: 1, letterSpacing: 10, overflow: "clip" },
+      runs: [{ text: "A", color: "#ff0000" }, { text: "B", color: "#0000ff" }],
+    },
+    translated = [], clips = [],
+    ctx = Object.fromEntries(["save", "restore", "beginPath", "rect", "clip", "scale", "moveTo", "lineTo", "quadraticCurveTo", "bezierCurveTo", "closePath", "fill"].map(name => [name, () => {}]));
+  ctx.translate = x => translated.push(x);
+  ctx.rect = (...args) => clips.push(args);
+  assert.equal(fontMeasure(font, node)("AB", 20), 34);
+  const drawn = drawText(ctx, node, {}, font);
+  assert.equal(drawn.lines[0].width, 34);
+  assert.equal(drawn.overflow, true);
+  assert.deepEqual(translated, [0, 22]);
+  assert.deepEqual(clips, [[0, 0, 29, 20]]);
+  const plain = { ...node, text: "AB" }; delete plain.runs;
+  assert.equal(fontMeasure(font, plain)("AB", 20), drawn.lines[0].width);
+  translated.length = 0;
+  assert.equal(drawText(ctx, plain, {}, font).lines[0].width, drawn.lines[0].width);
+  assert.deepEqual(translated, [0, 22]);
+});
+
 test("embedded font overflow preserves exact ellipsis, clip and grow bounds", () => {
   const { font } = inspectFont(testFont(), "font/ttf"),
     measure = fontMeasure(font, {}),

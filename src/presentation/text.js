@@ -629,32 +629,35 @@ const withSpan = (node, span) => ({
     ),
   },
 });
+const fontTracking = (node) => node.typography?.letterSpacing ?? 0;
+const glyphTracking = (node, run, index) =>
+  index + 1 < run.glyphs.length ? fontTracking(node) : 0;
 function rawFontMeasure(font, node, value, size, mirrored) {
-  const active = fontForNode(font, node);
-  return (
-    (active
-      .layout(
-        value,
-        mirrored ? { rtlm: false } : undefined,
-        undefined,
-        node.typography?.language,
-        node.typography?.direction === "auto"
-          ? undefined
-          : node.typography?.direction,
-      )
-      .positions.reduce((sum, p) => sum + p.xAdvance, 0) *
-      size) /
-      active.unitsPerEm +
-    Math.max(0, Array.from(value).length - 1) *
-      (node.typography?.letterSpacing ?? 0)
+  const active = fontForNode(font, node),
+    run = active.layout(
+      value,
+      mirrored ? { rtlm: false } : undefined,
+      undefined,
+      node.typography?.language,
+      node.typography?.direction === "auto"
+        ? undefined
+        : node.typography?.direction,
+    );
+  return run.positions.reduce(
+    (sum, position, index) =>
+      sum +
+      position.xAdvance * size / active.unitsPerEm +
+      glyphTracking(node, run, index),
+    0,
   );
 }
 function makeFontMeasure(font, node, paragraphText) {
   const parts = directionalFragments(node, paragraphText);
   return (value, size, start = 0) =>
     parts(value, start).reduce(
-      (total, span) =>
+      (total, span, index) =>
         total +
+        (index ? fontTracking(node) : 0) +
         (span.icon
           ? size
           : rawFontMeasure(
@@ -759,7 +762,8 @@ export function drawText(ctx, node, manifest, font, icons = new Map()) {
   for (const line of layout.lines) {
     let x = line.x;
     const spans = parts(line.text, line.start);
-    for (const span of spans) {
+    for (const [spanIndex, span] of spans.entries()) {
+      if (font && spanIndex) x += fontTracking(node);
       if (span.icon) {
         const bitmap = icons.get(span.icon);
         ensure(bitmap, "TEXT_ICON", "Inline icon could not be loaded");
@@ -828,7 +832,7 @@ export function drawText(ctx, node, manifest, font, icons = new Map()) {
         }
         ctx.fill();
         ctx.restore();
-        x += position.xAdvance * scale + (t.letterSpacing ?? 0);
+        x += position.xAdvance * scale + glyphTracking(node, run, i);
       }
     }
   }

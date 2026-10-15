@@ -565,7 +565,7 @@ export function fontDiagnostics(font, node, text) {
 }
 export function accessibleText(manifest, scene) {
   const flatten = (nodes) =>
-    nodes.flatMap((n) => [n, ...flatten(n.children ?? [])]);
+    nodes.flatMap((n) => n.visible === false ? [] : [n, ...flatten(n.children ?? [])]);
   return flatten(scene?.nodes ?? [])
     .filter((n) => n.type === "text" && n.visible !== false)
     .sort((a, b) => (a.readingOrder ?? 0) - (b.readingOrder ?? 0))

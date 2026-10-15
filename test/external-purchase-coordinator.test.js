@@ -2,13 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fork} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {SQLiteStore} from '../src/sqlite.js';
 import {fixture} from './helpers.js';
+import {createPresentationStore} from '../src/presentation/service.js';
+import {backupRecoveryBundle,restoreRecoveryBundle} from '../tools/recovery-bundle.js';
 
 const providerId='coordinator.wallet';
 async function coordinator(config){
@@ -60,4 +62,25 @@ for(const branch of ['fulfilled','compensated'])test('independent payment coordi
   if(branch==='fulfilled'){assert.equal(terminal.purchase.packs.length,1);journal.finalize();journal.finalize();assert.deepEqual(journal.snapshot(),{balance:90,debits:1,refunds:0,finalized:1});}
   else{const refund=JSON.parse(saved.refund);assert.deepEqual(journal.refund({...terminal,state:'refund_required'}),refund);assert.deepEqual(await worker.call('compensate',{preparationId:prepared.preparationId,fingerprint:prepared.fingerprint,refundReceipt:refund},{verifiedEvidence:[refund]}),terminal);assert.deepEqual(journal.snapshot(),{balance:100,debits:1,refunds:1,finalized:0});}
   const snapshot=await worker.call('snapshot');assert.deepEqual(snapshot.wallet,walletBefore);assert.equal(snapshot.alicePacks.length,branch==='fulfilled'?1:0);assert.equal(snapshot.aliceInventory.length,0);assert.equal(snapshot.allocatedCopyIds.length,branch==='fulfilled'?1:0);if(branch==='fulfilled')assert.equal(snapshot.alicePacks[0].id,terminal.purchase.packs[0].id);assert.equal(snapshot.audit.ok,true);assert.equal(snapshot.integrity,true);await worker.close();
+});
+
+
+test('older bundle reconciles a surviving debit only after newer authority proves no issuance',{timeout:30000},async t=>{
+  const root=mkdtempSync(join(tmpdir(),'external-coordinator-')),filename=join(root,'newer.sqlite'),presentationRoot=join(root,'presentations'),bundle=join(root,'older-bundle'),destination=join(root,'restored'),paymentFile=join(root,'external-wallet.sqlite'),encryptionKey=randomBytes(32),x=fixture({store:new SQLiteStore(filename,{encryptionKey})});
+  const intent={key:'retained-paid-order',providerId,transactionId:'retained-paid-order',userId:x.alice.userId,externalCurrency:'points',externalUnits:'10',quote:x.core.quote(x.alice,{productId:'common',quantity:1})},walletBefore=x.core.wallet(x.alice);x.core.close();let worker,journal=walletJournal(paymentFile);
+  t.after(async()=>{await worker?.stop();journal.close();if(!resolve(root).startsWith(resolve(tmpdir())+sep))throw Error('Unsafe coordinator cleanup target');rmSync(root,{recursive:true,force:true});});
+  const art=await createPresentationStore({root:presentationRoot,authorize:()=>true});await art.close();await backupRecoveryBundle({database:filename,presentationRoot,destination:bundle,encryptionKey});
+  const manifest=JSON.parse(readFileSync(join(bundle,'manifest.json'),'utf8'));assert(manifest.excluded.includes('external-provider-state'));assert(!manifest.files.some(member=>member.path.includes('external-wallet')));
+  const config={filename,encryptionKey:encryptionKey.toString('hex'),providerId,alice:x.alice,bob:x.bob};worker=await coordinator(config);
+  const prepared=await worker.call('prepare',intent);assert.equal(prepared.state,'prepared');journal.prepare(intent,prepared);const debit=journal.debit();
+  const newerStatus=await worker.call('lookup',{providerId,transactionId:intent.transactionId}),newerSnapshot=await worker.call('snapshot');assert.equal(newerStatus.state,'prepared');assert.equal(newerStatus.preparationId,prepared.preparationId);assert.equal(newerStatus.fingerprint,prepared.fingerprint);assert.equal(newerStatus.purchase,undefined);assert.equal(newerStatus.debitReference,undefined);assert.equal(newerSnapshot.alicePacks.length,0);assert.equal(newerSnapshot.allocatedCopyIds.length,0);assert.deepEqual(newerSnapshot.wallet,walletBefore);assert.equal(newerSnapshot.audit.ok,true);
+  // Never dispatch the first commit: preserved authority proves the paid order was unfulfilled.
+  await worker.close();worker=null;const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex'),newerHash=hash(filename),bundleHash=hash(join(bundle,'state.sqlite'));journal.close();journal=walletJournal(paymentFile);const retained=journal.order();assert.deepEqual(JSON.parse(retained.intent),intent);assert.deepEqual(JSON.parse(retained.prepared),prepared);assert.deepEqual(JSON.parse(retained.debit),debit);assert.deepEqual(journal.snapshot(),{balance:90,debits:1,refunds:0,finalized:0});
+  await restoreRecoveryBundle({bundle,destination,encryptionKey});assert.equal(hash(filename),newerHash);assert.equal(hash(join(bundle,'state.sqlite')),bundleHash);
+  worker=await coordinator({...config,filename:join(destination,'state.sqlite')});await assert.rejects(worker.call('lookup',{providerId,transactionId:intent.transactionId}),{code:'NOT_FOUND'});assert.equal((await worker.call('pending',{providerId})).items.length,0);assert.equal((await worker.call('snapshot')).allocatedCopyIds.length,0);
+  const recovered=await worker.call('prepare',JSON.parse(retained.intent));assert.equal(recovered.preparationId,prepared.preparationId);assert.equal(recovered.fingerprint,prepared.fingerprint);assert.deepEqual(recovered.terms,prepared.terms);assert.deepEqual(journal.debit(),debit);assert.equal(journal.snapshot().debits,1);
+  const commit={preparationId:recovered.preparationId,fingerprint:recovered.fingerprint,debitReceipt:JSON.parse(retained.debit)},proofOptions={verifiedEvidence:[JSON.parse(retained.debit)]};
+  await assert.rejects(worker.call('commit',{...commit,debitReceipt:{...debit,externalCurrency:'other'}},proofOptions),{code:'SETTLEMENT_CONFLICT'});
+  const fulfilled=await worker.call('commit',commit,proofOptions);assert.equal(fulfilled.state,'fulfilled');assert.equal(fulfilled.purchase.packs.length,1);assert.deepEqual(await worker.call('commit',commit,proofOptions),fulfilled);assert.deepEqual(await worker.call('lookup',{providerId,transactionId:intent.transactionId}),fulfilled);assert.deepEqual(await worker.call('status',{preparationId:prepared.preparationId}),fulfilled);
+  journal.finalize();journal.finalize();assert.deepEqual(journal.snapshot(),{balance:90,debits:1,refunds:0,finalized:1});const final=await worker.call('snapshot');assert.equal(final.alicePacks.length,1);assert.equal(final.alicePacks[0].id,fulfilled.purchase.packs[0].id);assert.equal(final.allocatedCopyIds.length,1);assert.deepEqual(final.wallet,walletBefore);assert.equal(final.audit.ok,true);assert.equal(final.integrity,true);await worker.close();worker=null;assert.equal(hash(filename),newerHash);assert.equal(hash(join(bundle,'state.sqlite')),bundleHash);
 });

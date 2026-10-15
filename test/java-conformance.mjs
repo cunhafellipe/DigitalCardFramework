@@ -4,9 +4,9 @@ import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {mkdtemp,readFile,writeFile,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {createPluginHost,pluginCommands} from '../src/plugin-host.js';
 import {createRemoteTransferPolicy} from '../src/remote-transfer-policy.js';
 import {createRemoteActionHandler} from '../src/remote-actions.js';
@@ -75,14 +75,25 @@ async function events(initialService){
   try{store=new SQLiteStore(path);const x=fixture({store,...options});core=x.core;const copy=x.open()[0],job=core.actionJobs(admin).items[0];assert.equal(core.actionJobs(admin).total,1);assert.equal((await core.dispatchActions(admin,{limit:1}))[0].status,'pending');const saved=JSON.parse(await readFile(journal));assert.equal(Object.keys(saved.receipts).length,1);const receipt=saved.receipts[job.id];assert.equal(receipt.payload.source.eventId,receipt.payload.params.event.id);assert.equal(receipt.payload.params.event.data.copyId,copy.id);assert.equal(receipt.payload.beneficiaryId,x.alice.userId);assert.equal(core.fulfillments(x.bob).total,0);
     core.close();core=null;await stop(service.child);service=await start();now+=2000;store=new SQLiteStore(path);core=new CardFramework({store,...options});assert.equal((await core.dispatchActions(admin,{limit:1}))[0].status,'succeeded');assert.deepEqual(attempts[1],attempts[0]);assert.deepEqual(JSON.parse(await readFile(journal)),saved);assert.equal(core.inventory(x.alice).length,1);assert.equal(core.inventory(x.bob).length,0);assert.equal(core.audit(admin).ok,true);
     const golden=JSON.parse(await readFile(new URL('./fixtures/action-delivery.json',import.meta.url)));const send=(value,status=200,headers={})=>post(service,'/actions',value,status,{'idempotency-key':golden.jobId,...headers});await send(golden);await send(JSON.stringify(golden).replace('1.25','1.250'));await send({...golden,params:{...golden.params,label:'changed'}},409);
-    for(const patch of [{protocol:'wrong'},{pluginId:'wrong'},{handlerId:'wrong'},{jobId:'__proto__'},{actor:{role:'admin'}},{source:null},{params:[]}])await send({...golden,...patch},400);
+    for(const patch of [{protocol:'wrong'},{pluginId:'wrong'},{handlerId:'wrong'},{actor:{role:'admin'}},{source:null},{params:[]}])await send({...golden,...patch},400);
     await send(golden,403,{authorization:'Bearer revoked-fixture-credential'});await send(golden,400,{'idempotency-key':'forged-job'});await send('{"protocol":1,"protocol":2}',400);await send(Buffer.from([0xff,0xfe]),400);await send(JSON.stringify(golden).replace('1.25','1e4000'),400);await send(JSON.stringify(golden).replace('1.25','"\\ud800"'),400);
-    const final=JSON.parse(await readFile(journal));assert.equal(Object.keys(final.receipts).length,2);await stop(service.child);service=await start(journal,{PLUGIN_MAX_RECEIPTS:'1'});await send(golden);await send({...golden,jobId:'capacity-refused'},507,{'idempotency-key':'capacity-refused'});assert.deepEqual(JSON.parse(await readFile(journal)),final);
+    const boundary='b'.repeat(128),unicode={...golden,jobId:'unicode-beneficiary',beneficiaryId:'外部:account/自由 𝄞'},reserved={...golden,jobId:'__proto__'};
+    await send({...golden,jobId:'b'.repeat(129)},400,{'idempotency-key':'b'.repeat(129)});await send({...golden,jobId:'𝄞'.repeat(65)},400);
+    await send({...golden,jobId:boundary},200,{'idempotency-key':boundary});await send(unicode,200,{'idempotency-key':unicode.jobId});await send(reserved,200,{'idempotency-key':reserved.jobId});
+    const final=JSON.parse(await readFile(journal));assert.equal(Object.keys(final.receipts).length,5);await stop(service.child);service=await start(journal,{PLUGIN_MAX_RECEIPTS:'1'});await send(golden);await send({...golden,jobId:boundary},200,{'idempotency-key':boundary});await send(unicode,200,{'idempotency-key':unicode.jobId});await send(reserved,200,{'idempotency-key':reserved.jobId});await send({...golden,jobId:'capacity-refused'},507,{'idempotency-key':'capacity-refused'});assert.deepEqual(JSON.parse(await readFile(journal)),final);
     checks.push('Java committed event scope and stable job/event/beneficiary; consumed reply loss, framework and receiver restart, one durable receipt, golden Unicode/exact decimal replay, malformed/forged/conflicting terms and retained capacity');
   }finally{core?.close();await stop(service.child);}
 }
+async function byteCapacity(){
+  const path=join(root,'byte-capacity.json'),limit=4194304;
+  const canonical=value=>value&&typeof value==='object'?(Array.isArray(value)?'['+value.map(canonical).join(',')+']':'{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+canonical(value[key])).join(',')+'}'):JSON.stringify(value);
+  const make=jobId=>{const payload={protocol:'digital-card-action@1',pluginId:'example.receiver',handlerId:'example.record',jobId,beneficiaryId:'collector',source:{type:'fixture'},params:{blob:'x'.repeat(60000)}};return {digest:createHash('sha256').update(canonical(payload)).digest('hex'),payload};};
+  const receipts=Object.fromEntries(Array.from({length:69},(_,n)=>{const key='byte-known-'+n;return [key,make(key)];})),saved=JSON.stringify({version:1,receipts}),candidate=make('byte-refused');
+  assert(Buffer.byteLength(saved)<=limit);assert(Buffer.byteLength(JSON.stringify({version:1,receipts:{...receipts,'byte-refused':candidate}}))>limit);await writeFile(path,saved);const service=await start(path);
+  try{await post(service,'/actions',candidate.payload,507,{'idempotency-key':candidate.payload.jobId});const known=receipts['byte-known-0'].payload;await post(service,'/actions',known,200,{'idempotency-key':known.jobId});await post(service,'/actions',candidate.payload,507,{'idempotency-key':candidate.payload.jobId});assert.equal(await readFile(path,'utf8'),saved);checks[checks.length-1]+='; exact UTF16 job bounds, Unicode beneficiary/reserved job replay and deterministic byte-capacity refusal retaining original replay';}finally{await stop(service.child);}
+}
 try{
   await mkdir(classes);await writeFile(records,JSON.stringify({actors:[{id:'alice',recipientIds:['bob'],allowListingReservation:true},{id:'bob',recipientIds:['alice'],allowListingReservation:false}]}));
-  const compile=await processResult(javac,['--release','21','-d',classes,source]);assert.equal(compile.code,0,compile.errors);await control();const service=await start();await hook(service);await events(service);
+  const compile=await processResult(javac,['--release','21','-d',classes,source]);assert.equal(compile.code,0,compile.errors);await control();const service=await start();await hook(service);await events(service);await byteCapacity();
   console.log(JSON.stringify({language:'Java',checks,status:'passed'},null,2));
-}finally{for(const child of processes)await stop(child);await rm(root,{recursive:true,force:true});}
+}finally{for(const child of processes)await stop(child);if(!resolve(root).startsWith(resolve(tmpdir())+sep))throw Error('Unsafe conformance cleanup target');await rm(root,{recursive:true,force:true});}

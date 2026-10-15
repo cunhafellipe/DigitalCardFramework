@@ -71,6 +71,12 @@ jobs:
         env:
           JAVA: java
           JAVAC: javac
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: node test/csharp-conformance.mjs
+        env:
+          DOTNET: dotnet
       - run: node --test test/editor-panel-examples.mjs
         env:
           PYTHON: python3

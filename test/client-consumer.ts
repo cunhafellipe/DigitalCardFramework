@@ -295,3 +295,29 @@ policyAdmin.node;
 // @ts-expect-error A handled initial policy error can resolve its displayed string.
 const voidPolicyReady:Promise<void>=policyAdmin.ready;
 void [nativeMarketplace,nativeMarketplaceReady,sharedMarketplaceReady,fulfillmentsReady,tradingControlsReady,policyAdminReady,narrowedSharedMarketplaceReady,promisedMarketplace,voidPolicyReady];
+
+import {renderStudio,type StudioModel,type StudioContext,type StudioView} from '@digital-card/framework/studio-ui';
+const studioModel:StudioModel={me:{userId:'creator',role:'player',permissions:['catalog.read','catalog.preview']},catalog:{version:1,lines:[{id:'sky',name:'Sky'}],rarities:[{id:'common',name:'Common'}],currencies:[{id:'credits',name:'Credits'}],cards:collectionModel.catalog.cards,variants:collectionModel.catalog.variants,products:[{id:'starter',name:'Starter',lineId:'sky'}]}};
+const studioContext:StudioContext={client,mutate:runner,action:async(fn,options)=>{const message:string=options.message;const refreshAfter:boolean|undefined=options.refreshAfter;void [message,refreshAfter];return fn();},locale:'en',messages:{'studioShell.creatorStudio':'Studio'},
+  cardRenderer(copy,options){const name:string=copy.definition.name;const serial:null=copy.serialNumber;const edition:number|null=copy.editionTotal;const rarity:string=copy.rarityId;const finish:string|undefined=copy.variant.finish;const locale:string=options.localization.locale;options.onSelect(copy);void [name,serial,edition,rarity,finish,locale];return document.createElement('article');},
+  inspect:copy=>{const id:string=copy.cardId;void id;},
+};
+const studioResult:HTMLElement|StudioView=renderStudio(studioModel,studioContext);
+if('node' in studioResult){document.body.append(studioResult.node);const studioDisposed:void=studioResult.dispose();void studioDisposed;}
+else {const explanation:HTMLElement=studioResult;document.body.append(explanation);}
+const deniedStudioResult=renderStudio({...studioModel,me:{userId:'viewer',role:'player',permissions:[]}},studioContext);
+if(!('node' in deniedStudioResult)){const explanation:HTMLElement=deniedStudioResult;void explanation;}
+const committedStudio:Promise<UIConsumerSchemas['ImportReceipt']>=studioContext.mutate('commitImport',{manifest:marketplaceUIModel.catalog,digest:'sha256:example',expectedVersion:1});
+// @ts-expect-error Permission checks can return an explanatory element without a disposable view.
+const alwaysDisposableStudio:StudioView=renderStudio(studioModel,studioContext);
+// @ts-expect-error Studio shell exposes no readiness promise on either return shape.
+studioResult.ready;
+// @ts-expect-error Studio shell returns synchronously.
+const promisedStudio:Promise<HTMLElement|StudioView>=renderStudio(studioModel,studioContext);
+// @ts-expect-error Preview card renderers return elements directly.
+renderStudio(studioModel,{...studioContext,cardRenderer:()=>({node:document.createElement('article')})});
+// @ts-expect-error Embedded visual studio needs policy and library client methods too.
+renderStudio(studioModel,{...studioContext,client:{operatorCatalog:client.operatorCatalog,previewImport:client.previewImport,commitImport:client.commitImport}});
+// @ts-expect-error Catalog publication retains the checked expected revision.
+studioContext.mutate('commitImport',{manifest:marketplaceUIModel.catalog,digest:'sha256:example'});
+void [studioResult,deniedStudioResult,committedStudio,alwaysDisposableStudio,promisedStudio];

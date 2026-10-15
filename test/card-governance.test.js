@@ -311,6 +311,34 @@ test("catalog publication rechecks current grants after review and before receip
   assert.deepEqual(store.read((state) => state), committed);
   assert.equal(core.audit(admin).ok, true);
 });
+test("catalog review rejects a permitted dependency registry revision change without consuming its key", async (t) => {
+  const store = new MemoryStore(), { core } = fixture({ store }),
+    entry = await saveTemplate(createProject(await build(art())), createMemoryLibrary(), { id: "review-frame" });
+  t.after(() => core.close());
+  await core.registerCardPresentation(admin, entry.archive);
+  core.saveCardResource(admin, { key: "frame-one", expectedRevision: core.cardPolicies(admin).revision, resource: { kind: "template", document: entry.document } });
+  activate(core, policy([], { templates: [entry.key] }));
+  const applied = await loadTemplate(entry);
+  await core.registerCardPresentation(admin, applied.archive);
+  const catalog = core.operatorCatalog(admin), card = { ...catalog.cards[0], name: "Reviewed dependency", presentation: {
+    contract: "digital-card@0.1", digest: applied.digest, baseURL: "https://assets.example/",
+  } }, source = { cards: [card] },
+    preview = core.previewImport(admin, { source, expectedVersion: catalog.version }),
+    input = { ...preview, key: "dependency-review" };
+  core.saveCardResource(admin, { key: "frame-two", expectedRevision: core.cardPolicies(admin).revision,
+    resource: { kind: "template", document: { ...entry.document, revision: entry.document.revision + 1 } } });
+  const changed = store.read((state) => state);
+  assert.equal(core.cardPolicies(admin).revision, preview.policyRevision + 1);
+  assert.throws(() => core.commitImport(admin, input), code("POLICY_CHANGED"));
+  assert.deepEqual(store.read((state) => state), changed);
+  const refreshed = core.previewImport(admin, { source, expectedVersion: catalog.version }),
+    receipt = core.commitImport(admin, { ...refreshed, key: input.key }), committed = store.read((state) => state);
+  assert.equal(receipt.version, catalog.version + 1);
+  assert.equal(committed.events.filter((event) => event.type === "catalog.imported").length, changed.events.filter((event) => event.type === "catalog.imported").length + 1);
+  assert.deepEqual(core.commitImport(admin, { ...refreshed, key: input.key }), receipt);
+  assert.deepEqual(store.read((state) => state), committed);
+  assert.equal(core.audit(admin).ok, true);
+});
 test("calculated fields discard supplied dependent values and cannot reveal private inputs", () => {
   const fields = [
     {

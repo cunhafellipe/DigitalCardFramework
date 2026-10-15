@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {randomBytes,createHash,createHmac} from 'node:crypto';
-import {mkdtempSync,rmSync,readFileSync,readdirSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {Worker} from 'node:worker_threads';
 import {SQLiteStore} from '../src/sqlite.js';
+import {CardFramework} from '../src/index.js';
 import {schemaSqlV3,encodeState,writeDifference} from '../src/indexed-storage.js';
 import {initialState,MemoryStore} from '../src/store.js';
 import {createStateCodec} from '../src/encryption.js';
@@ -110,6 +111,49 @@ test('process loss during migration and at WAL commit preserves one complete out
       store.transact(s=>{s.balances.u1.points=99;s.requests.completed={id:'stable-completion'};});`;
     const child=spawnSync(process.execPath,['--input-type=module','-e',script],{env:{...process.env,TEST_DB:path,TEST_KEY:key.toString('hex'),BOUNDARY:boundary},encoding:'utf8',timeout:20000});assert.equal(child.status,81,child.stderr);
     const restored=new SQLiteStore(path,{encryptionKey:key}),expected=structuredClone(state);if(boundary==='after-commit'){expected.balances.u1.points=99;expected.requests.completed={id:'stable-completion'};expected.revision++;}assert.deepEqual(restored.read(s=>s),expected);assert(restored.integrity());restored.close();
+  }
+});
+
+test('catalog activation process loss at WAL commit recovers one original-key outcome',t=>{
+  let active;const dir=directory(t,()=>active?.close()),key=randomBytes(32),clock=()=> '2026-10-15T12:00:00.000Z';
+  for(const boundary of ['before-commit','after-commit']){
+    const path=join(dir,boundary+'.sqlite'),reviewPath=join(dir,boundary+'-review.json'),intendedPath=join(dir,boundary+'-intended.json'),
+      seededStore=new SQLiteStore(path,{encryptionKey:key}),x=fixture({store:seededStore,clock});active=x.core;
+    x.open('common');x.buy('rare');
+    const catalog=x.core.operatorCatalog(admin),preview=x.core.previewImport(admin,{source:{cards:[{...catalog.cards[0],name:'Activated after restart'}]},expectedVersion:catalog.version}),
+      input={...preview,key:'interrupted-catalog'},before=seededStore.read(s=>s);
+    writeFileSync(reviewPath,JSON.stringify(input));x.core.close();active=null;
+    const script=`import {DatabaseSync} from 'node:sqlite';import {readFileSync,writeFileSync} from 'node:fs';
+      import {SQLiteStore} from ${JSON.stringify(moduleUrl)};import {CardFramework} from ${JSON.stringify(new URL('../src/index.js',import.meta.url).href)};
+      const store=new SQLiteStore(process.env.TEST_DB,{encryptionKey:Buffer.from(process.env.TEST_KEY,'hex')}),core=new CardFramework({store,clock:()=> '2026-10-15T12:00:00.000Z'}),
+        input=JSON.parse(readFileSync(process.env.TEST_REVIEW,'utf8')),transact=store.transact.bind(store),exec=DatabaseSync.prototype.exec;
+      let intended,result;
+      store.transact=fn=>transact(state=>{result=fn(state);intended=state;return result;});
+      DatabaseSync.prototype.exec=function(sql){if(sql==='COMMIT'){
+        if(!intended||intended.catalog.version!==input.expectedVersion+1)throw Error('Catalog activation not observed');
+        writeFileSync(process.env.TEST_INTENDED,JSON.stringify({state:intended,result}));
+        if(process.env.BOUNDARY==='before-commit')process.exit(81);
+        exec.call(this,sql);process.exit(81);
+      }return exec.call(this,sql);};
+      core.commitImport({role:'admin'},input);throw Error('Expected activation process loss');`;
+    const child=spawnSync(process.execPath,['--input-type=module','-e',script],{env:{...process.env,TEST_DB:path,TEST_KEY:key.toString('hex'),TEST_REVIEW:reviewPath,TEST_INTENDED:intendedPath,BOUNDARY:boundary},encoding:'utf8',timeout:20000});
+    assert.ifError(child.error);assert.equal(child.status,81,child.stderr);
+    const intended=JSON.parse(readFileSync(intendedPath,'utf8')),store=new SQLiteStore(path,{encryptionKey:key});
+    active=new CardFramework({store,clock});
+    assert.deepEqual(store.read(s=>s),boundary==='before-commit'?before:intended.state);
+    const recovered=store.read(s=>s),receipt=active.commitImport(admin,input),committed=store.read(s=>s);
+    if(boundary==='after-commit'){assert.deepEqual(receipt,intended.result);assert.deepEqual(committed,recovered);}
+    else assert.equal(committed.revision,before.revision+1);
+    assert.deepEqual(receipt,{version:preview.manifest.version,digest:preview.digest,importedAt:clock()});
+    assert.deepEqual(committed.catalog,preview.manifest);
+    for(const field of ['balances','copies','packs','ledger','supply'])assert.deepEqual(committed[field],before[field],field);
+    assert.equal(committed.events.filter(row=>row.type==='catalog.imported').length,before.events.filter(row=>row.type==='catalog.imported').length+1);
+    assert.equal(Object.keys(committed.operatorRequests).length,Object.keys(before.operatorRequests??{}).length+1);
+    assert.deepEqual(active.commitImport(admin,input),receipt);assert.deepEqual(store.read(s=>s),committed);
+    assert.equal(active.audit(admin).ok,true);assert(store.integrity());active.close();active=null;
+    const restarted=new SQLiteStore(path,{encryptionKey:key});active=new CardFramework({store:restarted,clock});
+    assert.deepEqual(active.commitImport(admin,input),receipt);assert.deepEqual(restarted.read(s=>s),committed);
+    assert.equal(active.audit(admin).ok,true);assert(restarted.integrity());active.close();active=null;
   }
 });
 

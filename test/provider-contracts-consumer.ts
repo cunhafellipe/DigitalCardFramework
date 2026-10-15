@@ -305,3 +305,71 @@ presentationHandler(new Request('https://cards.example/presentations/imports'),n
 // @ts-expect-error The handler does not own or close the store.
 presentationHandler.close();
 void signedArchive;
+
+import {createCodeGateway, type CodeGatewayFramework} from '@digital-card/framework/code-gateway';
+import {createCurrencyGateway, type CurrencyGatewayFramework, type GatewayCurrencyProvider} from '@digital-card/framework/currency-gateway';
+interface GatewayActor {userId:string;tenant:string}
+interface ConfirmedCode {codeId:string;status:'redeemed'|'revoked';receiptId:string}
+const codeFramework:CodeGatewayFramework<GatewayActor,ConfirmedCode>={
+  codeLookupMaterial(actor,codeId){return {codeId,providerId:'example.provider',externalId:null,code:'CODE-'+actor.tenant};},
+  async confirmCodeStatus(authority,input){
+    const permission:'codes.confirm'=authority.permissions[0];
+    const eventTime:string=input.occurredAt;
+    const providerScope:string|undefined=authority.codeProviderIds[0];
+    void [permission,eventTime,providerScope];
+    return {codeId:input.codeId,status:input.status,receiptId:input.eventId};
+  },
+};
+const codeGateway=createCodeGateway({framework:codeFramework,providers:{'example.provider':codeAdapter},timeoutMs:5000});
+codeGateway.reconcile({userId:'collector',tenant:'example'},{codeId:'example.code',signal}).then(reply=>{
+  const codeId:string=reply.codeId;
+  if(reply.status==='unverified'){
+    // @ts-expect-error Unverified lookups have no confirmation receipt.
+    reply.receiptId;
+  }else{const receiptId:string=reply.receiptId;void receiptId;}
+  void codeId;
+});
+createCodeGateway({framework:codeFramework});
+interface CreditReceipt {providerId:string;transactionId:string;userId:string;currencyId:string;amount:number;balance:number;at:string;receiptId:string}
+const currencyFramework:CurrencyGatewayFramework<GatewayActor,CreditReceipt>={
+  async me(actor){return {id:actor.userId,tenant:actor.tenant};},
+  settleExternalCredit(authority,input){
+    const permission:'currency.settle'=authority.permissions[0];
+    const amount:number=input.amount;
+    const externalUnits:string=input.externalUnits;
+    void [permission,amount,externalUnits];
+    return {...input,balance:input.amount,at:'2026-01-01T00:00:00Z',receiptId:'settlement'};
+  },
+};
+const directGatewayCurrency:GatewayCurrencyProvider={
+  currencies,resolveAccount:({userId})=>'account-'+userId,
+  lookup:({transactionId,account})=>({transactionId,account,status:'settled',currency:'points',amountUnits:'100'}),
+  assertActive(){},
+};
+const currencyGateway=createCurrencyGateway({framework:currencyFramework,providers:{'example.provider':currencyAdapter,'direct.provider':directGatewayCurrency}});
+const currencyDescription=currencyGateway.describe()[0];
+const settlementContract:'dc.currency-settlement@1'|undefined=currencyDescription?.contract;
+const mappedCurrencyId:string|undefined=currencyDescription?.currencies.points?.currencyId;
+currencyGateway.reconcile({userId:'collector',tenant:'example'},{providerId:'example.provider',transactionId:'purchase-1'},{signal}).then(receipt=>{
+  const credited:number=receipt.amount;
+  const receiptId:string=receipt.receiptId;
+  void [credited,receiptId];
+});
+createCurrencyGateway({framework:currencyFramework});
+// @ts-expect-error Reconciliation preserves the framework actor requirements.
+codeGateway.reconcile({userId:'collector'},{codeId:'example.code'});
+// @ts-expect-error Code IDs are strings.
+codeGateway.reconcile({userId:'collector',tenant:'example'},{codeId:1});
+// @ts-expect-error Code gateways accept status lookup callbacks, not account lookup adapters.
+createCodeGateway({framework:codeFramework,providers:{invalid:{lookup:()=>({status:'pending'})}}});
+// @ts-expect-error Currency gateway providers must declare their currency mappings.
+createCurrencyGateway({framework:currencyFramework,providers:{invalid:{resolveAccount:()=>'account',lookup:()=>({transactionId:'transaction',account:'account',status:'pending'})}}});
+// @ts-expect-error Reconciliation accepts a transaction ID; settlement amounts come from providers.
+currencyGateway.reconcile({userId:'collector',tenant:'example'},{providerId:'example.provider',transactionId:'purchase-1',amount:100});
+// @ts-expect-error Currency cancellation belongs in the third options argument.
+currencyGateway.reconcile({userId:'collector',tenant:'example'},{providerId:'example.provider',transactionId:'purchase-1',signal});
+// @ts-expect-error Provider timeout values are numeric.
+createCurrencyGateway({framework:currencyFramework,timeoutMs:'5000'});
+// @ts-expect-error Gateways reconcile provider evidence and have no client settlement method.
+currencyGateway.settleExternalCredit({amount:100});
+void [settlementContract,mappedCurrencyId];

@@ -156,3 +156,41 @@ createRemoteCodeIssuer({...remoteConfig,kind:'pure'});
 // @ts-expect-error A registry currency adapter requires both lookup callbacks.
 createCurrencyProviderRegistry({currencyProviders:{broken:{resolveAccount:()=> 'account'}}});
 void [remoteCodeProtocol,remoteCurrencyProtocol,remoteIssuanceProtocol];
+
+import {bindingFactoryConfiguration, snapshotBindingFactoryUser, createRemoteBindingFactory, createBindingFactoryRegistry, bindingFactoryProtocol as remoteFactoryProtocol, type PureBindingFactoryRequest} from '@digital-card/framework/remote-binding-factory';
+const factoryDescriptor=bindingFactoryConfiguration({kind:'provision',providerId:'example.factory',revision:1,userFields:['id','profile.region']});
+const userSnapshot=snapshotBindingFactoryUser({id:'collector',profile:{region:'example'}},factoryDescriptor.userFields);
+const remoteFactory=createRemoteBindingFactory({...remoteConfig,kind:'provision',revision:1,userFields:['id']});
+remoteFactory.assertGrant(remoteFactory.grant());
+const factoryScope:'binding-factory'=remoteFactory.setEnabled(true).scope;
+const provisionRequest:BindingFactoryRequest={...factoryRequest,operation:'provision',context:{entries:[{...factoryEntry,kind:'provision'}]}};
+remoteFactory.evaluate(provisionRequest,{signal}).then(reply=>{
+  const protocol:typeof remoteFactoryProtocol=reply.protocol;
+  const status:'processed'=reply.status;
+  reply.results.forEach(row=>{if(row.state==='ready')Object.keys(row.data);});
+  // @ts-expect-error Provider error frames reject instead of resolving.
+  reply.errorCode;
+  void [protocol,status];
+});
+remoteFactory.close();
+const pureFactoryRequest:PureBindingFactoryRequest={...factoryRequest,operation:'produce',context:{entries:[{...factoryEntry,kind:'pure'}]}};
+const factoryRegistry=createBindingFactoryRegistry({allocationBindingFactories:{
+  local:{kind:'pure',providerId:'example.local',revision:1,produce:row=>({copyId:row.copyId,ownerId:row.input.user.id})},
+  external:{...remoteConfig,kind:'activation',revision:1},
+}});
+const registeredFactory=factoryRegistry.factories.local;
+if(registeredFactory){registeredFactory.assertGrant(registeredFactory.grant());registeredFactory.setEnabled(false);void registeredFactory.evaluate(pureFactoryRequest);}
+factoryRegistry.close();createBindingFactoryRegistry().close();
+// @ts-expect-error Factory user grants are immutable.
+factoryDescriptor.userFields.push('private');
+// @ts-expect-error Remote factories reject production callbacks.
+createRemoteBindingFactory({...remoteConfig,kind:'pure',revision:1,produce:()=>({})});
+// @ts-expect-error Only pure factory configurations accept production callbacks.
+createBindingFactoryRegistry({allocationBindingFactories:{invalid:{kind:'provision',providerId:'example.factory',revision:1,produce:()=>({})}}});
+// @ts-expect-error Pure callbacks must return synchronously.
+createBindingFactoryRegistry({allocationBindingFactories:{invalid:{kind:'pure',providerId:'example.factory',revision:1,produce:async()=>({})}}});
+// @ts-expect-error Factory output data must be JSON.
+createBindingFactoryRegistry({allocationBindingFactories:{invalid:{kind:'pure',providerId:'example.factory',revision:1,produce:()=>({run:()=>true})}}});
+// @ts-expect-error Pure evaluation cannot activate bindings.
+const pureActivation:PureBindingFactoryRequest={...pureFactoryRequest,operation:'activate'};
+void [userSnapshot,factoryScope,pureActivation];

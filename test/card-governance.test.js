@@ -1,6 +1,7 @@
 import {validateFrameworkEvent} from '../src/action-contracts.js';
 import test from "node:test";
 import assert from "node:assert/strict";
+import { MemoryStore } from "../src/store.js";
 import { fixture, admin, code } from "./helpers.js";
 import { fixture as art, build } from "./presentation-fixtures.mjs";
 import { createProject } from "../src/presentation/project.js";
@@ -281,6 +282,34 @@ test("private values stay hidden after field removal and cannot accidentally be 
     () => publish(core, { ...card, name: "Changed" }),
     code("CARD_POLICY"),
   );
+});
+
+test("catalog publication rechecks current grants after review and before receipt replay", (t) => {
+  const store = new MemoryStore(), { core, alice } = fixture({ store });
+  t.after(() => core.close());
+  activate(core, policy([{ key: "level", label: "Level", type: "integer", minimum: 0, maximum: 10 }]));
+  const grants = ["catalog.read", "catalog.preview", "catalog.publish"],
+    publisher = { ...alice, permissions: [...grants] },
+    catalog = core.operatorCatalog(publisher),
+    card = { ...catalog.cards[0], name: "Reviewed governed card", stats: { level: 5 } },
+    preview = core.previewImport(publisher, { source: { cards: [card] }, expectedVersion: catalog.version }),
+    input = { ...preview, key: "reviewed-publication" },
+    before = store.read((state) => state);
+  publisher.permissions = ["catalog.read", "catalog.preview"];
+  assert.throws(() => core.commitImport(publisher, input), code("FORBIDDEN"));
+  assert.deepEqual(store.read((state) => state), before);
+  publisher.permissions = [...grants];
+  const receipt = core.commitImport(publisher, input), committed = store.read((state) => state);
+  assert.equal(receipt.version, catalog.version + 1);
+  assert.equal(committed.catalog.cards.find((candidate) => candidate.id === card.id).stats.level, 5);
+  assert.equal(committed.events.filter((event) => event.type === "catalog.imported").length, before.events.filter((event) => event.type === "catalog.imported").length + 1);
+  publisher.permissions = [];
+  assert.throws(() => core.commitImport(publisher, input), code("FORBIDDEN"));
+  assert.deepEqual(store.read((state) => state), committed);
+  publisher.permissions = [...grants];
+  assert.deepEqual(core.commitImport(publisher, input), receipt);
+  assert.deepEqual(store.read((state) => state), committed);
+  assert.equal(core.audit(admin).ok, true);
 });
 test("calculated fields discard supplied dependent values and cannot reveal private inputs", () => {
   const fields = [

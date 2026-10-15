@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm,readdir,mkdir,symlink,cp} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {execFileSync,spawn} from 'node:child_process';
+import {execFileSync,spawn,fork} from 'node:child_process';
 import {once} from 'node:events';
+import {pathToFileURL} from 'node:url';
 import {createServer as createPortProbe} from 'node:net';
 import {randomBytes,createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -216,4 +217,23 @@ test('rotated code vault bundle boots actual restored host and retains orphan ar
     const ended=once(child,'exit');child.send('stop-recovery-fixture');const [exitCode]=await ended;assert.equal(exitCode,0,logs);child=null;
     const sessions=new SessionStore(path.join(restored,'state.sqlite'),{encryptionKey:x.key});try{assert.deepEqual(sessions.get(x.flow,'flow'),{verifier:'retained-verifier',nonce:'retained-nonce'});}finally{sessions.close();}assert.deepEqual(await tree(bundle),bundleBefore);
   }finally{if(child&&child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill();await ended;}await clean(x);}
+});
+
+
+test('abrupt backup child exit leaves unaccepted stage and stale lock until verified owner removal',{timeout:30000},async()=>{
+  const x=await seed(),bundle=path.join(x.dir,'crash-bundle'),destination=path.join(x.dir,'restored'),marker=path.join(x.dir,'child-phase.json'),childTemp=path.join(x.dir,'child-temp'),script=path.join(x.dir,'backup-child.mjs'),lock=path.join(x.presentationRoot,'writer.lock');let child;
+  const databaseHash=()=>sha(readFileSync(x.database));
+  try{
+    await mkdir(childTemp);const sourceHash=databaseHash(),artBefore=await tree(x.presentationRoot),moduleUrl=pathToFileURL(path.resolve('tools/recovery-bundle.js')).href,vaultUrl=pathToFileURL(path.resolve('test/codes-fixtures.mjs')).href;
+    await writeFile(script,`import {existsSync,readdirSync,writeFileSync} from 'node:fs';import path from 'node:path';import {backupRecoveryBundle} from ${JSON.stringify(moduleUrl)};import {vault} from ${JSON.stringify(vaultUrl)};const config=JSON.parse(process.env.RECOVERY_FIXTURE),controller=new AbortController(),check=controller.signal.throwIfAborted.bind(controller.signal);Object.defineProperty(controller.signal,'throwIfAborted',{value(){check();const stage=readdirSync(config.parent).find(name=>name.startsWith('.crash-bundle.recovery-'));if(stage&&existsSync(config.lock)){writeFileSync(config.marker,JSON.stringify({pid:process.pid,stage:path.join(config.parent,stage),phase:'owned-stage-and-lock-before-publication'}));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);}}});await backupRecoveryBundle({database:config.database,presentationRoot:config.presentationRoot,destination:config.bundle,encryptionKey:Buffer.from(config.key,'hex'),codeVault:vault(),signal:controller.signal});throw Error('Backup unexpectedly passed crash gate');`);
+    child=fork(script,[],{windowsHide:true,stdio:['ignore','ignore','pipe','ipc'],env:{...process.env,TMPDIR:childTemp,TEMP:childTemp,TMP:childTemp,RECOVERY_FIXTURE:JSON.stringify({parent:x.dir,lock,marker,database:x.database,presentationRoot:x.presentationRoot,bundle,key:x.key.toString('hex')})}});let errors='',spawnError;child.on('error',error=>{spawnError=error;});child.stderr.on('data',part=>errors=(errors+part).slice(-4096));
+    for(let count=0;count<500&&!existsSync(marker);count++){if(spawnError)throw spawnError;assert.equal(child.exitCode,null,errors);assert.equal(child.signalCode,null,errors);await delay(10);}assert(existsSync(marker),'Child did not reach existing pre-publication signal check');const observed=JSON.parse(await readFile(marker));assert.equal(observed.pid,child.pid);assert.equal(observed.phase,'owned-stage-and-lock-before-publication');assert(path.resolve(observed.stage).startsWith(path.join(path.resolve(x.dir),'.crash-bundle.recovery-')));assert(existsSync(lock));assert(!existsSync(bundle));
+    await assert.rejects(backupRecoveryBundle(backupOptions(x,path.join(x.dir,'live-refused'))),/writer lock/);assert.equal(child.exitCode,null);
+    const ended=once(child,'exit');assert(child.kill('SIGKILL'));const [exitCode,signal]=await ended;assert(exitCode!==0||signal!==null);assert(child.exitCode!==null||child.signalCode!==null);child=null;
+    assert(!existsSync(bundle));assert(existsSync(lock));assert(existsSync(observed.stage));assert.equal(databaseHash(),sourceHash);const afterDeath=await tree(x.presentationRoot);delete afterDeath['writer.lock'];assert.deepEqual(afterDeath,artBefore);
+    await assert.rejects(backupRecoveryBundle(backupOptions(x,bundle)),/writer lock/);assert(!existsSync(bundle));await assert.rejects(restoreRecoveryBundle(restoreOptions(x,observed.stage,path.join(x.dir,'abandoned-restore'))));assert(!existsSync(path.join(x.dir,'abandoned-restore')));
+    // The disposable fixture has one registered writer, whose actual exit was observed above.
+    await rm(lock);assert.deepEqual(await tree(x.presentationRoot),artBefore);await backupRecoveryBundle(backupOptions(x,bundle));await restoreRecoveryBundle(restoreOptions(x,bundle,destination));assert.equal(databaseHash(),sourceHash);assert.deepEqual(await tree(x.presentationRoot),artBefore);
+    const restoredCore=new CardFramework({store:new SQLiteStore(path.join(destination,'state.sqlite'),{encryptionKey:x.key}),codeVault:vault()});try{assert.deepEqual(restoredCore.purchase(x.alice,x.input),x.purchase);assert.deepEqual(restoredCore.openPack(x.alice,{packId:x.purchase.packs[0].id,key:'retained-open'}),x.opened);assert.equal(restoredCore.audit(admin).ok,true);}finally{restoredCore.close();}
+  }finally{if(child&&child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill('SIGKILL');await ended;}await clean(x);}
 });

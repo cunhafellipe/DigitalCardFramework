@@ -64,8 +64,16 @@ try{
   assert.equal(await native.locator('dc-program-pack').count(),0);assert.equal(await native.locator('.dc-pack-art').count(),1);
   await product.getByLabel('Packs',{exact:true}).fill('2');
   const review=product.getByRole('button',{name:'Review purchase · 20 Credits',exact:true});
+  const focusDefaults=await program.frameLocator('iframe').locator('html').evaluate(()=>{
+    const select=document.querySelector('button[data-dc-intent="select"]'),disabled=select.cloneNode(true),unrelated=document.createElement('button');disabled.disabled=true;document.body.append(disabled,unrelated);
+    const prevented=(target,button)=>{const event=new MouseEvent('mousedown',{bubbles:true,cancelable:true,button});target.dispatchEvent(event);return event.defaultPrevented;};
+    const result={select:prevented(select,0),disabled:prevented(disabled,0),unrelated:prevented(unrelated,0),nonprimary:prevented(select,1)};disabled.remove();unrelated.remove();return result;
+  });
+  assert.deepEqual(focusDefaults,{select:true,disabled:false,unrelated:false,nonprimary:false});
   await program.frameLocator('iframe').getByRole('button',{name:'Select Celestial Archive pack',exact:true}).click();
   await page.waitForFunction(button=>document.activeElement===button,await review.elementHandle(),{timeout:20000});assert(await review.evaluate(button=>document.activeElement===button));assert.equal(calls.quotes.length,0);assert.equal(calls.purchases.length,0);assert.equal(calls.openings.length,0);
+  await program.frameLocator('iframe').getByRole('button',{name:'Select Celestial Archive pack',exact:true}).press('Enter');
+  await page.waitForFunction(button=>document.activeElement===button,await review.elementHandle(),{timeout:20000});assert.equal(calls.quotes.length,0);assert.equal(calls.purchases.length,0);assert.equal(calls.openings.length,0);
   await program.getByRole('button',{name:'Show pack back',exact:true}).click();await program.frameLocator('iframe').locator('html[data-dc-side="back"]').waitFor();
   await program.getByRole('button',{name:'Show pack front',exact:true}).click();await program.frameLocator('iframe').locator('html[data-dc-side="front"]').waitFor();
   await review.click();const buy=product.getByRole('button',{name:'Buy reviewed packs · 20 Credits',exact:true});await buy.waitFor();

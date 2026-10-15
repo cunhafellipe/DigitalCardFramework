@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Preserve host control focus when selecting embedded card or pack artwork with the mouse; keyboard activation remains supported.
+
+- Add TypeScript interfaces for authentication adapters, catalog imports, allocation planning, presentation packages, project editing, authoring pipelines and reusable artwork libraries.
+
 - Add TypeScript declarations for purchase, listing, transfer and trade policy contracts and adapters, plus code status, currency settlement and code issuance providers.
 
 - Create basic packs through Studio fields for line, variants, card count, currency and price, using reviewed publication and the existing purchase/opening flow.

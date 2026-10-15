@@ -8,6 +8,11 @@ connectProgram({onInputs(inputs){
   for(const [key,value] of Object.entries({'--dc-tilt-x':inputs.tilt.x,'--dc-tilt-y':inputs.tilt.y,'--dc-reveal-progress':inputs.revealProgress,'--dc-flip-progress':inputs.flipProgress}))root.style.setProperty(key,String(value));
   root.dataset.dcSide=inputs.flipProgress>=.5?'back':'front';
 }}).then(value=>{if(disposed)value.dispose();else bridge=value;});
+// Selection hands focus to the host; suppress the pointer gesture's competing focus.
+document.addEventListener('mousedown',event=>{
+  const button=event.target.closest?.('button[data-dc-intent="select"]');
+  if(!disposed&&event.button===0&&button&&!button.disabled)event.preventDefault();
+},{signal:events.signal});
 document.addEventListener('click',event=>{
   const button=event.target.closest?.('button[data-dc-intent="select"]');
   if(!disposed&&button&&!button.disabled)bridge?.intent('select');

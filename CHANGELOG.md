@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Restore keyboard focus to the original marketplace control after closing a review, while respecting account changes, disposal and deliberate focus movement.
+- Measure embedded-font letter spacing consistently across styled spans so overflow and drawing agree.
+- Add a runnable complete card-line example covering artwork, packs, albums, publication and purchase/opening replay.
+
 - Refresh the Studio catalog after artwork publication so subsequent card and pack previews use the current revision without reloading the page.
 - Correct compressed variable-font rendering and mixed-direction styled text, including Latin letters and numbers inside right-to-left paragraphs. Keep preview, player, poster and accessible text consistent for the qualified font samples.
 - Avoid unused catalog decoding when reading inventory pages and repeated privacy-evidence hashing during card projection.

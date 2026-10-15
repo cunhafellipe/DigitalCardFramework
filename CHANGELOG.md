@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add opt-in Java, C# and Rust examples for authenticated commands, transfer policy hooks and durable event delivery, alongside the existing JavaScript/TypeScript, Python and Go routes.
+- Reject Java, C# and Rust receipt-journal additions that exceed restart-parser limits before writing, preserving replay of existing receipts.
+- Qualify recovery with rotated code-vault keys, retained artwork, interrupted backups and verified stale-owner lock removal; document reconciliation of known unfulfilled payments after restoring an older backup.
+- Report unsupported additional PSD mask coverage before import, and clarify PSD/OpenRaster color-profile handling.
+- Expand layered-image and GIF qualification for soft alpha, masks, blending, palettes, interlacing, disposal and resource boundaries.
+
 - Clear retained inspector and comparison details when the active account changes.
 - Preserve the original action-retry receipt when later delivery attempts update job history.
 

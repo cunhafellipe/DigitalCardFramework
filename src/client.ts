@@ -51,8 +51,9 @@ export interface RevealController {
 
 export type DurableCommand=Schemas['CommandIntent']['command'];
 type CommandOperation<C extends DurableCommand>=C extends 'preferences'?'setPreferences':C;
-type WithoutKey<T>=T extends object?Omit<T,'key'>&{key?:string}:never;
-export type CommandInput<C extends DurableCommand>=WithoutKey<Operations[CommandOperation<C>]['request']>;
+type WithoutKey<T>=T extends object?{[K in keyof T as K extends 'key'?never:K]:T[K]}&{key?:string}:never;
+type CommandInputs={[C in DurableCommand]:WithoutKey<Operations[CommandOperation<C>]['request']>};
+export type CommandInput<C extends DurableCommand>=CommandInputs[C];
 export type CommandResult<C extends DurableCommand>=Operations[CommandOperation<C>]['response'];
 export interface CommandStorage {
   getItem(key:string):string|null;

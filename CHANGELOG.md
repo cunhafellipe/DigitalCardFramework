@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve required command fields in TypeScript inputs while keeping retry keys optional; add inspector and activity view interfaces.
+
 - Preserve host control focus when selecting embedded card or pack artwork with the mouse; keyboard activation remains supported.
 
 - Add TypeScript interfaces for authentication adapters, catalog imports, allocation planning, presentation packages, project editing, authoring pipelines and reusable artwork libraries.

@@ -95,3 +95,89 @@ renderCodeHistory({}, {client,codeRevealRenderer:()=> 'code'});
 // @ts-expect-error History loading completes without exposing raw rows as the result.
 const historyRows:Promise<unknown[]>=codeHistory.ready;
 void [codeSnapshot,codeUnsubscribed,codeOpened,codeViewOpen,codeHistoryReady,guaranteedCode,immediateCode,coveredCode,historyRows];
+
+import {render3DInspector,renderComparison,type InspectorCopy,type InspectorCatalog,type InspectorRenderingOptions} from '@digital-card/framework/inspector-ui';
+import {renderActivity,type ActivityView,type ActivityContext} from '@digital-card/framework/player-ui';
+import type {Schemas as UIConsumerSchemas} from '@digital-card/framework/wire-types';
+declare const inspectorWireCopy:UIConsumerSchemas['Copy'];
+const inspectorPreview={id:'preview:card',cardId:'card',lineId:'sky',rarityId:'common',definition:{name:'Example',description:'Artwork',tags:['sky'],stats:{power:5}},variant:{finish:'foil'},preview:true};
+const inspectorCatalog:InspectorCatalog={displayFields:[{path:'stats.power',label:'Power'}],combinations:[{id:'scene',name:'Scene',rows:1,columns:2,gap:0,pieces:[{cardId:'card',row:0,column:0}]}]};
+const inspectorElement:HTMLElement=render3DInspector(inspectorPreview,{
+  catalog:inspectorCatalog,labels:{line:'Sky',rarity:'Common'},locale:'en',messages:{'inspector.close':'Close'},
+  cardRenderer(copy,options){const preview:boolean=copy.preview;const interactive:false=options.interactive;const mode:'interactive'|undefined=options.presentationMode;const locale:string=options.localization.locale;const back:Node|string|undefined=options.backRenderer?.(copy);void [preview,interactive,mode,locale,back];return document.createElement('article');},
+  metadataRenderer(copy,options){const preview:boolean=copy.preview;const locale:string=options.localization.locale;void [preview,locale];return document.createElement('dl');},
+  backRenderer:copy=>copy.definition.name,
+  onClose:event=>{const target:EventTarget|null=event.currentTarget;void target;},
+});
+const simpleInspectorRenderer:InspectorRenderingOptions<InspectorCopy>['cardRenderer']=()=>document.createElement('article');
+const wireInspector:HTMLElement=render3DInspector(inspectorWireCopy,{cardRenderer:simpleInspectorRenderer});
+const comparison:HTMLElement=renderComparison([inspectorPreview],{catalog:inspectorCatalog,cardRenderer:simpleInspectorRenderer,onClose:()=>{},locale:'en'});
+renderComparison([],{catalog:{},cardRenderer:simpleInspectorRenderer});
+document.body.append(inspectorElement,wireInspector,comparison);
+// @ts-expect-error Inspector rendering requires a card renderer.
+render3DInspector(inspectorPreview,{});
+// @ts-expect-error Inspector card renderers return elements directly.
+render3DInspector(inspectorPreview,{cardRenderer:()=>({node:document.createElement('div')})});
+// @ts-expect-error Comparison reads the host catalog.
+renderComparison([inspectorPreview],{cardRenderer:simpleInspectorRenderer});
+// @ts-expect-error Combination grid coordinates are numbers.
+renderComparison([inspectorPreview],{catalog:{combinations:[{name:'Scene',rows:'1',columns:2,pieces:[]}]},cardRenderer:simpleInspectorRenderer});
+// @ts-expect-error Inspector returns a DOM element without a disposal wrapper.
+inspectorElement.dispose();
+// @ts-expect-error Inspector rendering is synchronous.
+const promisedInspector:Promise<HTMLElement>=render3DInspector(inspectorPreview,{cardRenderer:simpleInspectorRenderer});
+
+const activityContext:ActivityContext={client,mutate:runner,action:async(fn,options)=>{const message:string=options.message;void message;return fn();}};
+const activityModel={me:{preferences:{inventoryVisibility:'traders' as const,blockedUserIds:['collector']}},catalog:{currencies:[{id:'credits',name:'Credits'}]}};
+const activityView:ActivityView=renderActivity(activityModel,activityContext);
+const activityNode:HTMLElement=activityView.node;
+document.body.append(activityNode);
+const activityDisposed:void=activityView.dispose();
+renderActivity({me:{},catalog:{currencies:[{id:'credits'}]}},activityContext).dispose();
+const activityPreferences:Promise<UIConsumerSchemas['Preferences']>=activityContext.mutate('preferences',{inventoryVisibility:'private'});
+const activityRead:Promise<UIConsumerSchemas['NotificationReadReceipt']>=activityContext.mutate('readNotifications',{ids:['notification']});
+const activityBinding:Promise<UIConsumerSchemas['BindingUseReceipt']>=activityContext.mutate('consumeBinding',{copyId:'copy',namespace:'reward'});
+// @ts-expect-error Activity requires its host callbacks.
+renderActivity(activityModel,{client});
+// @ts-expect-error The visibility preference has explicit values.
+renderActivity({me:{preferences:{inventoryVisibility:'friends'}},catalog:activityModel.catalog},activityContext);
+// @ts-expect-error Activity clients return checked ledger entries.
+renderActivity(activityModel,{...activityContext,client:{...client,history:async()=>[{delta:'1'}]}});
+// @ts-expect-error Activity loading has no exposed readiness promise.
+activityView.ready;
+// @ts-expect-error Activity returns a lifecycle object synchronously.
+const promisedActivity:Promise<ActivityView>=renderActivity(activityModel,activityContext);
+// @ts-expect-error Activity host mutations use only its three commands.
+activityContext.mutate('purchase',{productId:'sample'});
+// @ts-expect-error Binding copy IDs use strings.
+activityContext.mutate('consumeBinding',{copyId:42,namespace:'reward'});
+// @ts-expect-error Binding consumption identifies its namespace.
+activityContext.mutate('consumeBinding',{copyId:'copy'});
+void [inspectorElement,wireInspector,comparison,promisedInspector,activityNode,activityDisposed,activityPreferences,activityRead,activityBinding,promisedActivity];
+
+import type {CommandInput as CheckedCommandInput} from '@digital-card/framework/client';
+const indexedBindingWithoutKey:CheckedCommandInput<'consumeBinding'>={copyId:'copy',namespace:'reward'};
+const indexedBindingWithKey:CheckedCommandInput<'consumeBinding'>={key:'binding-retry',copyId:'copy',namespace:'reward',extension:{source:'example'}};
+const indexedRead:CheckedCommandInput<'readNotifications'>={ids:['notice'],extension:true};
+const indexedUnion:CheckedCommandInput<'consumeBinding'|'readNotifications'>=indexedRead;
+void runner('consumeBinding',indexedBindingWithoutKey);
+void runner('consumeBinding',indexedBindingWithKey);
+void runner.beginNew('readNotifications',indexedRead);
+void runner.recover('consumeBinding',indexedBindingWithKey);
+// @ts-expect-error Indexed binding commands retain their required namespace.
+void runner('consumeBinding',{copyId:'copy'});
+// @ts-expect-error Indexed binding commands retain their required copy ID.
+void runner('consumeBinding',{namespace:'reward'});
+// @ts-expect-error Known indexed fields retain their declared string types.
+void runner('consumeBinding',{copyId:42,namespace:'reward'});
+// @ts-expect-error Optionalized keys still require string values.
+void runner('consumeBinding',{key:42,copyId:'copy',namespace:'reward'});
+// @ts-expect-error Other indexed command schemas retain required fields too.
+void runner('readNotifications',{extension:true});
+// @ts-expect-error Indexed trade proposals retain both offer sides.
+void runner('proposeTrade',{toUserId:'collector'});
+// @ts-expect-error Recovery uses the same checked input shape.
+void runner.recover('consumeBinding',{copyId:'copy'});
+// @ts-expect-error Union inputs require one complete command member.
+const incompleteIndexedUnion:CheckedCommandInput<'consumeBinding'|'readNotifications'>={copyId:'copy'};
+void [indexedBindingWithoutKey,indexedBindingWithKey,indexedRead,indexedUnion,incompleteIndexedUnion];

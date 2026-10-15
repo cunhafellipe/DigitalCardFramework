@@ -206,7 +206,7 @@ export class ActionService {
         at: this.#clock(),
         actorId: actor.userId ?? null,
       });
-      const result = view(j);
+      const result = structuredClone(view(j));
       s.actionRetryRequests[token] = { jobId, result };
       completionCapacity(s,this.#limits);
       return result;

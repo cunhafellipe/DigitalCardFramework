@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, admin, code } from "./helpers.js";
 import { MemoryStore, CardFramework } from "../src/index.js";
+import { SQLiteStore } from "../src/sqlite.js";
 const reward = (c) => {
   c.variants.find((v) => v.id === "dawn.standard").onOpen = [
     { id: "unlock", handler: "external.unlock", params: { item: "badge" } },
@@ -95,6 +96,17 @@ test("worker failure is sanitized, backoff retries use a stable downstream ID, a
   assert.deepEqual(calls, [job.id, job.id]);
   x.core.close();
 });
+for(const Store of [MemoryStore,SQLiteStore])test(Store.name+" legacy retry receipt stays unchanged after later delivery",async()=>{
+  const backing=new Store(),store={read:backing.read.bind(backing),transact:backing.transact.bind(backing),measure:backing.measure.bind(backing),close:backing.close.bind(backing)},calls=[];let succeed=false;
+  const x=fixture({store,change:reward,actionOptions:{maxAttempts:1},actionHandlers:{"external.unlock":async job=>{calls.push(job.idempotencyKey);if(!succeed)throw Error("Synthetic delivery failure");}}});
+  try{
+    x.open();await x.core.dispatchActions(admin);const job=x.core.fulfillments(x.alice).items[0];assert.equal(job.status,"dead");
+    const input={key:"retained-retry",jobId:job.id},receipt=x.core.retryAction(admin,input);assert.equal(receipt.status,"pending");assert.deepEqual(x.core.retryAction(admin,input),receipt);
+    succeed=true;await x.core.dispatchActions(admin);const completed=x.core.fulfillments(x.alice).items[0];assert.equal(completed.status,"succeeded");assert(completed.history.length>receipt.history.length);
+    assert.deepEqual(x.core.retryAction(admin,input),receipt);assert.deepEqual(calls,[job.id,job.id]);assert.equal(completed.history.filter(entry=>entry.type==="retry-requested").length,1);
+  }finally{x.core.close();}
+});
+
 test("delivery leases prevent duplicate claims and fence expired worker acknowledgments", () => {
   let now = "2026-10-01T00:00:00Z";
   const store = new MemoryStore(),

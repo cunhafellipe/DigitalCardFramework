@@ -174,6 +174,7 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
+          DC_PROGRAM_LANGUAGES: python,go
       - run: xvfb-run --auto-servernum node test/program-pack-browser.mjs test-results/program-pack
         env:
           HEADED: '1'
@@ -209,6 +210,10 @@ jobs:
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
       - run: node test/codes-shell-browser.mjs test-results/codes-shell
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: node test/rewards-shell-browser.mjs test-results/rewards-shell
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3

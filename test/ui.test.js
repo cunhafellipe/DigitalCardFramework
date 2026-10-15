@@ -31,6 +31,20 @@ for(const delayed of [false,true])test('account switch clears '+(delayed?'a late
   }finally{release?.();app.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}
 });
 
+for(const kind of ['inspector','comparison'])for(const closed of [false,true])test('account switch clears private '+kind+' data from '+(closed?'closed':'open')+' dialog and permits current inspection',async()=>{
+  const window=new Window(),x=fixture();globalThis.document=window.document;globalThis.sessionStorage=window.sessionStorage;
+  let actor=x.alice,restored=0;const first=x.open('unique')[0],second=x.open('common',x.bob)[0],root=document.createElement('main'),invoker=document.createElement('button');document.body.append(invoker,root);
+  const client={requestKey:randomUUID,me:async()=>x.core.me(actor),catalog:async()=>x.core.catalog(actor)};
+  for(const name of ['wallet','packs','inventory','albums','trades','commandIntents','registerCommandIntent','executeCommandIntent','acknowledgeCommandIntent'])client[name]=async input=>x.core[name](actor,input);
+  const app=mountFramework(root,{client,sections:['packs'],comparisonRenderer(copies){const node=document.createElement('section');node.textContent=copies.map(copy=>copy.id+' '+JSON.stringify(copy.bindings)).join(' ');return node;}});
+  const inspect=copy=>kind==='inspector'?app.inspect(copy):app.inspectTogether([copy]);
+  try{
+    await app.ready;invoker.focus();invoker.addEventListener('focus',()=>restored++);inspect(first);const dialog=root.querySelector('.dc-inspector-dialog');assert(dialog.open);assert(dialog.textContent.includes(first.id));assert(dialog.textContent.includes('PRIVATE-DEMO-CODE'));if(closed)dialog.close();await settle();restored=0;
+    actor=x.bob;await app.refresh();await settle();assert.equal(dialog.open,false);assert.equal(dialog.childElementCount,0);assert(!dialog.textContent.includes(first.id));assert(!dialog.textContent.includes('PRIVATE-DEMO-CODE'));assert.equal(restored,0);
+    inspect(second);assert(dialog.open);assert(dialog.textContent.includes(second.id));assert(!dialog.textContent.includes(first.id));
+  }finally{app.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}
+});
+
 const studioMessages=()=>Object.fromEntries(Object.entries(englishMessages).filter(([key])=>key.startsWith('studioShell.')||key.startsWith('policyUI.')).map(([key,value])=>[key,typeof value==='string'?'['+value+']':Object.fromEntries(Object.entries(value).map(([category,text])=>[category,'['+text+']']))]));
 
 test('localized studio previews preserve import inputs, authored rows and reviewed publishing',async()=>{

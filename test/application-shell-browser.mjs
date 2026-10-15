@@ -26,7 +26,11 @@ const programServer=createServer(async(req,res)=>{try{
 const hostServer=createServer(async(req,res)=>{try{
   if(holdExecute&&req.url==='/api/command-intents/execute')await new Promise(resolve=>releaseExecute=resolve);
   if(dropExecuteReply&&req.url==='/api/command-intents/execute'){
-    dropExecuteReply=false;res.end=()=>{lostExecuteReplies++;res.destroy();return res;};
+    dropExecuteReply=false;res.end=()=>{
+      lostExecuteReplies++;
+      // Deliver response bytes before truncation so transport retries cannot hide the lost result.
+      res.flushHeaders();res.write('{"result":',()=>res.destroy());return res;
+    };
   }
   if(holdWalletReply&&req.url==='/api/wallet'){
     holdWalletReply=false;const end=res.end.bind(res);res.end=(...args)=>{releaseWalletReply=()=>end(...args);walletReplyCaptured?.();return res;};

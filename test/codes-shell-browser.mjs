@@ -15,7 +15,12 @@ const engine=process.env.BROWSER_ENGINE??'webkit',output=resolve(process.argv[2]
 let browser,x,actor,api,origin,dropReveal=false,holdReveal=false,releaseReveal,capturedReveal;
 const server=createServer(async(request,response)=>{
   try{
-    if(request.url==='/api/codes/reveal'&&dropReveal){dropReveal=false;response.end=()=>{response.destroy();return response;};}
+    if(request.url==='/api/codes/reveal'&&dropReveal){
+      dropReveal=false;response.end=()=>{
+        // Deliver response bytes before truncation so transport retries cannot hide the lost result.
+        response.flushHeaders();response.write('{"result":',()=>response.destroy());return response;
+      };
+    }
     if(request.url==='/api/codes/reveal'&&holdReveal){holdReveal=false;const end=response.end.bind(response);response.end=(...args)=>{releaseReveal=()=>end(...args);capturedReveal?.();return response;};}
     if(await api?.(request,response))return;
     const path=new URL(request.url,'http://localhost').pathname;

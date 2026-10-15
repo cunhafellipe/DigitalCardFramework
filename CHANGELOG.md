@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clear retained inspector and comparison details when the active account changes.
+- Preserve the original action-retry receipt when later delivery attempts update job history.
+
 - Start a new conversion when the wallet button is deliberately used again after a confirmed result and an account switch or remount; preserve original-result recovery for uncertain conversions.
 
 - Require complete code-confirmation and copy-stat receipts in checked responses and reject unexpected response fields.

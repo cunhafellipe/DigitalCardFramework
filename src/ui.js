@@ -350,7 +350,7 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
     const generation=++refreshGeneration;
     const [catalog,me,capabilities]=await Promise.all([client.catalog(),client.me(),client.capabilities?.()??null]);
     if(disposed||generation!==refreshGeneration)return;
-    if(shellPrincipal!==me.userId){if(shellPrincipal!==null){shellGeneration++;openerDispose?.();openerDispose=null;controller.dispose();controller=createController();}shellPrincipal=me.userId;}
+    if(shellPrincipal!==me.userId){if(shellPrincipal!==null){shellGeneration++;inspectorInvoker=null;inspector.close();inspector.replaceChildren();openerDispose?.();openerDispose=null;controller.dispose();controller=createController();}shellPrincipal=me.userId;}
     const enabled=name=>!capabilities||capabilities.available[name]||capabilities.draining.includes(name);
     const commerce=enabled('directSales')||enabled('resale')||enabled('packs'),packsEnabled=enabled('packs'),trading=enabled('trading');
     const sectionEnabled={shop:!capabilities||capabilities.available.packs,packs:packsEnabled,marketplace:commerce,rewards:commerce||capabilities?.history?.rewards,codes:commerce||packsEnabled||capabilities?.history?.codes,trades:trading,tradingControls:trading,wallet:commerce||packsEnabled||trading,albums:!capabilities||catalog.features.publicAlbums};

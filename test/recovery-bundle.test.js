@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm,readdir,mkdir,symlink} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm,readdir,mkdir,symlink,cp} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createServer as createPortProbe} from 'node:net';
 import {randomBytes,createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {SQLiteStore} from '../src/sqlite.js';
@@ -57,7 +59,7 @@ async function seed() {
 }
 const backupOptions = (x,destination) => ({database:x.database,presentationRoot:x.presentationRoot,destination,encryptionKey:x.key,codeVault:vault()});
 const restoreOptions = (x,bundle,destination) => ({bundle,destination,encryptionKey:x.key,codeVault:vault()});
-const clean = x => rm(x.dir,{recursive:true,force:true});
+const clean = x => {if(!path.resolve(x.dir).startsWith(path.join(path.resolve(tmpdir()),'card-recovery-')))throw Error('Unsafe recovery fixture cleanup target');return rm(x.dir,{recursive:true,force:true});};
 
 test('CLI recovery restores encrypted state, sessions, pinned art, moderation and import replay together',async()=>{
   const x = await seed(), bundle = path.join(x.dir,'bundle'), restored = path.join(x.dir,'restored');
@@ -184,4 +186,34 @@ test('recovery refuses nested destinations through directory aliases without cha
     assert.deepEqual(await tree(bundle),bundleBefore);
     await assert.rejects(backupRecoveryBundle({...backupOptions(x,path.join(x.dir,'aliased-source')),presentationRoot:alias}),/ordinary directories/);
   } finally {await clean(x);}
+});
+
+
+test('rotated code vault bundle boots actual restored host and retains orphan artwork',{timeout:60000},async()=>{
+  const x=await seed(),bundle=path.join(x.dir,'rotated-bundle'),restored=path.join(x.dir,'restored-host'),rotatedVault=vault({activeKeyId:'two',keys:{one:Buffer.alloc(32,7),two:Buffer.alloc(32,8)}}),onlyNewVault=vault({activeKeyId:'two',keys:{two:Buffer.alloc(32,8)}});let child;
+  try{
+    const rotating=new CardFramework({store:new SQLiteStore(x.database,{encryptionKey:x.key}),codeVault:rotatedVault});try{assert.equal(rotating.rotateCodeEncryption(admin).count,8);}finally{rotating.close();}
+    const checking=new CardFramework({store:new SQLiteStore(x.database,{encryptionKey:x.key}),codeVault:onlyNewVault});try{assert.equal(checking.verifyCodeVault(admin).count,8);}finally{checking.close();}
+    const orphanFixture=artFixture();orphanFixture.manifest.revision=3;const orphan=await build(orphanFixture),art=await presentationStore(x.presentationRoot);let orphanJob;
+    try{orphanJob=await ready(art,orphan.archive,'unreferenced-published-import');await art.publish({id:'operator'},orphanJob.id);}finally{await art.close();}
+    const sourceBefore=await tree(x.dir);await backupRecoveryBundle({...backupOptions(x,bundle),codeVault:onlyNewVault});for(const [name,digest]of Object.entries(sourceBefore))assert.equal((await tree(x.dir))[name],digest);
+    const manifest=JSON.parse(await readFile(path.join(bundle,'manifest.json'),'utf8'));assert(manifest.presentations.includes(orphan.digest));assert(!manifest.references.some(reference=>reference.digest===orphan.digest));
+    const damaged=path.join(x.dir,'truncated-bundle');await cp(bundle,damaged,{recursive:true});const member=path.join(damaged,'presentations/content',orphan.digest.slice(7),'download.dcard'),bytes=await readFile(member);await writeFile(member,bytes.subarray(0,bytes.length-1));const refused=path.join(x.dir,'truncated-restore');await assert.rejects(restoreRecoveryBundle({...restoreOptions(x,damaged,refused),codeVault:onlyNewVault}),/member is missing, changed/);assert(!existsSync(refused));
+    await restoreRecoveryBundle({...restoreOptions(x,bundle,restored),codeVault:onlyNewVault});const bundleBefore=await tree(bundle);
+    const extension=path.join(x.dir,'restored-host-module.mjs');await writeFile(extension,`export const bindings={'demo.code':()=>({code:'synthetic'})};export const identityProvider={begin:async()=>({url:'https://identity.example.test',data:{}}),finish:async()=>{throw Error('Unused fixture login');}};export const actionWorker=false;process.on('message',message=>{if(message==='stop-recovery-fixture')process.emit('SIGTERM');});`);
+    const probe=createPortProbe();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));const origin='https://cards.test',base='http://127.0.0.1:'+port;
+    const env={...process.env,SITE_ORIGIN:origin,DATABASE_PATH:path.join(restored,'state.sqlite'),PRESENTATION_ROOT:path.join(restored,'presentations'),HOST_MODULE:extension,STATE_ENCRYPTION_KEY:x.key.toString('hex'),CODE_ACTIVE_KEY_ID:'two',CODE_VAULT_KEYS:JSON.stringify({two:Buffer.alloc(32,8).toString('hex')}),CODE_INDEX_KEY:Buffer.alloc(32,9).toString('hex'),OPERATOR_SUBJECTS:JSON.stringify(['collector']),PORT:String(port),BIND_ADDRESS:'127.0.0.1'};for(const name of ['STATE_ENCRYPTION_KEY_FILE','CODE_VAULT_KEYS_FILE','CODE_INDEX_KEY_FILE'])delete env[name];
+    child=spawn(process.execPath,[path.resolve('host/server.js')],{env,windowsHide:true,stdio:['ignore','pipe','pipe','ipc']});let logs='';
+    await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Restored host startup timed out: '+logs)),15000);const fail=error=>{clearTimeout(timer);reject(error);};child.once('error',fail);child.once('exit',code=>fail(Error('Restored host exited before ready '+code+': '+logs)));child.stderr.on('data',part=>logs=(logs+part).slice(-8192));child.stdout.on('data',part=>{logs=(logs+part).slice(-8192);if(logs.includes('Framework production host ready')){clearTimeout(timer);resolve();}});});
+    const request=(route,{input,authenticated=true}={})=>fetch(base+route,{method:input===undefined?'GET':'POST',headers:{connection:'close',origin,'content-type':'application/json',...(authenticated?{cookie:'__Host-dc_session='+x.token,'x-dc-principal':x.alice.userId}:{})},body:input===undefined?undefined:JSON.stringify(input),signal:AbortSignal.timeout(10000)});
+    const json=async(route,input)=>{const response=await request(route,{input});assert.equal(response.status,200,logs);return response.json();};
+    assert.equal((await request('/healthz')).status,200);assert.equal((await request('/api/me',{authenticated:false})).status,401);assert.equal((await json('/api/me')).userId,x.alice.userId);
+    assert.deepEqual(await json('/api/purchase',x.input),x.purchase);assert.deepEqual(await json('/api/open',{packId:x.purchase.packs[0].id,key:'retained-open'}),x.opened);assert.deepEqual(await json('/api/codes/reveal',{codeId:x.reward.codes[0].id,key:'retained-reveal'}),x.codeResult);
+    const inventory=await json('/api/inventory');assert.deepEqual(inventory.find(copy=>copy.cardId==='dawn').definition.presentation,x.reference);
+    const quarantined=await request('/presentations/'+x.pkg.digest+'/files/assets/art.png');assert.equal(quarantined.status,400);assert.equal((await quarantined.json()).error,'QUARANTINED');
+    const orphanDownload=await request('/presentations/'+orphan.digest+'/download');assert.equal(orphanDownload.status,200);assert.equal((await importPackage(new Uint8Array(await orphanDownload.arrayBuffer()))).digest,orphan.digest);
+    assert.equal((await json('/presentations/imports/'+x.pending.id)).state,'ready');assert.equal((await json('/presentations/imports/'+orphanJob.id)).state,'published');assert.equal((await json('/api/operator/audit')).ok,true);
+    const ended=once(child,'exit');child.send('stop-recovery-fixture');const [exitCode]=await ended;assert.equal(exitCode,0,logs);child=null;
+    const sessions=new SessionStore(path.join(restored,'state.sqlite'),{encryptionKey:x.key});try{assert.deepEqual(sessions.get(x.flow,'flow'),{verifier:'retained-verifier',nonce:'retained-nonce'});}finally{sessions.close();}assert.deepEqual(await tree(bundle),bundleBefore);
+  }finally{if(child&&child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill();await ended;}await clean(x);}
 });

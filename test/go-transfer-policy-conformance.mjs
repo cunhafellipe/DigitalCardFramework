@@ -3,7 +3,7 @@ import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
-import {request as httpRequest} from 'node:http';
+import {request as httpRequest,createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
 import {createRemoteTransferPolicy,transferPolicyProtocol,validateTransferPolicyResponse} from '../src/remote-transfer-policy.js';
@@ -112,6 +112,12 @@ try{
   await post(receiver,encoded,401,{headers:['Content-Type','application/json','Authorization','Bearer '+token,'Authorization','Bearer '+token,'Content-Length',String(Buffer.byteLength(encoded))]});
   await post(receiver,encoded,400,{headers:['Content-Type','application/json','Content-Type','application/json','Authorization','Bearer '+token,'Content-Length',String(Buffer.byteLength(encoded))]});
   assert.deepEqual(await readFile(receiver.filename),original);assertions++;
+  {
+    let arrive,release;const arrived=new Promise(resolve=>arrive=resolve),held=new Promise(resolve=>release=resolve);
+    const proxy=createServer(async(req,res)=>{const parts=[];for await(const part of req)parts.push(part);const response=await fetch(receiver.url,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:Buffer.concat(parts)});assert.equal(response.status,200);const body=Buffer.from(await response.arrayBuffer());assert.equal(validateTransferPolicyResponse(JSON.parse(body)).status,'allowed');assertions+=2;arrive();await held;res.writeHead(200,{'content-type':'application/json'});res.end(body);});await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve));
+    const remote=createRemoteTransferPolicy({scope:'transfer',providerId,url:'http://127.0.0.1:'+proxy.address().port,token,allowLoopbackHttp:true});
+    try{const pending=remote.evaluate({...transfer(),...remote.grant()}),rejected=assert.rejects(pending,error=>error.code==='POLICY_DISABLED');await arrived;remote.setEnabled(false);release();await rejected;assertions++;}finally{release();remote.close();proxy.closeAllConnections();await new Promise(resolve=>proxy.close(resolve));}
+  }
   await writeFile(receiver.filename,JSON.stringify({actors:[]}));
   const unchanged=transfer();assert.deepEqual(await post(receiver,unchanged),expected(unchanged));assertions++;
   await stop(receiver);
@@ -121,7 +127,7 @@ try{
     await assert.rejects(start(config),/Policy exited before readiness/);assertions++;
   }
   for(const environment of [{TRANSFER_POLICY_PROVIDER_ID:'constructor'},{TRANSFER_POLICY_TOKEN:'short'},{TRANSFER_POLICY_TOKEN:'invalid credential with spaces'}]){await assert.rejects(start(records,environment),/Policy exited before readiness/);assertions++;}
-  console.log(JSON.stringify({provider:'go',assertions,status:'passed',scenarios:['Node transfer/trade transports','both transfer legs and null reservation','currency-only zero and exact integer limits','identity/authentication','malformed/unknown/duplicate JSON and UTF-8','combined 2000 copies','bounded requests and configuration','default deny and immutable records']},null,2));
+  console.log(JSON.stringify({provider:'go',assertions,status:'passed',scenarios:['Node transfer/trade transports','both transfer legs and null reservation','currency-only zero and exact integer limits','identity/authentication','malformed/unknown/duplicate JSON and UTF-8','combined 2000 copies','bounded requests and configuration','default deny and immutable records','live disable fences consumed real allowed reply']},null,2));
 }finally{
   for(const child of processes){if(child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill();await ended;}}
   if(!resolve(directory).startsWith(base+sep))throw Error('Unsafe conformance cleanup target');

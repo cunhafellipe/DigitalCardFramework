@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
+import {createServer} from 'node:http';
 import {createRemoteTransferPolicy,transferPolicyProtocol,validateTransferPolicyRequest,validateTransferPolicyResponse} from '../src/remote-transfer-policy.js';
 import {createRemoteTradePolicy,tradePolicyProtocol,validateTradePolicyRequest,validateTradePolicyResponse} from '../src/remote-trade-policy.js';
 
@@ -41,6 +42,13 @@ async function post(url,request,status=200){
   const response=await fetch(url,{method:'POST',headers,body:typeof request==='string'||Buffer.isBuffer(request)?request:JSON.stringify(request)});
   assert.equal(response.status,status);assert.ok(Number(response.headers.get('content-length'))<=8192);return response.json();
 }
+
+test('independent Python allowed response is fenced by live transport disable before admission',async()=>withPython(records,async url=>{
+  let arrive,release;const arrived=new Promise(resolve=>arrive=resolve),held=new Promise(resolve=>release=resolve);
+  const proxy=createServer(async(req,res)=>{const parts=[];for await(const part of req)parts.push(part);const response=await fetch(url,{method:'POST',headers,body:Buffer.concat(parts)});assert.equal(response.status,200);const body=Buffer.from(await response.arrayBuffer());assert.equal(validateTransferPolicyResponse(JSON.parse(body)).status,'allowed');arrive();await held;res.writeHead(200,{'content-type':'application/json'});res.end(body);});await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve));
+  const remote=createRemoteTransferPolicy({scope:'transfer',providerId,url:'http://127.0.0.1:'+proxy.address().port,token,allowLoopbackHttp:true});
+  try{const pending=remote.evaluate({...transfer(),...remote.grant()}),rejected=assert.rejects(pending,error=>error.code==='POLICY_DISABLED');await arrived;remote.setEnabled(false);release();await rejected;}finally{release();remote.close();proxy.closeAllConnections();await new Promise(resolve=>proxy.close(resolve));}
+}));
 
 test('independent Python transfer and currency-only trade policies allow configured routes and deny other actors or recipients through Node transports',async()=>{
   await withPython(records,async(url,filename)=>{

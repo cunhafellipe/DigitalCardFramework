@@ -59,6 +59,7 @@ jobs:
       - run: go build -mod=readonly -buildvcs=false -trimpath -o "$RUNNER_TEMP/action-receiver" .
         working-directory: examples/plugins/go-action-receiver
       - run: node test/action-receiver-conformance.mjs "$RUNNER_TEMP/action-receiver" python3
+      - run: node test/node-action-receiver-conformance.mjs
       - run: go -C examples/plugins/go-plugin-client build -mod=readonly -o "$RUNNER_TEMP/plugin-client" .
       - run: node test/plugin-purchase-conformance.mjs "$RUNNER_TEMP/plugin-client" python3
       - run: go -C examples/plugins/go-transfer-policy build -mod=readonly -buildvcs=false -trimpath -o "$RUNNER_TEMP/transfer-policy" .

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Correct compressed variable-font rendering and mixed-direction styled text, including Latin letters and numbers inside right-to-left paragraphs. Keep preview, player, poster and accessible text consistent for the qualified font samples.
+- Avoid unused catalog decoding when reading inventory pages and repeated privacy-evidence hashing during card projection.
+- Correct production guidance for schema 8 migrations and asynchronous access resolvers.
+
 - Add opt-in Java, C# and Rust examples for authenticated commands, transfer policy hooks and durable event delivery, alongside the existing JavaScript/TypeScript, Python and Go routes.
 - Reject Java, C# and Rust receipt-journal additions that exceed restart-parser limits before writing, preserving replay of existing receipts.
 - Qualify recovery with rotated code-vault keys, retained artwork, interrupted backups and verified stale-owner lock removal; document reconciliation of known unfulfilled payments after restoring an older backup.

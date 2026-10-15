@@ -643,3 +643,84 @@ createAuthoring({publish:()=>({digest:'digest'})});
 // @ts-expect-error Publication requires an idempotency key.
 authoring.publishPack({cards:[authoringRequest],catalog:{version:1,cards:[{id:'example'}]}});
 void [imageArchive,builtAuthoring,batchAuthoring,authoringVersion,authoringImporters,authoringEffects,authoringPublication,immediateAuthoringImage,immediateAuthoringPackage];
+
+import {addText,configureAuthoring,setStat,addStatBlock,transformSelection,createSharedLibrary,combineLibraries,createMemoryLibrary,createLocalLibrary,saveTextStyle,applyTextStyle,saveTemplate,loadTemplate,saveMask,applyMask,previewTemplateMigration,applyTemplateMigration,previewTemplateBatch,inspectProject,type LibraryEntry,type TemplateEntry,type TextStyleEntry,type MaskEntry,type TemplateMigrationPreview,type SelectionCommand} from '@digital-card/framework/presentation/authoring-tools';
+import type {Schemas as AuthoringToolSchemas} from '@digital-card/framework/wire-types';
+declare const toolsPolicy:AuthoringToolSchemas['CardPolicyEffective'];
+declare const toolsRegistry:AuthoringToolSchemas['CardPolicyRegistry'];
+declare const toolsTemplate:TemplateEntry;
+declare const toolsStyle:TextStyleEntry;
+declare const toolsMask:MaskEntry;
+const toolsTextId:string=addText(editingProject);
+addText(editingProject,'back',{text:'Example',x:20,width:100,typography:{size:24},stat:{key:'power',scope:'variant'}});
+configureAuthoring(editingProject,{policy:toolsPolicy,context:{cardId:'example',lineId:'sky',variantId:'foil'},policyRevision:1});
+configureAuthoring(editingProject);
+setStat(editingProject,'power',5);
+setStat(editingProject,'power',undefined,'variant');
+const toolsStatIds:string[]=addStatBlock(editingProject,'front',['power',{key:'level',scope:'variant'}],{view:'badge',columns:2,rowHeight:40});
+const toolsCommands:SelectionCommand[]=['lock','unlock','forward','backward','delete','duplicate','group','ungroup','left','right','top','bottom','center','snap'];
+toolsCommands.forEach(command=>transformSelection(editingProject,'front',[toolsTextId],command,10));
+const personalToolsLibrary=createMemoryLibrary();
+const localToolsLibrary=createLocalLibrary('example-library');
+const localToolsPut:Promise<IDBValidKey>=localToolsLibrary.put(toolsTemplate);
+const localToolsRemove:Promise<undefined>=localToolsLibrary.remove(toolsTemplate.key);
+const memoryToolsPut:Promise<void>=personalToolsLibrary.put(toolsTemplate);
+const memoryToolsRemove:Promise<void>=personalToolsLibrary.remove(toolsTemplate.key);
+const customToolsLibrary=createMemoryLibrary<{key:string;label:string}>();
+customToolsLibrary.put({key:'custom@1',label:'Custom'});
+customToolsLibrary.get('custom@1').then(entry=>{const label:string|undefined=entry?.label;void label;});
+const sharedToolsLibrary=createSharedLibrary({client:{
+  cardPolicies:async()=>toolsRegistry,
+  saveCardResource:async input=>{const revision:number=input.expectedRevision;return {saved:true,revision};},
+},upload:pkg=>{const files:Map<string,Uint8Array>=pkg.files;void files;},download:async digest=>{const requested:string=digest;void requested;return new Uint8Array(0);}});
+sharedToolsLibrary.list().then(entries=>{const shared:true|undefined=entries[0]?.shared;void shared;});
+sharedToolsLibrary.get('example@1').then(entry=>{const archive:Uint8Array|undefined=entry?.archive;void archive;});
+sharedToolsLibrary.put(toolsTemplate).then(receipt=>{const revision:number=receipt.revision;void revision;});
+const combinedToolsLibrary=combineLibraries(personalToolsLibrary,sharedToolsLibrary,{canShare:true});
+const combinedToolsPut:Promise<void>=combinedToolsLibrary.put(toolsMask);
+combinedToolsLibrary.share(toolsTemplate).then(receipt=>{const saved:boolean=receipt.saved;void saved;});
+combinedToolsLibrary.get('example@1',true);
+combinedToolsLibrary.list().then(entries=>{const entry:LibraryEntry|undefined=entries[0];void entry;});
+const unsharedToolsLibrary=combineLibraries(personalToolsLibrary,sharedToolsLibrary);
+// @ts-expect-error Sharing is installed only when enabled.
+unsharedToolsLibrary.share(toolsTemplate);
+saveTextStyle(editingProject,{typography:{size:24}},personalToolsLibrary,{id:'style',revision:2,name:'Body',tags:['text']}).then(entry=>{
+  const archive:Uint8Array=entry.archive;const kind:'style'=entry.kind;const size:number|undefined=entry.document.typography.size;void [archive,kind,size];
+});
+const appliedToolsStyle:Promise<void>=applyTextStyle(editingProject,'front',toolsTextId,toolsStyle);
+saveTemplate(editingProject,personalToolsLibrary,{id:'template'}).then(entry=>{
+  const fixed:Record<string,unknown>|undefined=entry.document.slots[0]?.fixed;
+  const childId:string|undefined=entry.document.structure.front?.[0]?.children?.[0]?.id;
+  const assetDigests:Record<string,string>=entry.document.assetDigests;
+  void [fixed,childId,assetDigests];
+});
+const loadedToolsTemplate:Promise<AuthoringImagePackage>=loadTemplate(toolsTemplate);
+saveMask(editingProject,'front',toolsTextId,personalToolsLibrary,{use:'effect'}).then(entry=>{const use:'clip'|'effect'=entry.document.use;const asset:string|undefined=entry.document.mask.asset;void [use,asset];});
+const appliedToolsMask:Promise<void>=applyMask(editingProject,'back',toolsTextId,toolsMask);
+const toolsMigration:Promise<TemplateMigrationPreview>=previewTemplateMigration(editingProject,toolsTemplate);
+toolsMigration.then(preview=>{const change:'added'|'updated'|'removed'|undefined=preview.changes[0]?.change;const applied:Promise<void>=applyTemplateMigration(editingProject,preview);void [change,applied];});
+previewTemplateBatch([editingProject],toolsTemplate).then(results=>results.forEach(result=>{
+  if(result.error){const code:string=result.error.code;void code;}
+  else {const digest:string=result.preview.beforeDigest;void digest;}
+}));
+const toolsIssues=inspectProject(editingProject,toolsPolicy);
+const toolsIssueMessage:string|undefined=toolsIssues[0]?.message;
+// @ts-expect-error Text typography uses numeric sizes.
+addText(editingProject,'front',{typography:{size:'large'}});
+// @ts-expect-error Card faces are front or back.
+addText(editingProject,'left');
+// @ts-expect-error Only implemented selection commands are exposed.
+transformSelection(editingProject,'front',[],'rotate',90);
+// @ts-expect-error Scoped stat references must identify a known scope.
+addStatBlock(editingProject,'front',[{key:'power',scope:'account'}]);
+// @ts-expect-error Library archives use package bytes.
+personalToolsLibrary.put({...toolsTemplate,archive:'archive'});
+// @ts-expect-error Templates need archive bytes before loading.
+loadTemplate({key:'template@1',kind:'template',document:toolsTemplate.document});
+// @ts-expect-error Masks and text styles are distinct resources.
+applyMask(editingProject,'front',toolsTextId,toolsStyle);
+// @ts-expect-error Migration previews are asynchronous.
+const immediateToolsMigration:TemplateMigrationPreview=previewTemplateMigration(editingProject,toolsTemplate);
+// @ts-expect-error Shared downloads return package bytes.
+createSharedLibrary({client:{cardPolicies:()=>toolsRegistry,saveCardResource:()=>{}},upload:()=>{},download:()=> 'archive'});
+void [toolsTextId,toolsStatIds,localToolsPut,localToolsRemove,memoryToolsPut,memoryToolsRemove,combinedToolsPut,appliedToolsStyle,loadedToolsTemplate,appliedToolsMask,toolsIssueMessage,immediateToolsMigration];

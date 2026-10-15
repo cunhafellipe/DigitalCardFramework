@@ -516,3 +516,52 @@ const schemaValidatedInput:{dialect:string;nodes:unknown[]}=untrustedPresentatio
 // @ts-expect-error Schema keyword bounds are numeric.
 const invalidSchemaHints:PresentationJSONSchema={maxItems:'100'};
 void [manifestSchemaID,schemaDraft,schemaHints,assetItemHints,nodeTypeHints,nodeAlternatives,maskAlternatives,requiredManifestFields,schemaValidatedInput,invalidSchemaHints];
+
+import {createProject, openProject, loadDraft, blankPackage, materialPresets, type Project, type ProjectSnapshot, type ProjectPackage} from '@digital-card/framework/presentation/project';
+import type {ValidatedPackage as ProjectValidatedPackage} from '@digital-card/framework/presentation/package';
+declare const projectValidatedPackage:ProjectValidatedPackage;
+const editingProject:Project=createProject(projectValidatedPackage);
+const projectRevision:number=editingProject.getRevision();
+const edited:void=editingProject.edit(project=>{
+  project.manifest.title='Updated card';
+  project.manifest.faces.front.description='Front artwork';
+  project.manifest.capabilities.required.push('dc.text@0.2');
+  project.scenes.forEach(scene=>scene.nodes.push({id:'group',type:'group',children:[]}));
+});
+const undone:boolean=editingProject.undoEdit();
+const redone:boolean=editingProject.redoEdit();
+const projectState:ProjectSnapshot=editingProject.serialize();
+const previousState:ProjectSnapshot|undefined=editingProject.undo[0];
+const nextState:ProjectSnapshot|undefined=editingProject.redo[0];
+const projectArchive:Promise<ProjectPackage>=editingProject.export({retainSources:true});
+projectArchive.then(pkg=>{const archive:Uint8Array=pkg.archive;const title:string=pkg.manifest.title;void [archive,title];});
+const projectBlob=new Blob([new Uint8Array(16)],{type:'image/png'});
+editingProject.addImage(projectBlob,{id:'art',role:'color'}).then(asset=>{const width:number=asset.width;const hash:string=asset.sha256;void [width,hash];});
+editingProject.addMedia(new Blob([],{type:'video/mp4'}),{id:'clip',width:320,height:240,duration:1,role:'media'}).then(asset=>{const duration:number|undefined=asset.duration;void duration;});
+editingProject.addFont(new Blob([]),{id:'font',license:'Example license'}).then(asset=>{const role:'font'=asset.role;const family:string=asset.font.family;void [role,family];});
+const updatedPosters:Promise<void>=editingProject.setPosters({front:projectBlob,back:projectBlob});
+const savedProject:Promise<void>=editingProject.saveDraft('example-project');
+editingProject.saveDraft(['example',1]);
+const openedProject:Promise<Project>=openProject(new Uint8Array(0));
+const draftProject:Promise<Project|null>=loadDraft('example-project');
+draftProject.then(project=>{if(project)project.undoEdit();});
+const blankProjectPackage:Promise<ProjectPackage>=blankPackage();
+const glitterKind:'glitter'=materialPresets['Fine silver'].kind;
+const bloomCenter:[number,number]=materialPresets['Feathered bloom'].center;
+// @ts-expect-error Preset names cannot be replaced on the frozen preset map.
+materialPresets['Soft foil']={kind:'foil',angle:1,radius:1,intensity:1,mode:'surface'};
+// @ts-expect-error Project opening consumes package bytes.
+openProject('archive');
+// @ts-expect-error Media additions consume Blob data.
+editingProject.addMedia(new Uint8Array(0));
+// @ts-expect-error Poster updates support the two card faces.
+editingProject.setPosters({left:projectBlob});
+// @ts-expect-error Image metadata options do not accept a caller-supplied width.
+editingProject.addImage(projectBlob,{width:100});
+// @ts-expect-error Export source retention is boolean.
+editingProject.export({retainSources:'yes'});
+// @ts-expect-error Serialization returns a snapshot without live project methods.
+projectState.undoEdit();
+// @ts-expect-error Draft loading may find no saved project and is asynchronous.
+const immediateDraft:Project=loadDraft();
+void [projectRevision,edited,undone,redone,previousState,nextState,updatedPosters,savedProject,openedProject,blankProjectPackage,glitterKind,bloomCenter,immediateDraft];

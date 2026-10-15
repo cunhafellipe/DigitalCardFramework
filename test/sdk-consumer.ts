@@ -639,3 +639,60 @@ new CardFramework({codeLimits:{capacity:1000}});
 // @ts-expect-error Subscriptions require the target handler name.
 new CardFramework({eventSubscriptions:[{id:'events',events:['pack.opened']}]});
 void hostIntegratedCore;
+
+import {MemoryStore, initialState} from '../src/store.js';
+import type {StorageState, StoredPack, StoredCode, StoragePage} from '../src/storage-types.js';
+const hostMemory=new MemoryStore();
+const hostInitialState:StorageState=initialState();
+const hostInitialCatalog:CoreCatalog|null=hostInitialState.catalog;
+const hostReadRevision:number=hostMemory.read(state=>state.revision);
+const hostTransactionResult:{next:number}=hostMemory.transact(state=>{state.revision+=1;state.users[hostUser.id]=hostUser;return {next:state.revision};});
+const hostDetachedUser=hostMemory.read(state=>state.users[hostUser.id]);
+const hostDetachedId:string|undefined=hostDetachedUser?.id;
+const hostQueryResult=hostMemory.query(queries=>{
+  const version:number|undefined=queries.get('catalog','version');
+  const userId:string|undefined=queries.get('users',hostUser.id)?.id;
+  const wallet:Record<string,number>|undefined=queries.get('balances',hostUser.id);
+  const extension:unknown=queries.get('hostExtension','record');
+  const revision:number=queries.value('revision');
+  const catalog:CoreCatalog|null=queries.value('catalog');
+  const copies=queries.records('copies',{ids:['copy']});const copyId:string|undefined=copies.copy?.id;
+  const identity=queries.providerIdentity(hostUser.id);const provider:string|undefined=identity?.provider;
+  const user=queries.userByIdentity('host','account');const name:string|undefined=user?.displayName;
+  const counts=queries.collectionCounts(hostUser.id);const owned:number=counts.ownedCopies;
+  const summary=queries.variantCounts({ownerId:hostUser.id,excludeTypes:['reward']});const exemplar:string|undefined=summary.items[0]?.copyId;
+  const present:boolean|undefined=queries.ownedCardPresence(hostUser.id,['card'])[0]?.owned;
+  const codes:StoredCode[]=queries.availableCodeStock('pool',20,new Date().toISOString());
+  const codeOrdinal:number|undefined=queries.importedCodePrefix('pool',20,new Date().toISOString())[0]?.ordinal;
+  const notifications=queries.notifications(hostUser.id);const recipient:string|undefined=notifications[0]?.userId;
+  const codeHistory=queries.codeHistoryEntries(hostUser.id);const secretKeyId:string|undefined=codeHistory[0]?.code.secret.keyId;
+  const packs:StoragePage<StoredPack>=queries.pagePacks({ownerId:hostUser.id,status:'unopened',sort:'ordinal'});
+  const packCopyIds:string[]|undefined=packs.items[0]?.copyIds;
+  const poolId:string|undefined=queries.pageCodes({poolId:'pool',states:['available']}).items[0]?.poolId;
+  const purchase=queries.pageExternalPurchases({providerId:'payments',sort:'id'}).items[0];const purchaseId:string|undefined=purchase?.preparationId;
+  const inventory=queries.pageCopies({ownerId:hostUser.id,state:'owned',sort:'name'});const total:number=inventory.total;
+  void [version,userId,wallet,extension,revision,catalog,copyId,provider,name,owned,exemplar,present,codes,codeOrdinal,recipient,secretKeyId,packCopyIds,poolId,purchaseId,total];
+  return {revision,next:packs.next};
+});
+const hostStorageCursor:string|null=hostQueryResult.next;
+const hostMeasurement=hostMemory.measure(hostInitialState);const hostStoredBytes:number=hostMeasurement.usedBytes;
+hostMemory.assertCapacity(hostInitialState);
+const hostDueTrades:string[]=hostMemory.selectDueExpirations('trades',new Date().toISOString(),20);
+const hostDueRaffles:string[]=hostMemory.selectDueRaffles(new Date().toISOString(),20);
+const hostPrepared:boolean=hostMemory.prepareRecordTransactions({force:true}).prepared;
+// @ts-expect-error Transaction callbacks must be synchronous.
+hostMemory.transact(async state=>state.revision);
+// @ts-expect-error Query callbacks cannot return a promise after the snapshot closes.
+hostMemory.query(async queries=>queries.value('revision'));
+// @ts-expect-error Read results must be detached synchronously.
+hostMemory.read(async state=>state.revision);
+// @ts-expect-error Known stored users retain their typed fields.
+hostMemory.transact(state=>{state.users.account={id:123};});
+// @ts-expect-error Query lookup preserves missing-record outcomes.
+const requiredStoredUserId:string=hostMemory.query(queries=>queries.get('users','missing').id);
+// @ts-expect-error Scoped query callback methods have checked parameter shapes.
+hostMemory.query(queries=>queries.records('copies',{ids:[123]}));
+// @ts-expect-error The due-expiration selector supports trades and listings.
+hostMemory.selectDueExpirations('copies',new Date().toISOString());
+hostMemory.close();
+void [hostInitialCatalog,hostReadRevision,hostTransactionResult,hostDetachedId,hostStorageCursor,hostStoredBytes,hostDueTrades,hostDueRaffles,hostPrepared,requiredStoredUserId];

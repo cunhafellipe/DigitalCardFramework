@@ -267,3 +267,36 @@ async function auditImportResponses(){
   return {ok,version,digest,time,detail};
 }
 void auditImportResponses;
+
+import {openapi} from '@digital-card/framework/contracts';
+import type {Operations} from '@digital-card/framework/wire-types';
+const httpDocumentVersion:'3.1.0'=openapi.openapi;
+const httpDocumentTitle:string=openapi.info.title;
+const httpSessionLocation:'cookie'=openapi.components.securitySchemes.hostSession.in;
+const httpQuoteSchema=openapi.components.schemas.QuoteRequest;
+const httpRequiredFields:string[]|undefined=httpQuoteSchema.required;
+const httpQuantityType= httpQuoteSchema.properties?.quantity?.type;
+const httpSchemaExtension:unknown=httpQuoteSchema.dcUniquePageIds;
+for(const [path,item] of Object.entries(openapi.paths)){
+  for(const operation of [item.get,item.post]){
+    if(!operation)continue;
+    const id:keyof Operations=operation.operationId;
+    const requestSchema=operation.requestBody?.content['application/json'].schema;
+    const responseSchema=operation.responses['200']?.content?.['application/json'].schema;
+    const reference:string|undefined=responseSchema?.$ref;
+    const requestRequired:boolean|undefined=operation.requestBody?.required;
+    const origin=operation.parameters?.find(parameter=>parameter.name==='Origin');
+    const parameterLocation:'path'|'query'|'header'|undefined=origin?.in;
+    const securityScopes:string[]|undefined=operation.security[0]?.hostSession;
+    void [path,id,requestSchema,reference,requestRequired,parameterLocation,securityScopes];
+  }
+}
+// @ts-expect-error Schema documents describe wire data; they are not request values.
+const httpQuoteRequest:Schemas['QuoteRequest']=openapi.components.schemas.QuoteRequest;
+// @ts-expect-error Component names reuse the checked wire schema names.
+openapi.components.schemas.UnknownContract;
+// @ts-expect-error Unspecified schema keywords must be narrowed before use.
+const httpExtensionBoolean:boolean=httpQuoteSchema.dcUniquePageIds;
+// @ts-expect-error The exported OpenAPI version is 3.1.0.
+const oldHTTPDocumentVersion:'3.0.3'=openapi.openapi;
+void [httpDocumentVersion,httpDocumentTitle,httpSessionLocation,httpRequiredFields,httpQuantityType,httpSchemaExtension,httpQuoteRequest,httpExtensionBoolean,oldHTTPDocumentVersion];

@@ -319,3 +319,84 @@ evaluate(['input','host.level'], {'host.level':'high'});
 // @ts-expect-error Frame durations are numeric.
 selectFrame({frames:[{duration:'100'}],progress:0});
 void [expressionNodes,numericTilt,hostValue,evaluatedMotion,optionalFrameAsset,emptyFrame,requiredFrame];
+
+import {gltfAdapter, riveAdapter, dotLottieAdapter, type MediaAdapterContext} from '@digital-card/framework/presentation/adapters';
+const gltf = gltfAdapter();
+const rive = riveAdapter({wasmURL:'/runtime/rive.wasm',approvedDigests:['sha256:approved']});
+const lottie = dotLottieAdapter({wasmURL:'/runtime/lottie.wasm'});
+const gltfId: 'dc.gltf' = gltf.id;
+const adapterCost: number = gltf.estimate();
+gltf.estimate({width:200});
+const mediaContext: MediaAdapterContext = {width:200,height:300,signal:new AbortController().signal,asset:async id => ({url:'/assets/'+id})};
+const mediaFrame = {inputs:normalized,activeTimeSeconds:1,staticMotion:false};
+void gltf.create(mediaContext,{asset:'model',turnRadians:0.5}).then(instance => {
+  const canvas: HTMLCanvasElement = instance.canvas;
+  const needsTime: boolean = instance.update(mediaFrame).needsTime;
+  instance.render();
+  instance.dispose();
+  void [canvas,needsTime];
+});
+void rive.create({...mediaContext,digest:'sha256:approved'},{asset:'animation',artboard:'Card',animation:'Idle',clock:true});
+void lottie.create(mediaContext,{asset:'animation',animation:'Idle',duration:2});
+composeExtensions([gltf,rive,lottie]);
+// @ts-expect-error Rive requires a self-hosted WASM URL.
+riveAdapter({approvedDigests:[]});
+// @ts-expect-error Rive checks the current package digest against host approvals.
+rive.create(mediaContext,{asset:'animation'});
+// @ts-expect-error GLTF adapter turn controls are numeric.
+gltf.create(mediaContext,{asset:'model',turnRadians:'half'});
+// @ts-expect-error Adapter creation requires an asset identifier.
+lottie.create(mediaContext,{clock:true});
+void [gltfId,adapterCost];
+
+import {validatePresentationReference, publicInputs, connectedInputs, mountPresentation, mountAssembly, type PresentationStage, type PresentationResolver} from '@digital-card/framework/presentation/integration';
+const presentationRef = validatePresentationReference(JSON.parse('{}'));
+const presentationContract: 'digital-card@0.1' = presentationRef.contract;
+const inputManifest = {inputs:{'host.level':{type:'number' as const,default:1,min:1,max:99},'host.enabled':{type:'boolean' as const,default:true}}};
+const filteredInputs: Record<string,number|boolean> = publicInputs(inputManifest, {'host.level':123,secret:'filtered'});
+const connected = connectedInputs(inputManifest,{clock:()=>100,maxAgeMs:60});
+connected.update({'host.level':20},{at:100});
+const inputRead = connected.read();
+if(inputRead.state === 'offline') {const offlineTime:null=inputRead.at;void offlineTime;}
+else {const recordedTime:number=inputRead.at;void recordedTime;}
+const inputSnapshotTime:number|null = connected.snapshot().at;
+const integrationResolver: PresentationResolver = {manifest:inputManifest,dispose(){}};
+const integrationStage: PresentationStage<PresentationResolver,{setInputs(value:Record<string,unknown>):void;dispose():void;custom():number}> = {
+  mount(target,model,options) {
+    const modelResolver:PresentationResolver=model.resolver;
+    options.onEvent?.({type:'ready',result:{mode:'interactive'}});
+    void [target,modelResolver];
+    return {setInputs(value){console.log(value);},dispose(){},custom(){return 1;}};
+  },
+};
+void mountPresentation({stage:integrationStage,target:root,definition:{name:'Card',presentation:presentationRef},resolve:async (baseURL,options)=>{
+  const digest:string=options.digest;
+  const signal:AbortSignal|undefined=options.signal;
+  void [baseURL,digest,signal];
+  return integrationResolver;
+},hostInputs:{'host.level':3},onEvent:event=>console.log(event.type)}).then(view=>{
+  const custom:number=view.custom();
+  view.setInputs({tilt:{x:0.5}});
+  view.dispose();
+  void custom;
+});
+void mountAssembly({stage:integrationStage,root,descriptor:{version:1,members:[{id:'card',bounds:[0,0,50,100],presentation:presentationRef,title:'Card',label:'Card label'}]},
+  resolve:async()=>integrationResolver,missing:member=>member.label,
+  interaction:{rotate:true,defaults:{scale:[1,1]},onChange:(id,state)=>{const rotation:number=state.rotation.x;void [id,rotation];}},
+}).then(assembly=>{
+  const memberCustom:number|undefined=assembly.views[0]?.custom();
+  assembly.setInputs({tilt:{x:0.5}});
+  assembly.setMemberInputs('card',{tilt:{y:0.5}});
+  const memberRotation:number|undefined=assembly.snapshot().card?.rotation.x;
+  assembly.dispose();
+  void [memberCustom,memberRotation];
+});
+// @ts-expect-error Public input rules exclude string bindings.
+publicInputs({inputs:{'host.secret':{type:'string',default:'secret'}}});
+// @ts-expect-error Connected input event timestamps are numeric.
+connected.update({},{at:'now'});
+// @ts-expect-error Only supported presentation quality levels can be mounted.
+mountPresentation({stage:integrationStage,target:root,definition:{presentation:presentationRef},quality:'high'});
+// @ts-expect-error Assembly bounds require four coordinates.
+mountAssembly({stage:integrationStage,root,descriptor:{version:1,members:[{id:'card',bounds:[0,0,100]}]}});
+void [presentationContract,filteredInputs,inputSnapshotTime];

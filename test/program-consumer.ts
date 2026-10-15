@@ -400,3 +400,52 @@ mountPresentation({stage:integrationStage,target:root,definition:{presentation:p
 // @ts-expect-error Assembly bounds require four coordinates.
 mountAssembly({stage:integrationStage,root,descriptor:{version:1,members:[{id:'card',bounds:[0,0,100]}]}});
 void [presentationContract,filteredInputs,inputSnapshotTime];
+
+import {parseLayeredSource, type LayeredSourceNode, type LayeredSourceFormat} from '@digital-card/framework/presentation/layered-source';
+import {layeredPackage, type LayeredPackage} from '@digital-card/framework/presentation/layered-package';
+declare const layeredBytes:Uint8Array;
+const layeredDocument=parseLayeredSource(layeredBytes,{format:'ora',encodeRGBA:encodePNG,limits:{bytes:1024,pixels:4096,edge:64,layers:8,depth:2}});
+layeredDocument.then(async doc=>{
+  const merged:Uint8Array|null|undefined=doc.merged;
+  const sourceNode:LayeredSourceNode|undefined=doc.layers[0];
+  if(sourceNode?.type==='group')sourceNode.children.map(child=>child.id);
+  else if(sourceNode)sourceNode.bytes.byteLength.toFixed();
+  const poster=merged??layeredBytes;
+  const packaged:LayeredPackage=await layeredPackage(doc,{poster,flatten:false});
+  const archive:Uint8Array=packaged.archive;
+  const packageFormat:'digital-card'=packaged.manifest.format;
+  const scene=packaged.scenes.get('scenes/front.json');
+  scene?.nodes.forEach(node=>{
+    if(node.type==='image'){
+      node.asset.toUpperCase();
+      node.animation?.frames.forEach(frame=>frame.asset.toUpperCase());
+      // @ts-expect-error Package images refer to assets instead of embedded source bytes.
+      node.bytes;
+    }else node.children.forEach(child=>child.id.toUpperCase());
+  });
+  packaged.files.get('card.json')?.byteLength.toFixed();
+  // @ts-expect-error Package output does not contain an authoring import report.
+  packaged.report;
+  void [archive,packageFormat];
+});
+parseLayeredSource(layeredBytes,{format:'gif',encodeRGBA:image=>new Uint8Array(image.data),limits:{frames:10}}).then(doc=>{
+  const poster:Uint8Array=doc.poster;
+  doc.report.notes.map(note=>note.toUpperCase());
+  doc.layers.forEach(layer=>layer.animation?.frames.forEach(frame=>frame.duration.toFixed()));
+  // @ts-expect-error GIF imports expose a poster rather than a merged image.
+  doc.merged;
+  void poster;
+});
+declare const layeredFormat:LayeredSourceFormat;
+parseLayeredSource(layeredBytes,{format:layeredFormat,encodeRGBA:encodePNG});
+// @ts-expect-error Layered sources are byte arrays.
+parseLayeredSource('source',{format:'psd',encodeRGBA:encodePNG});
+// @ts-expect-error Source formats are explicitly supported archive/image formats.
+parseLayeredSource(layeredBytes,{format:'psb',encodeRGBA:encodePNG});
+// @ts-expect-error The encoder must return PNG bytes.
+parseLayeredSource(layeredBytes,{format:'psd',encodeRGBA:()=> 'png'});
+// @ts-expect-error Package creation requires a rendered poster.
+layeredPackage({width:1,height:1,title:'Example',layers:[]},{});
+// @ts-expect-error Package creation is asynchronous.
+const immediateLayeredPackage:LayeredPackage=layeredPackage({width:1,height:1,title:'Example',layers:[]},{poster:layeredBytes});
+void immediateLayeredPackage;

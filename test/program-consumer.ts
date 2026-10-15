@@ -449,3 +449,50 @@ layeredPackage({width:1,height:1,title:'Example',layers:[]},{});
 // @ts-expect-error Package creation is asynchronous.
 const immediateLayeredPackage:LayeredPackage=layeredPackage({width:1,height:1,title:'Example',layers:[]},{poster:layeredBytes});
 void immediateLayeredPackage;
+
+import {inspectGIF, parseGIFSource, type GIFInspection} from '@digital-card/framework/presentation/gif-source';
+import {importLayeredFile, type LayeredFileImport} from '@digital-card/framework/presentation/layered-import';
+const gifInspection:GIFInspection=inspectGIF(layeredBytes,{frames:10,pixels:4096,edge:64});
+const gifFrameCount:number=gifInspection.frames;
+const artworkAbort=new AbortController();
+parseGIFSource(layeredBytes,{encodeRGBA:encodePNG,signal:artworkAbort.signal,limits:{frames:10}}).then(doc=>{
+  const format:'gif'=doc.report.format;
+  const note:string|undefined=doc.report.notes[0];
+  const animation=doc.layers[0]?.animation;
+  const angleProgress:['input','angle']|undefined=animation?.progress;
+  const frameDuration:number|undefined=animation?.frames[0]?.duration;
+  void [format,note,angleProgress,frameDuration];
+});
+parseGIFSource(layeredBytes,{encodeRGBA:image=>new Uint8Array(image.data)});
+const artworkFile=new File([new Uint8Array(4)],'artwork.ora');
+const artworkImport:Promise<LayeredFileImport>=importLayeredFile(artworkFile,{workerURL:new URL('/workers/artwork.js',location.href),signal:artworkAbort.signal,timeoutMs:10000});
+importLayeredFile(artworkFile,{workerURL:'/workers/artwork.js'});
+artworkImport.then(async imported=>{
+  const sourceWidth:number=imported.sourceSize.width;
+  const canFlatten:boolean=imported.canFlatten;
+  const issue=imported.report.issues[0];
+  const issueLayer:string|undefined=issue?.layer;
+  const issueCode:string|undefined=issue?.code;
+  if(imported.report.format==='gif')imported.report.notes.map(note=>note.toUpperCase());
+  else imported.report.notes.map(note=>note.message.toUpperCase());
+  const built:LayeredPackage=await imported.build();
+  const flattened:LayeredPackage=await imported.build({flatten:true});
+  // @ts-expect-error Building an import produces its package asynchronously.
+  const immediate:LayeredPackage=imported.build();
+  // @ts-expect-error Flatten controls use a boolean.
+  imported.build({flatten:'yes'});
+  void [sourceWidth,canFlatten,issueLayer,issueCode,built,flattened,immediate];
+});
+// @ts-expect-error GIF inspection requires bytes.
+inspectGIF('gif');
+// @ts-expect-error GIF frame limits are numeric.
+inspectGIF(layeredBytes,{frames:'10'});
+// @ts-expect-error GIF decoding needs an RGBA encoder returning PNG bytes.
+parseGIFSource(layeredBytes,{encodeRGBA:()=> 'png'});
+// @ts-expect-error Cancellation accepts a DOM AbortSignal.
+parseGIFSource(layeredBytes,{encodeRGBA:encodePNG,signal:true});
+// @ts-expect-error Layered file imports require the browser File input.
+importLayeredFile(layeredBytes);
+// @ts-expect-error Import timeouts are numeric milliseconds.
+importLayeredFile(artworkFile,{timeoutMs:'10000'});
+void gifFrameCount;

@@ -440,3 +440,57 @@ policyDefinitions.CardPolicyUnknown;
 // @ts-expect-error Fields retain optional source metadata after validation.
 const requiredSource:string=policyField.source;
 void [policyVersion,validReference,policyObjectType,policySchemaRef,statError,visiblePolicyStats,expressionValue,evaluatedExpression,uncheckedExpression,requiredSource];
+
+import {SessionStore, createOIDCProvider, createAuthHost, type AuthSessionStorage, type AuthProvider, type OIDCFlowData, type AuthPrincipal} from '@digital-card/framework/auth';
+import type {DiscoveryRequestOptions} from 'openid-client';
+import {Buffer as AuthBuffer} from 'node:buffer';
+const authSessions=new SessionStore(':memory:',{encryptionKey:AuthBuffer.alloc(32),clock:()=>1000,maxSessions:100});
+const authSecret:string=authSessions.create('session',{userId:'collector',issuer:'https://identity.example',subject:'collector'},60000);
+const decodedAuthSession:unknown=authSessions.get(authSecret,'session');
+authSessions.get(undefined,'flow',{consume:true});
+authSessions.revoke(undefined);
+const asyncAuthSessions:AuthSessionStorage={
+  async create(kind,data,ttl){return authSessions.create(kind,data,ttl);},
+  async get(secret,kind,options){return authSessions.get(secret,kind,options);},
+  async revoke(secret){authSessions.revoke(secret);},
+};
+const customAuthProvider:AuthProvider<{state:string}>={
+  begin(){return {url:'https://identity.example/login',data:{state:'flow-state'}};},
+  async finish(url,data){return {issuer:url.origin,subject:data.state,displayName:'Collector'};},
+};
+const authHost=createAuthHost({framework:{async registerUser(authority,input){const admin:'admin'=authority.role;void admin;return {id:input.subject};}},sessions:asyncAuthSessions,provider:customAuthProvider,origin:'https://cards.example',adminSubjects:['administrator'],
+  async resolveAccess(session,{signal}){
+    const subject:string=session.subject;
+    // @ts-expect-error The access callback receives a frozen verified identity.
+    session.userId='replacement';
+    return signal.aborted?null:{role:'player',permissions:['catalog.read'],disabled:subject==='disabled'};
+  },
+  rateLimit({request,mutation}){const mutating:true=mutation;void mutating;return request.method==='GET';},
+});
+const authHandled:Promise<boolean>=authHost.handle(httpRequest,httpResponse);
+const authResolved:AuthPrincipal|null|Promise<AuthPrincipal|null>=authHost.resolveIdentity(httpRequest);
+declare const oidcDiscoveryOptions:DiscoveryRequestOptions;
+createOIDCProvider({issuer:new URL('https://identity.example'),clientId:'cards',origin:'https://cards.example',discoveryOptions:oidcDiscoveryOptions}).then(async provider=>{
+  const started=await provider.begin();
+  const flow:OIDCFlowData=started.data;
+  const authenticated=await provider.finish(new URL('https://cards.example/auth/callback'),flow);
+  const subject:string=authenticated.subject;
+  createAuthHost({framework:{registerUser:()=>({id:'collector'})},sessions:authSessions,provider,origin:'https://cards.example'});
+  // @ts-expect-error OIDC completion needs the PKCE verifier, state and nonce.
+  provider.finish(new URL('https://cards.example/auth/callback'),{state:'state'});
+  void subject;
+});
+// @ts-expect-error Session state is decoded without validating its shape.
+const uncheckedAuthSession:{userId:string}=authSessions.get(authSecret,'session');
+// @ts-expect-error Session kinds are bounded to sessions and login flows.
+authSessions.create('token',{},60000);
+// @ts-expect-error Session payloads must be serializable JSON.
+authSessions.create('flow',{callback:()=>true},60000);
+// @ts-expect-error Encryption uses a Node Buffer.
+new SessionStore(':memory:',{encryptionKey:'key'});
+// @ts-expect-error Host rate limiting is synchronous.
+createAuthHost({framework:{registerUser:()=>({id:'collector'})},sessions:authSessions,provider:customAuthProvider,origin:'https://cards.example',rateLimit:async()=>true});
+// @ts-expect-error The host consumes Node HTTP requests and responses.
+authHost.handle(new Request('https://cards.example/auth/login'),new Response());
+authSessions.close();
+void [decodedAuthSession,authHandled,authResolved,uncheckedAuthSession];

@@ -496,3 +496,23 @@ importLayeredFile(layeredBytes);
 // @ts-expect-error Import timeouts are numeric milliseconds.
 importLayeredFile(artworkFile,{timeoutMs:'10000'});
 void gifFrameCount;
+
+import {manifestSchema, sceneSchema, type PresentationJSONSchema} from '@digital-card/framework/presentation/schema';
+const manifestSchemaID:'https://digital-card.invalid/schema/manifest-0.1.0.json'=manifestSchema.$id;
+const schemaDraft:'https://json-schema.org/draft/2020-12/schema'=sceneSchema.$schema;
+const schemaHints:PresentationJSONSchema[]=[manifestSchema,sceneSchema];
+const assetItemHints:PresentationJSONSchema|undefined=manifestSchema.properties.assets.items;
+const nodeTypeHints:PresentationJSONSchema|undefined=sceneSchema.$defs.node.properties.type;
+const nodeAlternatives:PresentationJSONSchema[]|undefined=sceneSchema.$defs.node.allOf;
+const maskAlternatives:PresentationJSONSchema[]|undefined=sceneSchema.$defs.mask.oneOf;
+const requiredManifestFields:string[]=manifestSchema.required;
+declare const untrustedPresentation:unknown;
+// @ts-expect-error Schema documents supply hints rather than callable validators.
+manifestSchema(untrustedPresentation);
+// @ts-expect-error Scene schema documents do not expose a validation method.
+sceneSchema.validate(untrustedPresentation);
+// @ts-expect-error Reading a schema does not validate untrusted input.
+const schemaValidatedInput:{dialect:string;nodes:unknown[]}=untrustedPresentation;
+// @ts-expect-error Schema keyword bounds are numeric.
+const invalidSchemaHints:PresentationJSONSchema={maxItems:'100'};
+void [manifestSchemaID,schemaDraft,schemaHints,assetItemHints,nodeTypeHints,nodeAlternatives,maskAlternatives,requiredManifestFields,schemaValidatedInput,invalidSchemaHints];

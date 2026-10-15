@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Create a catalog card from name, description, line and rarity fields in Creator Studio, then review and publish it without editing JSON. The new card becomes available for visual artwork editing.
+
 - Add TypeScript declarations for presentation performance policies, analysis reports and enforcement, including unknown adapter cost estimates.
 
 - Document the shared error envelope for otherwise unspecified HTTP failure statuses across all API operations.

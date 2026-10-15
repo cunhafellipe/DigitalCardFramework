@@ -46,6 +46,8 @@ This launch binds only to your computer's loopback interface. The fictional acco
 
 Layered imports report compatibility limits. Advanced motion can require code or JSON. The reference site connects visual editing to reviewed catalog publication; exporting a card does not issue an owned copy.
 
+To add a catalog card, open **Creator studio**, enter its name and optional description under **New card**, and choose an existing card line and rarity. Select **Preview new card**, review the changes, check the review box, then select **Publish reviewed revision**. The new card is selected for visual artwork editing. Creating new card lines or pack definitions still uses catalog import.
+
 ## Default administration panel
 
 The reference website includes an **Administration** area for authorized operators. Manage line sales, pack prices and discounts, rarity weights, account restrictions, and card grants/removals through named controls. Website controls pause pack purchases, direct trading, and user shops independently. Changes include a review, a reason, and recorded history.

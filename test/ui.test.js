@@ -241,3 +241,57 @@ test('the reference conversion control executes a deliberate repeated amount twi
     assert.equal(before-x.core.wallet(x.alice).credits,600);assert.equal(x.core.wallet(x.alice).gems,6);
   }finally{mounted?.dispose();x.close();}
 });
+
+test('new card form previews without mutation and publishes a selectable artwork destination',async()=>{
+ const x=setup();let mounted;try{
+  let previews=0,commits=0;const actor={role:'admin'},before=x.core.catalog().cards.length;
+  x.client.previewImport=async input=>{previews++;return x.core.previewImport(actor,input);};
+  mounted=renderStudio(x.model,{...x.context,mutate:async(name,input)=>{commits++;return x.core.commitImport(actor,{...input,key:'new-card-test'});}});
+  const view=x.mount(mounted),form=view.querySelector('.dc-new-card'),name=field(form,'Card name'),submit=()=>form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));
+  submit();await settle();assert.equal(previews,0);
+  name.value='  ';submit();await settle();assert.equal(previews,0);
+  name.value='New artwork';name.dispatchEvent(new x.window.Event('input',{bubbles:true}));
+  const line=form.querySelector('[aria-label="Card line"]'),saved=line.value;line.value='';submit();await settle();assert.equal(previews,0);line.value=saved;
+  submit();await settle();assert.equal(previews,1);assert.equal(commits,0);assert.equal(x.core.catalog().cards.length,before);assert.equal(field(view,'Import content').value,'');
+  const publish=[...view.querySelectorAll('button')].find(b=>b.textContent==='Publish reviewed revision');assert(publish.disabled);
+  name.value='Reviewed artwork';name.dispatchEvent(new x.window.Event('input',{bubbles:true}));assert(publish.disabled);assert.equal(view.querySelector('.dc-import-preview').children.length,0);
+  submit();await settle();const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));assert(!publish.disabled,view.textContent);
+  publish.click();publish.click();await settle();assert.equal(commits,1);
+  const card=x.core.catalog().cards.find(c=>c.name==='Reviewed artwork');assert(card);assert.equal(x.core.catalog().cards.length,before+1);
+  assert(x.core.catalog().variants.some(v=>v.cardId===card.id&&v.id===card.id+'.standard'));
+  assert.equal(view.querySelector('[aria-label="Destination card"]').value,card.id);assert(publish.disabled);
+ }finally{mounted?.dispose();x.close();}
+});
+test('new card form explains missing line or rarity prerequisites',async()=>{
+ for(const section of ['lines','rarities']){const x=setup();let mounted;try{
+  x.model.catalog[section]=[];mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-card');
+  assert(form.textContent.includes('Import at least one card line and rarity'));assert(form.querySelector('button').disabled);
+ }finally{mounted?.dispose();x.close();}}
+});
+
+
+test('new card form fences late previews, supports cancellation and supplied translations',async()=>{
+ const x=setup();let mounted;try{
+  let finish,request;const localization=createLocalization({locale:'es',messages:{'studioShell.newCard':'Nueva tarjeta','studioShell.newCardName':'Nombre de tarjeta','studioShell.previewNewCard':'Revisar tarjeta','studioShell.cancelNewCard':'Cancelar tarjeta'}});
+  x.client.previewImport=input=>{request=input;return new Promise(resolve=>finish=resolve);};
+  mounted=renderStudio(x.model,{...x.context,localization});const view=x.mount(mounted),form=view.querySelector('.dc-new-card'),name=field(form,'Nombre de tarjeta');assert(form.textContent.includes('Nueva tarjeta'));assert.equal(view.lang,'es');
+  name.value='First';form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));
+  const firstId=request.source.cards[0].id;name.value='Changed';name.dispatchEvent(new x.window.Event('input',{bubbles:true}));finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(view.querySelector('.dc-import-preview').children.length,0);
+  form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));assert.equal(request.source.cards[0].id,firstId);
+  click(form,'Cancelar tarjeta');finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(name.value,'');assert.equal(view.querySelector('.dc-import-preview').children.length,0);
+  name.value='Second';form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));assert.notEqual(request.source.cards[0].id,firstId);finish(x.core.previewImport({role:'admin'},request));await settle();
+ }finally{mounted?.dispose();x.close();}
+});
+
+test('new card review cannot publish without catalog publication permission',async()=>{
+ const x=setup();let mounted;try{
+  x.model.me={...x.model.me,role:'player',permissions:['catalog.read','catalog.preview']};
+  x.client.previewImport=async input=>x.core.previewImport({role:'admin'},input);
+  mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-card');
+  field(form,'Card name').value='Review only';form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));await settle();
+  assert.equal(view.querySelector('.dc-import-preview .dc-collection-grid').children.length,1);
+  const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));
+  const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);
+  publish.dispatchEvent(new x.window.Event('click'));await settle();assert.equal(x.calls.length,0);
+ }finally{mounted?.dispose();x.close();}
+});

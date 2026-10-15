@@ -5771,6 +5771,42 @@
       "placeholders": [],
       "plural": false
     },
+    "studioShell.cancelNewCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardName": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardDescription": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardRarity": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.previewNewCard": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardPrerequisites": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newCardNameRequired": {
+      "placeholders": [],
+      "plural": false
+    },
     "studioShell.startANewCardDesign": {
       "placeholders": [],
       "plural": false

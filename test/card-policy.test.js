@@ -23,6 +23,8 @@ import {
   setStat,
 } from "../src/presentation/authoring-tools.js";
 import { layoutText } from "../src/presentation/text.js";
+import { redactGovernedCard } from "../src/card-policy-service.js";
+import { contentDigest } from "../src/importer.js";
 
 const document = (overrides = {}) => ({
   schemaVersion: 1,
@@ -42,6 +44,92 @@ const document = (overrides = {}) => ({
   ...overrides,
 });
 const assignments = [{ scope: "installation", policy: "cards.standard@1" }];
+test("pinned redaction fields preserve visibility without consulting fallback evidence", () => {
+  const fields = ["public", "owner", "operator"].map((visibility) => ({
+    key: visibility,
+    visibility,
+  }));
+  let evidenceReads = 0;
+  const state = {
+    get cardValidation() {
+      evidenceReads++;
+      return { retained: { cardDigest: "unrelated", fields } };
+    },
+  };
+  for (const scope of ["card", "variant", "copy"])
+    for (const [visibility, expected] of [
+      ["public", { public: 1 }],
+      ["owner", { public: 1, owner: 2 }],
+      ["operator", { public: 1, owner: 2, operator: 3 }],
+    ]) {
+      let digestReads = 0;
+      const card = {
+        stats: { public: 1, owner: 2, operator: 3 },
+        get digestProbe() {
+          digestReads++;
+          return "stable";
+        },
+      };
+      assert.deepEqual(
+        redactGovernedCard(state, card, scope, visibility, fields.map((f) => ({ ...f, scope }))).stats,
+        expected,
+      );
+      assert.equal(digestReads, 0);
+    }
+  const unrestricted = { stats: { retained: 1 } };
+  assert.deepEqual(redactGovernedCard(state, unrestricted, "card", "public", []).stats, { retained: 1 });
+  assert.equal(evidenceReads, 0);
+});
+
+test("fallback redaction hashes once and retains evidence plus current policy privacy", () => {
+  const original = {
+    lineId: "line",
+    type: "collectible",
+    digestProbe: "stable",
+    stats: { visible: 1, owner: 2, operator: 3, retained: 4 },
+  };
+  const digest = contentDigest(original);
+  const current = document({
+    fields: [
+      ["visible", "public"],
+      ["owner", "owner"],
+      ["operator", "operator"],
+      ["retained", "public"],
+    ].map(([key, visibility]) => ({ key, label: key, type: "integer", visibility })),
+  });
+  const state = {
+    cardAuthoring: { documents: [{ state: "active", document: current }], assignments, resources: [] },
+    cardValidation: {
+      first: { cardDigest: digest, fields: [{ key: "retained", visibility: "operator" }] },
+      second: { cardDigest: digest, fields: [{ key: "visible", visibility: "public" }] },
+      unrelated: { cardDigest: "other", fields: [{ key: "visible", visibility: "operator" }] },
+    },
+  };
+  for (const [visibility, expected] of [
+    ["public", { visible: 1 }],
+    ["owner", { visible: 1, owner: 2 }],
+    ["operator", original.stats],
+  ]) {
+    let digestReads = 0;
+    const card = { ...original, stats: { ...original.stats } };
+    Object.defineProperty(card, "digestProbe", { enumerable: true, get() { digestReads++; return "stable"; } });
+    assert.deepEqual(redactGovernedCard(state, card, "card", visibility).stats, expected);
+    assert.equal(digestReads, 1);
+  }
+  current.fields.find((field) => field.key === "owner").visibility = "operator";
+  assert.deepEqual(redactGovernedCard(state, structuredClone(original), "card", "owner").stats, { visible: 1 });
+});
+
+test("fallback redaction keeps an empty evidence dictionary lazy", () => {
+  let digestReads = 0;
+  const card = {
+    stats: { visible: 1 },
+    get digestProbe() { digestReads++; return "stable"; },
+  };
+  assert.deepEqual(redactGovernedCard({ cardValidation: {} }, card).stats, { visible: 1 });
+  assert.equal(digestReads, 0);
+});
+
 function activate(core, doc = document()) {
   let registry = core.cardPolicies(admin);
   core.saveCardPolicy(admin, {

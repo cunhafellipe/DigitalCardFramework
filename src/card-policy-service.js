@@ -241,16 +241,19 @@ export function redactGovernedCard(
   visibility = "public",
   fields,
 ) {
-  const evidence = Object.values(s.cardValidation ?? {})
-    .filter((e) => e.cardDigest === contentDigest(card))
-    .flatMap((e) => e.fields ?? []);
-  const levels = { public: 0, owner: 1, operator: 2 };
-  const p =
-    fields ??
-    [...evidence, ...effective(state(s), context(card)).fields].sort(
+  let p = fields;
+  if (p == null) {
+    const validation = Object.values(s.cardValidation ?? {});
+    const digest = validation.length ? contentDigest(card) : null;
+    const evidence = validation
+      .filter((e) => e.cardDigest === digest)
+      .flatMap((e) => e.fields ?? []);
+    const levels = { public: 0, owner: 1, operator: 2 };
+    p = [...evidence, ...effective(state(s), context(card)).fields].sort(
       (a, b) =>
         levels[b.visibility ?? "public"] - levels[a.visibility ?? "public"],
     );
+  }
   if (Object.hasOwn(card, "stats"))
     card.stats = publicStats(card.stats, p, scope, visibility);
   return card;

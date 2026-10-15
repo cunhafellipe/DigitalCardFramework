@@ -19,7 +19,8 @@ import {validateLocalizationBundle,createLocalization,localizationSchema} from '
 const localeBundle=validateLocalizationBundle(JSON.parse(execFileSync(process.env.PYTHON??'python3',[fileURLToPath(new URL('../examples/plugins/python-localization.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:localizationSchema.maximumBytes+1})));
 const localization=createLocalization({locale:localeBundle.locale,messages:localeBundle.messages}),t=(key,values)=>localization.text(key,values);
 const output = resolve(process.argv[2] ?? "test-results/card-authoring"),
-  engine = process.env.BROWSER_ENGINE ?? "chromium";
+  engine = process.env.BROWSER_ENGINE ?? "chromium",
+  joinedOnly = process.env.DC_AUTHORING_JOINED_ONLY === "1";
 await mkdir(output, { recursive: true });
 const temp = await mkdtemp(resolve(tmpdir(), "card-authoring-")),
   base = fileURLToPath(new URL("../", import.meta.url));
@@ -89,6 +90,7 @@ try {
   const idle = () => page.waitForFunction(() => document.querySelector(".dcard-studio")?.getAttribute("aria-busy") !== "true");
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(origin + "/harness");
+  if (!joinedOnly) {
   const coverage = await page.evaluate(async () => {
     const {createWebGLRenderer} = await import("/src/presentation/webgl.js"), canvas=document.createElement("canvas"), gpu=createWebGLRenderer(canvas),
       source=document.createElement("canvas"), maskCanvas=document.createElement("canvas");
@@ -1003,10 +1005,88 @@ try {
   assert.deepEqual(await page.evaluate(()=>window.nativeCore.getProject().serialize()),await page.evaluate(()=>window.nativeCoreBefore));assert.equal(await page.locator('#native-core').getByRole('button',{name:'Add text',exact:true}).count(),1);
   await page.evaluate(()=>{window.localizedCore.dispose();window.nativeCore.dispose();});assert.equal(await localized.getAttribute('lang'),'de');assert.equal(await localized.getAttribute('dir'),'rtl');assert.equal(await localized.locator('*').count(),0);assert.equal(await page.locator('#native-core').getAttribute('lang'),null);
   checks.push('Python-authored Spanish core Studio edits native materials and text, paints masks, preserves enum values/Undo/Redo, saves drafts, captures and exports exact artwork with independent English instance and language cleanup');
+  }
+  const joinedPolicy = { schemaVersion: 1, id: "browser.policy", revision: 2, name: "Joined privacy", requirements: {}, fields: [
+    { key: "public", label: "Public", type: "integer", maximum: 10 },
+    { key: "owner", label: "Owner", type: "string", visibility: "owner" },
+  ] };
+  core.saveCardPolicy(admin, { key: "joined-policy", expectedRevision: core.cardPolicies(admin).revision, document: joinedPolicy });
+  const joinedReview = core.previewCardPolicy(admin, { expectedRevision: core.cardPolicies(admin).revision, policy: "browser.policy@2", assignments: [{ scope: "installation", policy: "browser.policy@2" }] });
+  core.activateCardPolicy(admin, { ...joinedReview, key: "joined-activate" });
+  const businessState = () => ({ catalog: core.operatorCatalog(admin), wallet: core.wallet(alice), inventory: core.inventory(alice), packs: core.packs(alice), imports: core.events(admin, { limit: 1000 }).filter(event => event.type === "catalog.imported") }),
+    joinedBefore = businessState(), joinedPreviews = [], joinedCommits = [];
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(origin + "/harness");
+  page.on("request", request => {
+    if (request.url() === origin + "/api/operator/import/preview") joinedPreviews.push(request.postDataJSON());
+    if (request.url() === origin + "/api/operator/import/commit") joinedCommits.push(request.postDataJSON());
+  });
+  await page.evaluate(async () => {
+    const { createClient } = await import("/src/client.js"), { renderStudio } = await import("/src/studio-ui.js");
+    window.joinedClient = createClient();
+    window.joinedStudio = renderStudio({ me: await joinedClient.me(), catalog: await joinedClient.operatorCatalog() }, {
+      client: joinedClient, action: async work => work(), mutate: (operation, input) => joinedClient[operation](input),
+      cardRenderer: () => document.createElement("div"), inspect: () => {},
+    });
+    document.querySelector("#root").append(joinedStudio.node);
+  });
+  await page.getByRole("button", { name: "Open visual card editor", exact: true }).click();
+  await idle();
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some(button => button.textContent === "Open visual card editor" && !button.disabled));
+  await page.getByLabel("Public", { exact: true }).fill("11");
+  await page.getByLabel("Public", { exact: true }).press("Tab");
+  await idle();
+  await page.getByLabel("Owner", { exact: true }).fill("owner-route-sentinel-73");
+  await page.getByLabel("Owner", { exact: true }).press("Tab");
+  await idle();
+  await page.getByRole("button", { name: "Add Public to card", exact: true }).click();
+  await idle();
+  await page.getByRole("button", { name: "Capture posters", exact: true }).click();
+  await idle();
+  const stagedReply = page.waitForResponse(response => response.url().includes("/presentations/imports/") && response.url().endsWith("/publish"));
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  const stagedResponse = await stagedReply, staged = await stagedResponse.json();
+  assert.equal(stagedResponse.status(), 200);
+  await page.locator(".dcs-status").filter({ hasText: "outside" }).waitFor();
+  assert.equal(joinedPreviews.length, 1);
+  const invalidCard = joinedPreviews[0].source.cards[0];
+  assert.deepEqual(invalidCard.stats, { ...joinedBefore.catalog.cards[0].stats, public: 11, owner: "owner-route-sentinel-73" });
+  assert.equal(await page.getByRole("button", { name: "Publish reviewed card", exact: true }).count(), 0);
+  assert.deepEqual(businessState(), joinedBefore);
+  await page.getByLabel("Import content", { exact: true }).fill(JSON.stringify({ cards: [invalidCard] }));
+  await page.getByRole("button", { name: "Validate & preview", exact: true }).click();
+  await page.locator("#root > section > p").filter({ hasText: "outside" }).waitFor();
+  assert.equal(joinedPreviews.length, 2);
+  assert.deepEqual(JSON.parse(joinedPreviews[1].source).cards[0], invalidCard);
+  assert(await page.getByRole("button", { name: "Publish reviewed revision", exact: true }).isDisabled());
+  assert.deepEqual(joinedCommits, []);
+  assert.deepEqual(businessState(), joinedBefore);
+  const publicDOM = await page.evaluate(async digest => {
+    const { directoryResolver } = await import("/src/presentation/resolver.js"), { createPlayerStage } = await import("/src/presentation/player.js"),
+      root = document.createElement("div");
+    root.style.cssText = "width:300px;height:450px"; document.body.append(root);
+    const resolver = await directoryResolver(location.origin + "/presentations/" + digest + "/files/", { digest }),
+      stage = createPlayerStage({ root }), view = stage.mount(root, { resolver });
+    await view.ready;
+    const label = view.element.getAttribute("aria-label");
+    await view.setQuality("poster");
+    const image = view.element.querySelector("img"); await image.decode();
+    const asset = await resolver.asset(resolver.manifest.faces.front.poster), repeated = await resolver.asset(asset.id),
+      result = { label, posterLabel: image.alt, posterVisible: !image.hidden, repeated: asset.url === repeated.url,
+        metadata: JSON.stringify(resolver.manifest), scenes: JSON.stringify([...resolver.scenes]), urls: resolver.diagnostics().objectURLs };
+    view.dispose(); stage.dispose(); resolver.dispose(); result.released = resolver.diagnostics().objectURLs; root.remove(); return result;
+  }, staged.digest);
+  assert.match(publicDOM.label, /Public 11/);
+  assert.equal(publicDOM.posterLabel, publicDOM.label);
+  assert(publicDOM.posterVisible && publicDOM.repeated && publicDOM.urls > 0);
+  assert(!JSON.stringify(publicDOM).includes("owner-route-sentinel-73"));
+  assert.equal(publicDOM.released, 0);
+  await page.evaluate(() => joinedStudio.dispose());
+  checks.push("identical invalid governed card rejects in actual visual and catalog UIs without catalog or owned-state changes; staged public player DOM, poster labels and cache omit owner sentinel");
   assert.equal(errors.length, 0, errors.join("\n"));
   await writeFile(
     resolve(output, "results.json"),
-    JSON.stringify({ engine, checks, errors }, null, 2),
+    JSON.stringify({ engine, joinedOnly, checks, errors }, null, 2),
   );
   console.log(JSON.stringify({ engine, checks: checks.length, errors }));
 } catch (error) {

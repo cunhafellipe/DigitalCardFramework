@@ -15,6 +15,14 @@ import type {RemoteTradePolicyOptions} from './remote-trade-policy.js';
 import type {RemoteAllocationStrategyOptions} from './remote-allocation-strategy.js';
 import type {RemoteStockAllocationStrategyOptions} from './remote-stock-allocation-strategy.js';
 import type {RemoteExternalAllocationStrategyOptions} from './remote-external-allocation-strategy.js';
+import type {FrameworkStorage} from './storage-record-types.js';
+
+/** Capabilities needed across the complete framework operation surface. */
+export type FrameworkStore = Pick<FrameworkStorage,
+  'read' | 'transact' | 'query' | 'measure' | 'transactRecords' | 'prepareRecordTransactions' | 'close'> &
+  Partial<Pick<FrameworkStorage, 'selectDueRaffles' | 'selectDueExpirations'>> & {
+    selectDueActions?(at: string, limit?: number): string[];
+  };
 
 export type FrameworkLimits = Partial<Record<
   'users' | 'copies' | 'packs' | 'requests' | 'albums' | 'trades' | 'copiesPerUser' | 'packsPerUser' |
@@ -56,6 +64,7 @@ export interface FrameworkRemotePolicies {
   canTrade?: RemoteTradePolicyOptions;
 }
 export interface FrameworkOptions {
+  store?: FrameworkStore;
   clock?(): string;
   random?(maximum: number): number;
   raffleRandom?(maximum: number): number;

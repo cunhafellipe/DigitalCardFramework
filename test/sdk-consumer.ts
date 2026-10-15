@@ -751,3 +751,47 @@ hostAdmission.invocationId='replacement';
 // @ts-expect-error Record budgets and selected scopes use known option names.
 hostMemory.transactRecords(()=>undefined,{maxRows:100});
 void [hostRecordResult,hostAdmittedInvocation];
+
+import {SQLiteStore} from '@digital-card/framework/sqlite';
+import type {SQLiteMigration, SQLiteStorageDiagnostics} from '../src/sqlite.js';
+import type {FrameworkStore} from '../src/core.js';
+const sqliteMemory=new SQLiteStore();
+const sqliteHost=new SQLiteStore('framework.sqlite',{
+  readOnly:false,maxStateBytes:1024*1024,maxCompletionBytes:1024*1024,
+  onMigration(migration){
+    const stage:SQLiteMigration['stage']=migration.stage;
+    const version:number=migration.to;
+    return {stage,version};
+  }
+});
+const sqliteRevision:number=sqliteHost.query(queries=>queries.value('revision'));
+const sqliteWrite:{revision:number}=sqliteHost.transact(state=>({revision:state.revision}));
+const sqliteRecordRevision:number=sqliteHost.transactRecords(records=>records.value('revision'),{intent:true});
+const sqliteCapacity:number=sqliteHost.assertCapacity(initialState(),{previous:initialState()}).completionLimitBytes;
+const sqliteDueActions:string[]=sqliteHost.selectDueActions('2026-01-01T00:00:00Z',20);
+const sqliteDiagnostics:SQLiteStorageDiagnostics=sqliteHost.diagnostics();
+const sqliteIntegrity:boolean=sqliteHost.integrity();
+const sqliteBackup:Promise<{path:'backup.sqlite';revision:number}>=sqliteHost.backup('backup.sqlite');
+sqliteHost.prepareRecordTransactions({force:true});
+sqliteHost.close();
+new CardFramework({store:sqliteMemory});
+new CardFramework({store:hostMemory});
+// Optional due selectors use snapshot fallbacks.
+const customFrameworkStore:FrameworkStore={
+  read:hostMemory.read.bind(hostMemory),transact:hostMemory.transact.bind(hostMemory),
+  query:hostMemory.query.bind(hostMemory),measure:hostMemory.measure.bind(hostMemory),
+  transactRecords:hostMemory.transactRecords.bind(hostMemory),
+  prepareRecordTransactions:hostMemory.prepareRecordTransactions.bind(hostMemory),close:()=>{}
+};
+new CardFramework({store:customFrameworkStore});
+// @ts-expect-error Migration callbacks cannot return promises.
+new SQLiteStore('async.sqlite',{onMigration:async()=>{}});
+// @ts-expect-error SQLite snapshots cannot return promises.
+sqliteHost.read(async state=>state.revision);
+// @ts-expect-error SQLite record callbacks cannot return promises.
+sqliteHost.transactRecords(async records=>records.value('revision'));
+// @ts-expect-error Encryption keys use byte buffers.
+new SQLiteStore('encrypted.sqlite',{encryptionKey:'key'});
+// @ts-expect-error Snapshot-only stores do not support all command/custody workflows.
+new CardFramework({store:{read:hostMemory.read.bind(hostMemory),transact:hostMemory.transact.bind(hostMemory),close:()=>{}}});
+void [sqliteRevision,sqliteWrite,sqliteRecordRevision,sqliteCapacity,sqliteDueActions,sqliteDiagnostics,sqliteIntegrity,sqliteBackup];

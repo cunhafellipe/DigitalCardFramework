@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add TypeScript contracts for the root package, framework operations and host integrations, HTTP handlers, UI mounting and rendering, and synchronous storage queries and record transactions.
+
 - Add TypeScript interfaces for admin and Studio lifecycles, the presentation entry point and the exported HTTP contract document; preserve concrete player view inference when mounting presentations.
 
 - Tighten marketplace session types for state, command execution, editable drafts and guarded action results.

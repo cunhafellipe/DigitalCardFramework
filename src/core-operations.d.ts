@@ -3,6 +3,13 @@ import type {PermissionActor} from './access.js';
 import type {ExternalCreditInput} from './currency-gateway.js';
 import type {fontDiagnostics} from './presentation/text.js';
 import type {DurableCommand} from './client.js';
+import type {RemotePurchasePolicy} from './remote-purchase-policy.js';
+import type {RemoteListingPolicy} from './remote-listing-policy.js';
+import type {RemoteTransferPolicy} from './remote-transfer-policy.js';
+import type {RemoteTradePolicy} from './remote-trade-policy.js';
+import type {RemoteAllocationStrategy} from './remote-allocation-strategy.js';
+import type {RemoteStockAllocationStrategy} from './remote-stock-allocation-strategy.js';
+import type {RemoteExternalAllocationStrategy} from './remote-external-allocation-strategy.js';
 
 export type CoreActor = PermissionActor;
 export type CoreUserActor = PermissionActor & {userId: string};
@@ -67,7 +74,62 @@ export interface CoreCommandRegistration {command: DurableCommand; input: Record
 export type CoreCommandHead = Pick<Schemas['CommandIntent'], 'id' | 'userId' | 'command' | 'state'>;
 export type CoreSettlementActor = CoreActor & {settlementProviderId: string};
 export type CoreSettlementOperator = CoreSettlementActor & ({userId: string} | {id: string});
+export type CorePolicyHook = 'canPurchase' | 'canList' | 'canTransfer' | 'canTrade';
+export type CorePolicyEnablement<H extends CorePolicyHook> = ReturnType<(
+  H extends 'canPurchase' ? RemotePurchasePolicy : H extends 'canList' ? RemoteListingPolicy :
+  H extends 'canTransfer' ? RemoteTransferPolicy : RemoteTradePolicy)['setEnabled']>;
+export type CoreActionView = Schemas['ActionJob'] & {
+  userId: string | null; totalAttempts: number; history: Record<string, unknown>[];
+  error: string | null; createdAt: string; completedAt: string | null; nextAt: string;
+};
+export interface CoreActionPage {items: CoreActionView[]; total: number; next: string | null}
+export type CoreClaimedAction = CoreActionView & {
+  status: 'running'; params: Record<string, unknown>; leaseToken: string; leaseUntil: string;
+  completionId?: string; deliveryCompletionId?: string;
+};
+export interface CoreCodeLookupMaterial {codeId: string; providerId: string; externalId: string | null; code: string}
+export interface CoreCodeRegistrationMaterial extends CoreCodeLookupMaterial {
+  holderId: string | null; copyId: string | null; metadata: Record<string, unknown>;
+}
+export type CoreCodeHistoryEntry = Schemas['CodeSummary'] & {copyId: string; name: string; createdAt: string};
+export interface CoreCodeHistoryPage {items: CoreCodeHistoryEntry[]; total: number; next: string | null}
 export interface CoreOperations {
+  setRemotePolicyEnabled<H extends CorePolicyHook>(actor: CoreActor, input: {hook: H; enabled: boolean}): CorePolicyEnablement<H>;
+  fulfillments(actor: CoreUserActor, options?: CorePageOptions): CoreActionPage;
+  actionJobs(actor: CoreActor, options?: CorePageOptions): CoreActionPage;
+  retryAction(actor: CoreActor, input: Operations['retryAction']['request']): CoreActionView;
+  claimAction(actor: CoreActor): CoreClaimedAction | null;
+  settleAction(actor: CoreActor, input: {jobId: string; leaseToken: string; succeeded: boolean}): CoreActionView;
+  dispatchActions(actor: CoreActor, options?: CoreAsyncOptions & {limit?: number}): Promise<(CoreActionView | {id: string; status: 'lease-lost'})[]>;
+  configureCodePool(actor: CoreActor, input: Operations['configureCodePool']['request']): Schemas['CodePoolRecord'];
+  importCodes(actor: CoreActor, input: Operations['importCodes']['request']): Operations['importCodes']['response'] & {poolId: string; importedAt: string};
+  codePools(actor: CoreActor): Schemas['CodePoolView'][];
+  codeInventory(actor: CoreActor, options?: CorePageOptions): Schemas['CodeInventoryPage'];
+  /** Host custody material includes plaintext; it is separate from public code summaries. */
+  codeRegistrationMaterial(actor: CoreActor, codeId: string): CoreCodeRegistrationMaterial;
+  codeHistory(actor: CoreUserActor, options?: CorePageOptions): CoreCodeHistoryPage;
+  revealCode(actor: CoreUserActor, input: Operations['revealCode']['request']): Operations['revealCode']['response'];
+  reportCodeUsage(actor: CoreUserActor, input: Operations['reportCodeUsage']['request']): Schemas['CodeSummary'];
+  confirmCodeStatus(actor: CoreActor & {codeProviderIds?: string[]}, input: Schemas['CodeConfirmation']): {codeId: string; status: 'redeemed' | 'revoked'};
+  /** The account must hold the code even though this host method exposes plaintext. */
+  codeLookupMaterial(actor: CoreUserActor, codeId: string): CoreCodeLookupMaterial;
+  rotateCodeEncryption(actor: CoreActor): {count: number};
+  verifyCodeVault(actor: CoreActor): {count: number};
+  backfillProvenance(actor: CoreActor): {count: number};
+  codeIssuanceStatus(actor: CoreActor, input: Schemas['CodeIssuanceCommand']): Schemas['CodeIssuanceStatus'];
+  recoverCodeIssuance(actor: CoreActor, input: Schemas['CodeIssuanceCommand'], options?: CoreAsyncOptions): Promise<Schemas['CodeIssuanceStatus']>;
+  audit(actor: CoreActor): Schemas['AuditResult'];
+  workerPlan(actor: CoreActor): {actions: boolean; maintenance: boolean};
+  backfillCompletionReservations(actor: CoreActor): {count: number};
+  setRemoteExternalAllocationEnabled(actor: CoreActor, input: {enabled: boolean}): ReturnType<RemoteExternalAllocationStrategy['setEnabled']>;
+  allocationStatus(actor: CoreUserActor, input: {productId: string}): Schemas['AllocationStatus'];
+  acknowledgeAllocation(actor: CoreUserActor, input: Schemas['AllocationAcknowledgementInput']): Schemas['AllocationAcknowledgement'];
+  setRemoteAllocationEnabled(actor: CoreActor, input: {enabled: boolean}): ReturnType<RemoteAllocationStrategy['setEnabled']>;
+  setRemoteStockAllocationEnabled(actor: CoreActor, input: {enabled: boolean}): ReturnType<RemoteStockAllocationStrategy['setEnabled']>;
+  quoteMintPackStock(actor: CoreUserActor, input: Schemas['MintPackStockQuoteInput']): Schemas['MintPackStockQuote'];
+  stockAllocationStatus(actor: CoreUserActor, input: {shopId: string; productId: string}): Schemas['StockAllocationStatus'];
+  bindingFactoryStatus(actor: CoreActor, input: Schemas['BindingFactoryCommand']): Schemas['BindingFactoryStatus'];
+  recoverBindingFactories(actor: CoreActor, input: Schemas['BindingFactoryCommand'], options?: CoreAsyncOptions): Promise<Schemas['BindingFactoryStatus']>;
   directory(actor: CoreUserActor, options?: CorePageOptions): Schemas['DirectoryPage'];
   tradeInventory(actor: CoreUserActor, userId: string, options?: CorePageOptions): Schemas['TradeInventoryPage'];
   inventoryPage(actor: CoreUserActor, options?: CoreIndexedPageOptions): Schemas['InventoryPage'];

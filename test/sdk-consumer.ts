@@ -508,3 +508,78 @@ const requiredHostVariantCard:Schemas['InventoryCopy']=hostVariantSummary.items[
 // @ts-expect-error Core pagination retains nullable next cursors.
 const requiredHostPackCursor:string=hostCore.packPage(hostActor).next;
 void [hostDirectory,hostPartnerInventory,hostInventoryPage,hostPackPage,hostPackCursor,hostVariantCount,hostVariantCard,hostTotalCards,hostConverted,hostTradeUpCopy,hostNotifications,hostNotificationsRead,hostIntentKey,hostCommandState,hostPendingCommands,hostExecuted,hostExecutedAsync,hostAcknowledged,hostAlbums,hostPublicAlbum,hostPublicAlbums,hostExternalCommit,hostExternalCommitAsync,hostExternalCancel,hostExternalCompensation,hostExternalStatus,hostExternalLookup,hostExternalNext,hostLegacyReconciled,hostLegacyResolved,immediateHostExecution,requiredHostVariantCard,requiredHostPackCursor];
+
+const hostPurchasePolicyScope:'listing'=hostCore.setRemotePolicyEnabled(hostAuthority,{hook:'canPurchase',enabled:true}).scope;
+const hostTransferPolicyScope:'transfer'=hostCore.setRemotePolicyEnabled(hostAuthority,{hook:'canTransfer',enabled:false}).scope;
+const hostTradePolicyScope:'exchange'=hostCore.setRemotePolicyEnabled(hostAuthority,{hook:'canTrade',enabled:true}).scope;
+const hostListingPolicyScope:'listing'=hostCore.setRemotePolicyEnabled(hostAuthority,{hook:'canList',enabled:true}).scope;
+const hostFulfillments=hostCore.fulfillments(hostActor,{limit:20});
+const hostJobs=hostCore.actionJobs(hostAuthority,{search:'pending'});
+const hostActionCreatedAt:string|undefined=hostJobs.items[0]?.createdAt;
+const hostRetriedAction=hostCore.retryAction(hostAuthority,{key:'retry',jobId:'job'});
+const hostClaimedAction=hostCore.claimAction(hostAuthority);
+if(hostClaimedAction){
+  const lease:string=hostClaimedAction.leaseToken;
+  const params:Record<string,unknown>=hostClaimedAction.params;
+  const running:'running'=hostClaimedAction.status;
+  hostCore.settleAction(hostAuthority,{jobId:hostClaimedAction.id,leaseToken:lease,succeeded:true});
+  void [params,running];
+}
+hostCore.dispatchActions(hostAuthority,{limit:10,signal:new AbortController().signal}).then(results=>{
+  for(const result of results){const id:string=result.id;if(result.status==='lease-lost'){const lost:'lease-lost'=result.status;void lost;}else{const attempts:number=result.totalAttempts;void attempts;}void id;}
+});
+declare const hostCodePoolInput:Operations['configureCodePool']['request'];
+declare const hostCodeImportInput:Operations['importCodes']['request'];
+const hostCodePool:Schemas['CodePoolRecord']=hostCore.configureCodePool(hostAuthority,hostCodePoolInput);
+const hostCodeImport=hostCore.importCodes(hostAuthority,hostCodeImportInput);
+const hostCodeImportPool:string=hostCodeImport.poolId;
+const hostCodeImportTime:string=hostCodeImport.importedAt;
+const hostCodePools:Schemas['CodePoolView'][]=hostCore.codePools(hostAuthority);
+const hostCodeInventory:Schemas['CodeInventoryPage']=hostCore.codeInventory(hostAuthority,{sort:'name'});
+const hostRegistrationMaterial=hostCore.codeRegistrationMaterial(hostAuthority,'code');
+const hostCustodyPlaintext:string=hostRegistrationMaterial.code;
+const hostCustodyHolder:string|null=hostRegistrationMaterial.holderId;
+const hostCodeHistory=hostCore.codeHistory(hostActor,{limit:20});
+const hostCodeHistoryName:string|undefined=hostCodeHistory.items[0]?.name;
+const hostCodeRevealed=hostCore.revealCode(hostActor,{key:'reveal-code',codeId:'code'});
+const hostRevealedPlaintext:string=hostCodeRevealed.code;
+const hostCodeReported:Schemas['CodeSummary']=hostCore.reportCodeUsage(hostActor,{key:'report-code',codeId:'code',used:true});
+const hostCodeConfirmed=hostCore.confirmCodeStatus({permissions:['codes.confirm'],codeProviderIds:['issuer']},{providerId:'issuer',eventId:'event',codeId:'code',status:'redeemed',occurredAt:new Date().toISOString()});
+const hostConfirmedStatus:'redeemed'|'revoked'=hostCodeConfirmed.status;
+const hostLookupMaterial=hostCore.codeLookupMaterial(hostActor,'code');
+const hostLookupPlaintext:string=hostLookupMaterial.code;
+const hostRotatedCount:number=hostCore.rotateCodeEncryption(hostAuthority).count;
+const hostVerifiedCount:number=hostCore.verifyCodeVault(hostAuthority).count;
+const hostBackfilledCount:number=hostCore.backfillProvenance(hostAuthority).count;
+const hostIssuance:Schemas['CodeIssuanceStatus']=hostCore.codeIssuanceStatus(hostAuthority,{batchId:'batch'});
+const hostIssuanceRecovery:Promise<Schemas['CodeIssuanceStatus']>=hostCore.recoverCodeIssuance(hostAuthority,{batchId:'batch'},{signal:new AbortController().signal});
+const hostAudit:Schemas['AuditResult']=hostCore.audit(hostAuthority);
+if('counts' in hostAudit){const copies:number=hostAudit.counts.copies;void copies;}
+const hostWorkerActions:boolean=hostCore.workerPlan(hostAuthority).actions;
+const hostCompletionCount:number=hostCore.backfillCompletionReservations(hostAuthority).count;
+const hostExternalAllocationScope:'external-fulfillment'=hostCore.setRemoteExternalAllocationEnabled(hostAuthority,{enabled:true}).scope;
+const hostAllocation:Schemas['AllocationStatus']=hostCore.allocationStatus(hostActor,{productId:'product'});
+const hostAllocationAcknowledgement:Schemas['AllocationAcknowledgement']=hostCore.acknowledgeAllocation(hostActor,{attemptId:'attempt'});
+const hostAllocationScope:'catalog-purchase'=hostCore.setRemoteAllocationEnabled(hostAuthority,{enabled:true}).scope;
+const hostStockAllocationScope:'commerce-stock'=hostCore.setRemoteStockAllocationEnabled(hostAuthority,{enabled:true}).scope;
+const hostStockQuote:Schemas['MintPackStockQuote']=hostCore.quoteMintPackStock(hostActor,{shopId:'shop',productId:'product',quantity:1});
+const hostStockAllocation:Schemas['StockAllocationStatus']=hostCore.stockAllocationStatus(hostActor,{shopId:'shop',productId:'product'});
+const hostFactory:Schemas['BindingFactoryStatus']=hostCore.bindingFactoryStatus(hostAuthority,{batchId:'batch'});
+const hostFactoryRecovery:Promise<Schemas['BindingFactoryStatus']>=hostCore.recoverBindingFactories(hostAuthority,{batchId:'batch'},{signal:new AbortController().signal});
+// @ts-expect-error Action history omits delivery parameters and lease secrets.
+hostJobs.items[0]!.params;
+// @ts-expect-error No due action returns null.
+const requiredActionLease:string=hostCore.claimAction(hostAuthority).leaseToken;
+// @ts-expect-error Dispatch is asynchronous.
+const immediateDispatch:unknown[]=hostCore.dispatchActions(hostAuthority);
+// @ts-expect-error Only registered policy hook names can be enabled.
+hostCore.setRemotePolicyEnabled(hostAuthority,{hook:'canMint',enabled:true});
+// @ts-expect-error Holder lookup is account-bound.
+hostCore.codeLookupMaterial(hostAuthority,'code');
+// @ts-expect-error Recovery is asynchronous even if a batch is already settled.
+const immediateIssuance:Schemas['CodeIssuanceStatus']=hostCore.recoverCodeIssuance(hostAuthority,{batchId:'batch'});
+// @ts-expect-error Manual settlement requires the active lease token.
+hostCore.settleAction(hostAuthority,{jobId:'job',succeeded:true});
+// @ts-expect-error Audit may return the no-catalog branch without counters.
+const requiredAuditCount:number=hostCore.audit(hostAuthority).counts.copies;
+void [hostPurchasePolicyScope,hostTransferPolicyScope,hostTradePolicyScope,hostListingPolicyScope,hostFulfillments,hostActionCreatedAt,hostRetriedAction,hostCodePool,hostCodeImportPool,hostCodeImportTime,hostCodePools,hostCodeInventory,hostCustodyPlaintext,hostCustodyHolder,hostCodeHistoryName,hostRevealedPlaintext,hostCodeReported,hostConfirmedStatus,hostLookupPlaintext,hostRotatedCount,hostVerifiedCount,hostBackfilledCount,hostIssuance,hostIssuanceRecovery,hostWorkerActions,hostCompletionCount,hostExternalAllocationScope,hostAllocation,hostAllocationAcknowledgement,hostAllocationScope,hostStockAllocationScope,hostStockQuote,hostStockAllocation,hostFactory,hostFactoryRecovery,requiredActionLease,immediateDispatch,immediateIssuance,requiredAuditCount];

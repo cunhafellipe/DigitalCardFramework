@@ -19,6 +19,8 @@ const opened = await call('openPack', {
 
 The browser supplies the request origin. The production host still verifies the session, origin, principal, permissions and immutable review. Trade acceptance and counteroffers require the reviewed `expectedDigest`. Transport validation does not authorize a command or manage retry keys: preserve an original command and its key before sending, and recover that same command after an uncertain outcome.
 
+An independently hosted authoritative service owns funds, copies, command receipts and the durable action outbox together. Send complete commands to that service and keep their atomic writes there; do not apply its responses through a second local writer. The host must authenticate each caller and construct its trusted actor; forwarding an actor object in JSON does not authenticate that actor. Hosting the reference engine separately retains its storage behavior; a different storage implementation needs its own invariant and recovery qualification. Presentation publication follows the [assets-first, catalog-last contract](complex-cards/creator-api.md#headless-publication-and-packs).
+
 Use the options argument for path parameters, query parameters and cancellation:
 
 ```ts
@@ -27,7 +29,7 @@ await call('tradeInventory', undefined, {
 });
 ```
 
-`WireApiError` exposes the server's `code`, `message` and HTTP `status`. `WireContractError` identifies an invalid request, response or operation and provides validation diagnostics. A malformed successful response remains an uncertain command outcome; keep the original retry identity.
+`WireApiError` exposes the server's `code`, `message` and HTTP `status`. `WireContractError` identifies an invalid request, response or operation and provides validation diagnostics. A timeout, disconnect or malformed successful response leaves the command outcome uncertain. Recover its original command intent or replay the exact command with its original key; a new key can create another operation.
 
 The acquisition schemas describe quote revisions, integer prices, public pack views and opening receipts. Pack responses reject sealed copy IDs and internal receipts. Every documented error status uses the `{code, message}` envelope. Other operations are checked to the detail currently present in their schemas; unspecified object fields remain `unknown` and need an application-level contract before use. These declarations cover the wire transport, not the entire JavaScript browser or backend implementation.
 

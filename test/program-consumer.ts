@@ -971,3 +971,78 @@ const composedUI=mountFramework(uiButton,{client:uiClient,cardRenderer:renderer,
 composedUI.dispose();
 const standaloneUICardRenderer:UICardRenderer=renderer;
 void standaloneUICardRenderer;
+
+import {FrameworkWorkerService,type FrameworkWorkerOperations,type FrameworkWorkerMethodName,type FrameworkWorkerStatus,type FrameworkWorkerServiceOptions} from '@digital-card/framework/worker';
+import type {CoreOperations as WorkerCoreOperations,CoreActor as WorkerCoreActor} from '../src/core-operations.js';
+import type {SQLiteStorageDiagnostics as WorkerStorageDiagnostics} from '../src/sqlite.js';
+import type {AuthSessionStorage as WorkerAuthSessionStorage,AuthFramework as WorkerAuthFramework} from '@digital-card/framework/auth';
+import {Buffer as WorkerBuffer} from 'node:buffer';
+declare const workerActor:WorkerCoreActor & {userId:string};
+const workerOptions:FrameworkWorkerServiceOptions={filename:'state.sqlite',storeOptions:{encryptionKey:WorkerBuffer.alloc(32),maxStateBytes:1024*1024,maxCompletionBytes:1024*1024},sessionOptions:{maxSessions:100,encryptionKey:WorkerBuffer.alloc(32)},frameworkOptions:{limits:{users:100},actionOptions:{maxAttempts:3},eventSubscriptions:[{id:'events',handler:'deliver',events:['*']}],remotePolicies:{canPurchase:{scope:'listing',providerId:'policy',url:'https://example.test/policy',token:'configured-token'}},allocationCodeIssuers:{issuer:{providerId:'issuer',url:'https://example.test/issuer',token:'configured-token'}},allocationBindingFactories:{factory:{kind:'activation',providerId:'factory',revision:1,url:'https://example.test/factory',token:'configured-token'}}},extensionModule:'./extensions.mjs',extensionOptions:{labels:['example'],bytes:new Uint8Array([1]),optional:undefined},codeVaultOptions:{activeKeyId:'active',keys:{active:WorkerBuffer.alloc(32)},indexKey:WorkerBuffer.alloc(32)},maxPendingRequests:10,maxPendingBytes:1048576,startupTimeoutMs:30000,closeTimeoutMs:10000};
+const frameworkWorker=new FrameworkWorkerService(workerOptions);
+const defaultFrameworkWorker=new FrameworkWorkerService();
+const workerReady:Promise<FrameworkWorkerService>=frameworkWorker.ready;
+const workerState:FrameworkWorkerStatus=frameworkWorker.status();
+const workerPhase:'starting'|'ready'|'closing'|'closed'|'failed'=workerState.state;
+const workerSaturated:boolean=workerState.saturated,workerQueuedBytes:number=workerState.pendingBytes;
+const workerWallet:Promise<ReturnType<WorkerCoreOperations['wallet']>>=frameworkWorker.wallet(workerActor);
+const invokedWorkerWallet:Promise<ReturnType<WorkerCoreOperations['wallet']>>=frameworkWorker.invoke('wallet',workerActor);
+const workerDispatch:Promise<Awaited<ReturnType<WorkerCoreOperations['dispatchActions']>>>=frameworkWorker.dispatchActions(workerActor,{limit:1,signal:new AbortController().signal});
+const invokedWorkerDispatch:Promise<Awaited<ReturnType<WorkerCoreOperations['dispatchActions']>>>=frameworkWorker.invoke('dispatchActions',workerActor,{limit:1,signal:new AbortController().signal});
+const workerPolicy=frameworkWorker.setRemotePolicyEnabled(workerActor,{hook:'canPurchase',enabled:true});workerPolicy.then(result=>{const scope:'listing'=result.scope;void scope;});
+const invokedWorkerPolicy=frameworkWorker.invoke('setRemotePolicyEnabled',workerActor,{hook:'canTransfer',enabled:false});invokedWorkerPolicy.then(result=>{const scope:'transfer'=result.scope;void scope;});
+const workerIntegrity:Promise<boolean>=frameworkWorker.storeIntegrity(),workerDiagnostics:Promise<WorkerStorageDiagnostics>=frameworkWorker.invoke('storeDiagnostics');
+workerDiagnostics.then(result=>{const decoded:number=result.decodedQueryRecords,readonly:boolean=result.readOnly;void [decoded,readonly];});
+const workerPrepared:Promise<{prepared:boolean}>=frameworkWorker.prepareRecordTransactions({force:true});
+frameworkWorker.runtimeCapabilities().then(result=>{const bindings:string[]=result.bindingFactories,actions:boolean=result.actionHandlers,vault:boolean=result.codeVault;void [bindings,actions,vault];});
+const workerSessionCreated:Promise<string>=frameworkWorker.sessionCreate('flow',{state:'example'},60000);
+const workerSessionRead:Promise<unknown>=frameworkWorker.invoke('sessionGet','secret','flow');
+const workerSessionConsumed:Promise<unknown>=frameworkWorker.sessionConsume('secret','flow');
+const workerSessionRevoked:Promise<void>=frameworkWorker.invoke('sessionRevoke','secret');
+if(frameworkWorker.sessions){const sessionStorage:WorkerAuthSessionStorage=frameworkWorker.sessions;const created:Promise<string>=frameworkWorker.sessions.create('session',{userId:'example'},60000),consumed:Promise<unknown>=frameworkWorker.sessions.get('secret','flow',{consume:true}),revoked:Promise<void>=frameworkWorker.sessions.revoke('secret');void [sessionStorage,created,consumed,revoked];}
+const workerAuth:WorkerAuthFramework=frameworkWorker;
+const workerAllOperations:Pick<FrameworkWorkerService,FrameworkWorkerMethodName>=frameworkWorker;
+declare const workerOperationName:keyof FrameworkWorkerOperations;
+const workerClosing:Promise<void>=frameworkWorker.close(),workerTerminated:Promise<void>=defaultFrameworkWorker.terminate();
+// @ts-expect-error Core operations require their original actor arguments.
+frameworkWorker.wallet();
+// @ts-expect-error Invoked operations preserve their original argument tuples.
+frameworkWorker.invoke('wallet','actor');
+// @ts-expect-error Worker status is local and is not an allowed RPC method.
+frameworkWorker.invoke('status');
+// @ts-expect-error Arbitrary prototype properties cannot be invoked.
+frameworkWorker.invoke('constructor');
+// @ts-expect-error Store callbacks do not cross the worker boundary.
+frameworkWorker.transact(()=>{});
+// @ts-expect-error Core results are asynchronous on the worker service.
+const immediateWorkerWallet:ReturnType<WorkerCoreOperations['wallet']>=frameworkWorker.wallet(workerActor);
+// @ts-expect-error Sessions are absent when they were not configured.
+frameworkWorker.sessions.create('session',{},60000);
+// @ts-expect-error Session kinds reuse the authentication contract.
+frameworkWorker.sessionCreate('other',{},60000);
+// @ts-expect-error Session create takes JSON data, not a callback.
+frameworkWorker.sessionCreate('session',()=>{},60000);
+// @ts-expect-error Constructor callbacks must be loaded through extensionModule.
+new FrameworkWorkerService({frameworkOptions:{clock:()=>''}});
+const callbackWorkerOptions={limits:{users:10},clock:()=>''};
+// @ts-expect-error Known callbacks are rejected even through a configuration variable.
+new FrameworkWorkerService({frameworkOptions:callbackWorkerOptions});
+// @ts-expect-error Store migration callbacks cannot be transferred.
+new FrameworkWorkerService({storeOptions:{onMigration:()=>{}}});
+// @ts-expect-error Session clocks cannot be transferred.
+new FrameworkWorkerService({sessionOptions:{clock:()=>0}});
+// @ts-expect-error Session storage requires a writable store.
+new FrameworkWorkerService({storeOptions:{readOnly:true},sessionOptions:{}});
+// @ts-expect-error Extension options contain only transferable plain data.
+new FrameworkWorkerService({extensionOptions:{callback:()=>{}}});
+// @ts-expect-error Date objects are not supported by the worker transport.
+new FrameworkWorkerService({extensionOptions:new Date()});
+// @ts-expect-error Trusted modules are local filenames or file URL strings.
+new FrameworkWorkerService({extensionModule:new URL('file:///extensions.mjs')});
+// @ts-expect-error Constructor limits are numeric.
+new FrameworkWorkerService({maxPendingRequests:'10'});
+// @ts-expect-error The ready promise resolves to the service, rather than void.
+const voidWorkerReady:Promise<void>=frameworkWorker.ready;
+// @ts-expect-error Worker shutdown remains asynchronous.
+const immediateWorkerClose:void=frameworkWorker.close();
+void [workerReady,workerState,workerPhase,workerSaturated,workerQueuedBytes,workerWallet,invokedWorkerWallet,workerDispatch,invokedWorkerDispatch,workerIntegrity,workerDiagnostics,workerPrepared,workerSessionCreated,workerSessionRead,workerSessionConsumed,workerSessionRevoked,workerAuth,workerAllOperations,workerOperationName,workerClosing,workerTerminated,immediateWorkerWallet,voidWorkerReady,immediateWorkerClose];

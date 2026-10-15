@@ -15,6 +15,15 @@ const pw = await import(
 );
 const base = fileURLToPath(new URL("../", import.meta.url));
 const pkg = await build(fixture());
+const fontFailuresOnly = process.argv.includes("--font-failures");
+const { testFont } = await import("./font-fixture.mjs");
+const { createProject } = await import("../src/presentation/project.js");
+const { addText } = await import("../src/presentation/authoring-tools.js");
+const fontProject = createProject(pkg), fontBytes = testFont();
+const embeddedFont = await fontProject.addFont(new Blob([fontBytes], { type: "font/ttf" }));
+addText(fontProject, "front", { id: "font-load-caption", text: "AB", width: 100, height: 40,
+  typography: { fontAsset: embeddedFont.id, size: 24 } });
+const fontPackage = await fontProject.export(), fontRequests = [];
 const { gifFixture } = await import("./gif-fixture.mjs");
 const { maskedPsdFixture } = await import("./presentation-layered-fixtures.mjs");
 const special = new Map([
@@ -45,6 +54,13 @@ const server = createServer(async (req, res) => {
       res.end();
       return;
     }
+    if (["/font-ok.ttf", "/font-missing.ttf", "/font-corrupt.ttf"].includes(pathname)) {
+      fontRequests.push(pathname);
+      res.setHeader("content-type", "font/ttf");
+      if (pathname === "/font-missing.ttf") { res.writeHead(404); res.end(); }
+      else res.end(pathname === "/font-ok.ttf" ? fontBytes : new Uint8Array(16));
+      return;
+    }
     const relative = pathname.slice(1),
       resolved = path.resolve(base, relative);
     if (!resolved.startsWith(base) || relative.includes(".."))
@@ -53,6 +69,8 @@ const server = createServer(async (req, res) => {
       ? special.get(pathname)
       : pathname.startsWith("/card/")
         ? pkg.files.get(pathname.slice(6))
+        : pathname.startsWith("/font-card/")
+          ? fontPackage.files.get(pathname.slice(11))
         : await readFile(resolved);
     if (!data) throw Error("missing");
     res.setHeader(
@@ -97,7 +115,7 @@ try {
   assert.equal(denied.status, 401);
   checks.push({ name: "private card files reject anonymous requests", passed: true });
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  const result = await page.evaluate(async ({ crossOrigin }) => {
+  const result = await page.evaluate(async ({ crossOrigin, fontFailuresOnly, embeddedFontId }) => {
     const { createPlayerStage } = await import("/src/presentation/player.js");
     const { directoryResolver } = await import("/src/presentation/resolver.js");
     const { createWebGLRenderer } = await import("/src/presentation/webgl.js");
@@ -116,6 +134,30 @@ try {
     results.push(check(Boolean(probe),"fresh WebGL2 graphics setup",setup));probe.getExtension("WEBGL_lose_context")?.loseContext();
     const settle = () => new Promise((r) => setTimeout(r, 80)),
       root = document.getElementById("root");
+    for (const name of ["ok", "missing", "corrupt"]) {
+      const base = await directoryResolver("/font-card/"), events = [], host = document.createElement("div");
+      Object.assign(host.style, { width: "240px", height: "360px" }); root.append(host);
+      // A host resolver can return an unavailable or malformed font URL after metadata loading.
+      const resolver = { ...base, asset: id => id === embeddedFontId
+        ? Promise.resolve({ url: `/font-${name}.ttf`, mediaType: "font/ttf" }) : base.asset(id) };
+      const stage = createPlayerStage({ root: host, onDiagnostic: event => events.push(event) });
+      const view = stage.mount(host, { resolver }, { onEvent: event => events.push(event) }), ready = await view.ready, poster = host.querySelector("img");
+      if (name === "ok") results.push(check(ready.mode === "interactive" && poster.hidden,
+        "synthetic embedded TTF loads through the player", { ready, events }));
+      else {
+        await poster.decode();
+        const reason = name === "missing" ? "Font could not be loaded" : "Font signature does not match its format";
+        results.push(check(ready.mode === "poster" && ready.fallbackReason === reason && !poster.hidden && poster.naturalWidth > 0 &&
+          events.some(event => event.type === "fallback" && event.reason === reason),
+          `${name} font load gives diagnostic and visible poster fallback`, { ready, events }));
+      }
+      view.dispose(); stage.dispose(); base.dispose(); host.remove();
+      const disposed = stage.diagnostics();
+      results.push(check(disposed.views === 0 && disposed.textures === 0 && disposed.assetReferences === 0 &&
+        disposed.pendingJobs === 0 && disposed.scheduledFrames === 0 && disposed.estimatedGpuBytes === 0,
+        `${name} font load cleanup releases owned resources`, disposed));
+    }
+    if (fontFailuresOnly) return results;
     const resolver = await directoryResolver("/card/");
     results.push(check(Boolean(resolver.manifest), "directory resolver loads session-protected card metadata"));
     const external = await directoryResolver(crossOrigin);
@@ -698,16 +740,17 @@ try {
       ),
     );
     return results;
-  }, { crossOrigin: `http://127.0.0.1:${crossServer.address().port}/` });
+  }, { crossOrigin: `http://127.0.0.1:${crossServer.address().port}/`, fontFailuresOnly, embeddedFontId: embeddedFont.id });
   checks.push(...result);
-  assert.ok(crossRequests.length >= 4);
+  assert.deepEqual(fontRequests, ["/font-ok.ttf", "/font-missing.ttf", "/font-corrupt.ttf"]);
+  if (!fontFailuresOnly) assert.ok(crossRequests.length >= 4);
   assert.ok(
     crossRequests.every((request) => request.cookie === null),
     JSON.stringify(crossRequests.map(({ path, cookie }) => ({
       path, cookieLength: cookie?.length ?? null,
     }))),
   );
-  checks.push({ name: "cross-origin metadata and artwork receive no session cookies", passed: true });
+  if (!fontFailuresOnly) checks.push({ name: "cross-origin metadata and artwork receive no session cookies", passed: true });
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({ browser: browser.version(), engine, checks }, null, 2),

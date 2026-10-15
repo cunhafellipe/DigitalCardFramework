@@ -75,3 +75,57 @@ const invalidAmount: string = validatePurchasePolicyRequest(input).context.listi
 // @ts-expect-error Responses contain the identity and decision, not request context.
 validateTradePolicyResponse(input).context;
 void [invalidStock, privateStock, invalidResponse, invalidAmount];
+
+import {createRemotePurchasePolicy, purchasePolicyProtocol as remotePurchaseProtocol, validatePurchasePolicyResponse as remotePurchaseResponse} from '@digital-card/framework/remote-purchase-policy';
+import {createRemoteListingPolicy, listingPolicyProtocol as remoteListingProtocol, validateListingPolicyRequest as remoteListingRequest} from '@digital-card/framework/remote-listing-policy';
+import {createRemoteTransferPolicy, transferPolicyProtocol as remoteTransferProtocol, validateTransferPolicyRequest as remoteTransferRequest} from '@digital-card/framework/remote-transfer-policy';
+import {createRemoteTradePolicy, tradePolicyProtocol as remoteTradeProtocol, validateTradePolicyResponse as remoteTradeResponse} from '@digital-card/framework/remote-trade-policy';
+
+const transportOptions = {providerId: 'example.policy', url: 'https://policy.example.test/eligibility', token: 'configured-service-credential', timeoutMs: 5000, maxRequestBytes: 8192, maxResponseBytes: 4096, maxConcurrent: 2, allowLoopbackHttp: false};
+const purchaseAdapter = createRemotePurchasePolicy({...transportOptions, scope: 'listing'});
+const listingAdapter = createRemoteListingPolicy({...transportOptions, scope: 'listing'});
+const transferAdapter = createRemoteTransferPolicy({...transportOptions, scope: 'transfer'});
+const tradeAdapter = createRemoteTradePolicy({...transportOptions, scope: 'exchange'});
+const signal = new AbortController().signal;
+const purchaseResult = purchaseAdapter.evaluate({...purchase, ...purchaseAdapter.grant()}, {signal});
+const listingResult = listingAdapter.evaluate({...listing, ...listingAdapter.grant()});
+const transferResult = transferAdapter.evaluate({...transfer, ...transferAdapter.grant()}, {signal});
+const tradeResult = tradeAdapter.evaluate({...trade, ...tradeAdapter.grant()});
+void purchaseResult.then(result => {
+  const status: 'allowed' | 'denied' = result.status;
+  if (result.status === 'denied') result.reasonCode.toUpperCase();
+  // @ts-expect-error Remote error frames reject, rather than resolving an error decision.
+  result.errorCode;
+  return status;
+});
+void listingResult.then(result => {const phase: 'create' = result.phase; return phase;});
+void transferResult.then(result => {const scope: 'transfer' = result.scope; return scope;});
+void tradeResult.then(result => {const scope: 'exchange' = result.scope; return scope;});
+for (const adapter of [purchaseAdapter, listingAdapter, transferAdapter, tradeAdapter]) {
+  const grant = adapter.grant();adapter.assertGrant(grant);
+  adapter.providerId.toUpperCase();adapter.timeoutMs.toFixed();
+  const state = adapter.setEnabled(false);state.generation.toFixed();
+  const enabled: boolean = state.enabled;void enabled;
+  const closed: void = adapter.close();void closed;
+  // @ts-expect-error Grants are immutable snapshots.
+  grant.generation = 2;
+  // @ts-expect-error Adapters expose close, not a disposal method.
+  adapter.dispose();
+}
+void [remotePurchaseProtocol, remoteListingProtocol, remoteTransferProtocol, remoteTradeProtocol, remotePurchaseResponse(input), remoteListingRequest(input), remoteTransferRequest(input), remoteTradeResponse(input)];
+// @ts-expect-error A remote adapter requires an explicit matching scope.
+createRemotePurchasePolicy(transportOptions);
+// @ts-expect-error Listing policy never uses exchange scope.
+createRemoteListingPolicy({...transportOptions, scope: 'exchange'});
+// @ts-expect-error Transfer policy never uses listing scope.
+createRemoteTransferPolicy({...transportOptions, scope: 'listing'});
+// @ts-expect-error Trade policy requires exchange scope.
+createRemoteTradePolicy({...transportOptions, scope: 'transfer'});
+// @ts-expect-error Transport URL configuration must be a string.
+createRemotePurchasePolicy({...transportOptions, scope: 'listing', url: new URL(transportOptions.url)});
+// @ts-expect-error Transfer evaluation requires its own request protocol and context.
+transferAdapter.evaluate(trade);
+// @ts-expect-error Cancellation takes an AbortSignal, not a callback.
+tradeAdapter.evaluate(trade, {signal: () => true});
+// @ts-expect-error Grant validation requires generation and grantId.
+purchaseAdapter.assertGrant({providerId: 'example.policy'});

@@ -395,3 +395,48 @@ preparedImport.policyRevision;
 // @ts-expect-error Parsing leaves the imported shape unvalidated.
 const uncheckedCatalog:ImportSchemas['CatalogManifest']=parseContent('{}');
 void [importedData,importedCount,exportedCatalog,importedDigest,uncheckedCatalog];
+
+import {POLICY_VERSION, reference as policyReference, flattenNodes, exact, validateExpression, expression, validateField, valueError, validatePolicy, resolveCardPolicy, deriveStats, policyDefaults, publicStats, inspectCardPolicy} from '@digital-card/framework/card-policy';
+import {policyDefinitions, cardPolicySchema, type CardPolicyDefinitionName} from '@digital-card/framework/card-policy-schema';
+const policyVersion:1=POLICY_VERSION;
+const validReference:boolean=policyReference('example.policy@1');
+const policyDefinitionName:CardPolicyDefinitionName='CardCopyStats';
+const policyObjectType:'object'=policyDefinitions[policyDefinitionName].type;
+const policySchemaRef:'#/$defs/CardPolicy'=cardPolicySchema.$ref;
+const policyField=validateField({key:'power',label:'Power',type:'integer',default:1});
+const policyDocument=validatePolicy({schemaVersion:1,id:'example.policy',revision:1,name:'Example',fields:[policyField]});
+const effectivePolicy=resolveCardPolicy([policyDocument],[{policy:'example.policy@1',scope:'installation'}],{}, {resources:[]});
+const policyStats=deriveStats(effectivePolicy.fields,policyDefaults(effectivePolicy));
+const statError:string|null=valueError(policyField,policyStats.power);
+const visiblePolicyStats:Record<string,unknown>=publicStats(policyStats,effectivePolicy.fields,'card','owner');
+publicStats(null,[]);policyDefaults(effectivePolicy,'copy');
+exact({power:1},['power'],'stats');
+validateExpression(['add',1,2],{count:{value:0},depth:0});
+const expressionValue:unknown=expression(['field','power'],policyStats);
+const flattenedPolicyNodes=flattenNodes([{id:'root',children:[{id:'child'}]}]);
+flattenedPolicyNodes.forEach(node=>node.id.toUpperCase());
+const heterogeneousPolicyNodes=flattenNodes([{id:'root',rootOnly:true,children:[{id:'child'}]}]);
+heterogeneousPolicyNodes.forEach(node=>{
+  node.id.toUpperCase();
+  // @ts-expect-error Descendants need not contain properties present only on the root.
+  const rootOnly:boolean=node.rootOnly;
+  void rootOnly;
+});
+const policyIssues=inspectCardPolicy(effectivePolicy,{card:{stats:policyStats},presentation:{manifest:{faces:{front:{scene:'front'}},assets:[]},scenes:new Map([['front',{nodes:[{type:'text',id:'power',height:20,stat:{key:'power'}}]}]])}});
+inspectCardPolicy(effectivePolicy,{copy:{stats:{power:1}}});
+for(const issue of policyIssues){const severity:'error'=issue.severity;const provenance:string|string[]=issue.policies;issue.path.toUpperCase();void [severity,provenance];}
+// @ts-expect-error Resolved policies contain references, not registry revisions.
+effectivePolicy.revision;
+// @ts-expect-error Stat visibility must be a supported access level.
+publicStats(policyStats,effectivePolicy.fields,'card','admin');
+// @ts-expect-error Expression validation returns no evaluated value.
+const evaluatedExpression:number=validateExpression(1);
+// @ts-expect-error Evaluation may return a nonnumeric field value.
+const uncheckedExpression:number=expression(['field','power'],policyStats);
+// @ts-expect-error Policy assignments require a supported scope.
+resolveCardPolicy([policyDocument],[{policy:'example.policy@1',scope:'copy'}],{});
+// @ts-expect-error Only declared policy definitions are available.
+policyDefinitions.CardPolicyUnknown;
+// @ts-expect-error Fields retain optional source metadata after validation.
+const requiredSource:string=policyField.source;
+void [policyVersion,validReference,policyObjectType,policySchemaRef,statError,visiblePolicyStats,expressionValue,evaluatedExpression,uncheckedExpression,requiredSource];

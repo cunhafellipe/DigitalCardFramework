@@ -1,13 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve,sep} from 'node:path';
+import {randomBytes} from 'node:crypto';
+import {CardFramework} from '../src/index.js';
+import {SQLiteStore} from '../src/sqlite.js';
 import {createPluginDeployment,validatePluginManifest} from '../src/plugin-deployment.js';
 import {pluginProtocol,pluginCommands} from '../src/plugin-host.js';
 import {fixture,admin} from './helpers.js';
 const manifest=(id,dependencies=[],version='1.0.0')=>({contract:'digital-card-plugin-manifest@1',id,version,protocol:pluginProtocol,commands:[...pluginCommands],dependencies,configurationSchema:{type:'object',additionalProperties:false,properties:{region:{type:'string',enum:['local']}},required:['region']},runtime:{kind:'external-http',language:'Python',prerequisites:['Python 3'],migration:'none'}});
 const installations=(manifests,userId,suffix='initial')=>manifests.map(manifest=>({id:manifest.id,token:'public-deployment-'+suffix+'-'+manifest.id,commands:manifest.commands,userIds:[userId],configuration:{region:'local'}}));
 async function setup(manifests,overrides={}){
-  const x=fixture(),installs=installations(manifests,x.a.id),framework={...Object.fromEntries(['inventoryPage','operatorCatalog','quote','commandIntents','registerCommandIntent','commandIntent','executeCommandIntentAsync','acknowledgeCommandIntent'].map(name=>[name,(...args)=>x.core[name](...args)])),...overrides.framework};
+  const x=fixture(overrides.fixture??{}),installs=installations(manifests,x.a.id),framework={...Object.fromEntries(['inventoryPage','operatorCatalog','quote','commandIntents','registerCommandIntent','commandIntent','executeCommandIntentAsync','acknowledgeCommandIntent'].map(name=>[name,(...args)=>x.core[name](...args)])),...overrides.framework};
   const deployment=createPluginDeployment({manifests,installations:installs,framework,resolveActor:()=>x.alice,...overrides.options});
   const server=createServer(async(req,res)=>{if(!await deployment.handle(req,res)){res.statusCode=404;res.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url='http://127.0.0.1:'+server.address().port;
   const post=async(id,path,value,token=installs.find(install=>install.id===id).token,delegation)=>{const response=await fetch(url+path,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token,...(delegation?{'x-dc-delegation':delegation}:{})},body:JSON.stringify(value)});return {status:response.status,body:await response.json()};};
@@ -55,4 +61,28 @@ test('shared diamond dependencies have consistent bounded transitive health and 
     const base=(await x.handshake('base')).body;assert.equal(x.deployment.status().find(row=>row.pluginId==='left17').dependenciesReady,true);assert.equal((await x.command('left17',session,delegation,'inventory.read')).status,200);
     await x.post('base','/plugins/sessions/close',{protocol:pluginProtocol,sessionId:base.sessionId});assert.equal(x.deployment.status().find(row=>row.pluginId==='left17').dependenciesReady,false);assert.equal((await x.command('left17',session,delegation,'inventory.read')).status,403);
   }finally{await x.close();}
+});
+
+
+test('encrypted deployment upgrade, compatible rollback and uninstall retain the original purchase',{timeout:20000},async t=>{
+  const root=mkdtempSync(join(tmpdir(),'deployment-rollback-')),filename=join(root,'framework.sqlite'),encryptionKey=randomBytes(32),original=[manifest('buyer')],x=await setup(original,{fixture:{store:new SQLiteStore(filename,{encryptionKey})}});let closed=false,reopened;
+  t.after(async()=>{if(!closed)await x.close();reopened?.close();if(!resolve(root).startsWith(resolve(tmpdir())+sep))throw Error('Unsafe deployment fixture cleanup target');rmSync(root,{recursive:true,force:true});});
+  const session=(await x.handshake('buyer')).body,delegation=x.delegate('buyer'),quote=x.core.quote(x.alice,{productId:'common',quantity:1}),start=x.core.wallet(x.alice).credits;
+  const registered=await x.command('buyer',session,delegation,'purchase.register',quote);assert.equal(registered.status,200);const intent=registered.body.result;
+  x.deployment.drain('buyer');assert.equal((await x.command('buyer',session,delegation,'purchase.register',quote)).status,403);
+  const upgraded=[{...manifest('buyer',[],'2.0.0'),runtime:{...original[0].runtime,migration:'operator-required'}}],fresh=installations(upgraded,x.a.id,'durable-upgrade');
+  assert.throws(()=>x.deployment.replace({manifests:upgraded,installations:[{...fresh[0],configuration:{region:'invalid'}}],migrationApproved:['buyer']}),error=>error.code==='PLUGIN_DEPLOYMENT');
+  assert.equal((await x.command('buyer',session,delegation,'purchase.pending')).status,200);assert.equal(x.core.commandIntents(x.alice,{command:'purchase'}).items[0].id,intent.id);assert.equal(x.core.wallet(x.alice).credits,start);
+  assert.throws(()=>x.deployment.replace({manifests:upgraded,installations:fresh}),error=>error.status===409);
+  x.deployment.replace({manifests:upgraded,installations:fresh,migrationApproved:['buyer']});assert.equal((await x.handshake('buyer')).status,403);
+  const v2=(await x.handshake('buyer','2.0.0',fresh[0].token)).body,v2delegation=x.delegate('buyer'),execution=await x.command('buyer',v2,v2delegation,'purchase.execute',{id:intent.id},fresh[0].token);assert.equal(execution.status,200);const receipt=execution.body.result;
+  assert.equal(x.core.wallet(x.alice).credits,start-quote.price.amount);const packs=x.core.packs(x.alice);assert.equal(packs.length,1);
+  x.deployment.drain('buyer');const rollback=installations(original,x.a.id,'durable-rollback');x.deployment.replace({manifests:original,installations:rollback});
+  assert.equal((await x.handshake('buyer','2.0.0',fresh[0].token)).status,403);assert.equal((await x.command('buyer',v2,v2delegation,'purchase.pending',{},fresh[0].token)).status,403);
+  const v1=(await x.handshake('buyer','1.0.0',rollback[0].token)).body,v1delegation=x.delegate('buyer'),recovered=await x.command('buyer',v1,v1delegation,'purchase.execute',{id:intent.id},rollback[0].token);assert.equal(recovered.status,200);assert.deepEqual(recovered.body.result,receipt);
+  x.deployment.drain('buyer');x.deployment.replace({manifests:[],installations:[]});assert.deepEqual(x.deployment.status(),[]);assert.equal((await x.handshake('buyer','1.0.0',rollback[0].token)).status,403);assert.equal((await x.command('buyer',v1,v1delegation,'purchase.execute',{id:intent.id},rollback[0].token)).status,403);
+  assert.deepEqual(await x.core.executeCommandIntentAsync(x.alice,{id:intent.id}),receipt);assert.deepEqual(x.core.packs(x.alice),packs);assert.equal(x.core.audit(admin).ok,true);
+  await x.close();closed=true;reopened=new CardFramework({store:new SQLiteStore(filename,{encryptionKey})});
+  assert.equal(reopened.commandIntents(x.alice,{command:'purchase'}).items[0].id,intent.id);assert.deepEqual(await reopened.executeCommandIntentAsync(x.alice,{id:intent.id}),receipt);assert.deepEqual(reopened.packs(x.alice),packs);assert.equal(reopened.wallet(x.alice).credits,start-quote.price.amount);
+  const acknowledged=reopened.acknowledgeCommandIntent(x.alice,{id:intent.id});assert.deepEqual(reopened.acknowledgeCommandIntent(x.alice,{id:intent.id}),acknowledged);assert.deepEqual(reopened.commandIntents(x.alice,{command:'purchase'}),{items:[]});assert.equal(reopened.audit(admin).ok,true);
 });

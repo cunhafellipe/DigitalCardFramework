@@ -194,3 +194,33 @@ createBindingFactoryRegistry({allocationBindingFactories:{invalid:{kind:'pure',p
 // @ts-expect-error Pure evaluation cannot activate bindings.
 const pureActivation:PureBindingFactoryRequest={...pureFactoryRequest,operation:'activate'};
 void [userSnapshot,factoryScope,pureActivation];
+
+import {Buffer} from 'node:buffer';
+import {createStateCodec, keyFromHex, type StateCodec} from '@digital-card/framework/encryption';
+const stateKey:Buffer=keyFromHex('ab'.repeat(32));
+const absentStateKey:undefined=keyFromHex(undefined);
+const omittedStateKey:undefined=keyFromHex();
+declare const optionalHexKey:string|undefined;
+const optionalStateKey:Buffer|undefined=keyFromHex(optionalHexKey);
+const encryptedCodec:StateCodec=createStateCodec(stateKey);
+const encodedState:string=encryptedCodec.encode({version:1,entries:[{id:'example',active:true}],extra:null});
+const decodedState:unknown=encryptedCodec.decode(encodedState);
+if(decodedState!==null&&typeof decodedState==='object'&&'version' in decodedState){const version:unknown=decodedState.version;void version;}
+const plainCodec=createStateCodec();
+plainCodec.encode(['example',1,true,null]);
+createStateCodec(optionalStateKey);createStateCodec(Buffer.alloc(32));
+// @ts-expect-error Encryption requires a Node.js Buffer, not a plain byte array.
+createStateCodec(new Uint8Array(32));
+// @ts-expect-error Hex text must first be converted to a binary key.
+createStateCodec('ab'.repeat(32));
+// @ts-expect-error Key text must be a string.
+keyFromHex(123);
+// @ts-expect-error State values must be JSON-compatible.
+encryptedCodec.encode({run:()=>true});
+// @ts-expect-error JSON encoding excludes bigint values.
+plainCodec.encode({amount:1n});
+// @ts-expect-error State decoding does not validate an application-specific shape.
+const uncheckedState:{version:number}=encryptedCodec.decode(encodedState);
+// @ts-expect-error Encoded state is text, not bytes.
+plainCodec.decode(new Uint8Array());
+void [absentStateKey,omittedStateKey,uncheckedState];

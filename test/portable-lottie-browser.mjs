@@ -61,12 +61,19 @@ try{
   });
   assert((await page.evaluate(()=>window.liveEffect.mount('angle',{two:true}))).every(result=>result.mode==='interactive'));
   await page.waitForFunction(()=>window.liveEffect.records.filter(record=>!record.disposed).every(record=>record.updates>0));
-  const angle=await page.evaluate(async()=>{
-    const test=window.liveEffect,[first,second]=test.views;first.setInputs({tilt:{x:-1,y:0}});second.setInputs({tilt:{x:0,y:0}});
-    const before=await test.pixels(first),effectBefore=await test.effectHash(test.records[0]),other=await test.pixels(second);first.setInputs({tilt:{x:1,y:0}});const after=await test.pixels(first),effectAfter=await test.effectHash(test.records[0]),unchanged=await test.pixels(second);
+  async function sampleAngle(x){
+    await page.evaluate(x=>{const [first,second]=window.liveEffect.views;first.setInputs({tilt:{x,y:0}});second.setInputs({tilt:{x:0,y:0}});},x);
+    // Loaded views and an earlier neutral update do not establish delivery of this input.
+    await page.waitForFunction(angle=>{const records=window.liveEffect.records;return records[0].last?.angle===angle&&records[1].last?.angle===0.5;},(x+1)/2);
+    return page.evaluate(async()=>{const test=window.liveEffect;return {pixels:await test.pixels(test.views[0]),effect:await test.effectHash(test.records[0]),other:await test.pixels(test.views[1]),delivered:test.records.slice(0,2).map(record=>record.last.angle)};});
+  }
+  const beforeAngle=await sampleAngle(-1),afterAngle=await sampleAngle(1);
+  assert.deepEqual(beforeAngle.delivered,[0,0.5]);assert.deepEqual(afterAngle.delivered,[1,0.5]);
+  const angle=await page.evaluate(({before,after})=>{
+    const test=window.liveEffect;
     const surface=test.records[0].instance.canvas,pixels=surface.getContext('2d').getImageData(0,0,surface.width,surface.height).data;let transparent=0,painted=0;for(let i=3;i<pixels.length;i+=4){if(pixels[i]===0)transparent++;if(pixels[i]>20)painted++;}
-    return {before,after,effectBefore,effectAfter,other,unchanged,transparent,painted,diagnostics:test.stage.diagnostics()};
-  });
+    return {before:before.pixels,after:after.pixels,effectBefore:before.effect,effectAfter:after.effect,other:before.other,unchanged:after.other,transparent,painted,diagnostics:test.stage.diagnostics()};
+  },{before:beforeAngle,after:afterAngle});
   assert(angle.before.painted>1000);assert(angle.transparent>1000&&angle.painted>20,'Real vector surface contains both transparent and painted pixels');assert.equal(angle.after.background[3],255,'Native background remains visible through the transparent effect');assert.notEqual(angle.effectBefore,angle.effectAfter,'Tilt-derived angle changes the actual vector surface');assert.notEqual(angle.before.hash,angle.after.hash,'Live angle changes actual composited output');assert.equal(angle.other.hash,angle.unchanged.hash,'Second instance retains independent input');assert.equal(angle.diagnostics.views,2);
   // Keyboard input uses the stage's existing accessible drag mode.
   await page.locator('#first [role="img"]').press('ArrowLeft');await page.waitForFunction(()=>window.liveEffect.records[0].last.angle<1);

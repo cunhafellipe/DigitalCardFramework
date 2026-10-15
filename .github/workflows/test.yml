@@ -135,6 +135,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir src/presentation install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/program-marketplace-browser.mjs
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
       - run: xvfb-run --auto-servernum node test/portable-card-art-browser.mjs test-results/portable-card-art
         env:
           HEADED: '1'
@@ -169,11 +174,6 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
       - run: xvfb-run --auto-servernum node test/program-trading-browser.mjs
-        env:
-          HEADED: '1'
-          BROWSER_ENGINE: ${{ matrix.engine }}
-          PYTHON: python3
-      - run: xvfb-run --auto-servernum node test/program-marketplace-browser.mjs
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

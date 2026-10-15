@@ -494,3 +494,44 @@ createAuthHost({framework:{registerUser:()=>({id:'collector'})},sessions:authSes
 authHost.handle(new Request('https://cards.example/auth/login'),new Response());
 authSessions.close();
 void [decodedAuthSession,authHandled,authResolved,uncheckedAuthSession];
+
+import {readWithin, compileDirectory, writeCompiled, buildReport, publishPackage, type CompiledPackage, type CompilerReport} from '@digital-card/framework/presentation/compiler';
+const compilerRead:Promise<Uint8Array>=readWithin(new URL('file:///project/'),'card.json');
+const compilerOutput:Promise<CompiledPackage>=compileDirectory({root:'project',out:'compiled',archivePath:'card.dcard',maxEdge:1024,signal,
+  performance:{mode:'warn',quality:'lite'},
+  async imageProcessor(bytes,{maxEdge,mediaType}) {
+    const edge:number=maxEdge;
+    void edge;
+    return {bytes:AuthBuffer.from(bytes),width:1,height:1,mediaType};
+  },
+});
+compilerOutput.then(pkg=>{
+  const archive:Uint8Array=pkg.archive;
+  const files:Map<string,Uint8Array>=pkg.files;
+  const report:CompilerReport=buildReport(pkg,{mode:'off'});
+  const textureBytes:number|undefined=report.profiles.standard?.estimatedTextureBytes;
+  const accepted:boolean=pkg.report.performance.accepted;
+  const written:Promise<void>=writeCompiled(pkg,{out:'compiled'});
+  void [archive,files,textureBytes,accepted,written];
+});
+const compilerPublication=publishPackage(AuthBuffer.alloc(0),{contentRoot:'content',limits:{compressed:1024,ratio:20},performance:{mode:'reject'},expectedDigest:'sha256:example',stagingPath:'staging',temporaryBytes:4096});
+compilerPublication.then(result=>{
+  const folder:string=result.folder;
+  const warning:string|undefined=result.report.warnings[0];
+  // @ts-expect-error Publication returns a location and report, not archive bytes.
+  result.archive;
+  void [folder,warning];
+});
+// @ts-expect-error Compilation is asynchronous.
+const synchronousCompilation:CompiledPackage=compileDirectory({root:'project',out:'compiled'});
+// @ts-expect-error Compilation needs an output directory.
+compileDirectory({root:'project'});
+// @ts-expect-error Image processing must return dimensions and media type.
+compileDirectory({root:'project',out:'compiled',imageProcessor:bytes=>({bytes})});
+// @ts-expect-error Archive data must be bytes.
+publishPackage('archive',{contentRoot:'content'});
+// @ts-expect-error Publication limits are numeric.
+publishPackage(AuthBuffer.alloc(0),{contentRoot:'content',limits:{entries:'100'}});
+// @ts-expect-error Performance modes use the supported policy modes.
+publishPackage(AuthBuffer.alloc(0),{contentRoot:'content',performance:{mode:'allow'}});
+void [compilerRead,synchronousCompilation];

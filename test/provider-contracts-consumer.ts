@@ -598,3 +598,26 @@ tradingDefaults.enabled=false;
 // @ts-expect-error The default settings' top-level object is frozen.
 commerceDefaults.maxListingsPerShop=1;
 void [defaultTradeEnabled,defaultTradeDecision,defaultTradeRules,defaultShopLimit,defaultShopCurrencies];
+
+import {createApiHandler, createFrameworkServer, type HttpFramework} from '@digital-card/framework/http';
+import {CardFramework as HttpCore} from '../src/core.js';
+import type {Server} from 'node:http';
+const httpCore=new HttpCore();
+const httpService:HttpFramework=httpCore;
+const hostHandler=createApiHandler({framework:httpService,resolveIdentity:async request=>request.headers.authorization?{userId:'collector'}:null,allowedOrigin:'https://cards.example',rateLimit:({actor,mutation})=>!mutation||actor!==null,onRequest:({path,status})=>{const code:number=status;void [path,code];}});
+const hostServer:Server=createFrameworkServer({framework:httpCore,resolveIdentity:()=>undefined});
+declare const handlerHttpRequest:IncomingMessage;
+declare const handlerHttpResponse:ServerResponse;
+const handledRequest:Promise<boolean>=hostHandler(handlerHttpRequest,handlerHttpResponse);
+type AsyncHttpCore={[K in keyof import('../src/core-operations.js').CoreOperations]:(...args:Parameters<import('../src/core-operations.js').CoreOperations[K]>)=>Promise<Awaited<ReturnType<import('../src/core-operations.js').CoreOperations[K]>>>};
+declare const asyncHttpCore:AsyncHttpCore;
+createApiHandler({framework:asyncHttpCore,resolveIdentity:()=>({userId:'collector'})});
+// @ts-expect-error A Promise cannot provide a synchronous rate-limit decision.
+createApiHandler({framework:httpCore,resolveIdentity:()=>null,rateLimit:async()=>false});
+// @ts-expect-error Trusted identity resolution is required.
+createApiHandler({framework:httpCore});
+// @ts-expect-error Service methods preserve their core result contracts.
+const invalidHttpService:HttpFramework={...httpService,wallet:()=> 'balance'};
+// @ts-expect-error The handler result must be awaited.
+const immediateHandled:boolean=hostHandler(handlerHttpRequest,handlerHttpResponse);
+void [hostServer,handledRequest,invalidHttpService,immediateHandled];

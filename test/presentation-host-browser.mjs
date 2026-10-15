@@ -1,23 +1,34 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { serveReference } from "../src/static.js";
 const recipeOnly = process.argv[2] === "--recipe";
+const typographyOnly = process.argv[2] === "--typography";
+const selfHosted = recipeOnly || typographyOnly;
 let server;
 const [
   playwrightPath,
   base = "http://127.0.0.1:4173",
   out = "../PortableCardQA",
-] = recipeOnly ? [undefined, undefined, process.argv[3] ?? "test-results/presentation-host-recipe"] : process.argv.slice(2);
+] = selfHosted ? [undefined, undefined, process.argv[3] ?? (typographyOnly ? "test-results/presentation-host-typography" : "test-results/presentation-host-recipe")] : process.argv.slice(2);
 const engine = process.env.BROWSER_ENGINE ?? "chromium";
 await mkdir(out, {recursive:true});
 let origin = base;
-if (recipeOnly) {
+if (selfHosted) {
   server = createServer(async (request,response) => {
     try {
-      if (request.url === "/recipe") {response.setHeader("content-type","text/html");response.end('<!doctype html><html lang="en"><title>Custom material recipe</title><body></body></html>');return;}
+      if (request.url === "/recipe" || request.url === "/typography") {response.setHeader("content-type","text/html");response.end('<!doctype html><html lang="en"><title>Presentation qualification</title><link rel="stylesheet" href="/src/presentation/studio.css"><body></body></html>');return;}
+      const fonts = new Map([
+        ["/typography-fonts/variable.woff2", "SourceSans3VF-Upright.ttf.woff2"],
+        ["/typography-fonts/hebrew.ttf", "NotoSansHebrew-Full-Regular.ttf"],
+      ]);
+      if (typographyOnly && fonts.has(request.url)) {
+        response.setHeader("content-type", request.url.endsWith("woff2") ? "font/woff2" : "font/ttf");
+        response.end(await readFile(new URL("./fixtures/fonts/" + fonts.get(request.url), import.meta.url)));
+        return;
+      }
       if(await serveReference(request,response))return;response.writeHead(404);response.end();
     } catch {response.writeHead(500);response.end();}
   });
@@ -28,12 +39,12 @@ let browser;
 const errors = [];
 try {
   const playwright = await import(playwrightPath ? pathToFileURL(path.resolve(playwrightPath)).href : "playwright");
-  browser = await playwright[engine].launch({ headless: process.env.HEADED !== "1", ...(!recipeOnly && engine === "chromium" ? {channel:"msedge"} : {}) });
+  browser = await playwright[engine].launch({ headless: process.env.HEADED !== "1", ...(!selfHosted && engine === "chromium" ? {channel:"msedge"} : {}) });
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   page.on("pageerror", (e) => errors.push(e.message));
   page.setDefaultTimeout(20000);
-  await page.goto(origin + (recipeOnly ? "/recipe" : "/library.html"));
-  if (!recipeOnly) {
+  await page.goto(origin + (typographyOnly ? "/typography" : recipeOnly ? "/recipe" : "/library.html"));
+  if (!selfHosted) {
   await page.waitForFunction(
     () => document.querySelectorAll("dc-portable-card img").length === 2,
   );
@@ -43,8 +54,84 @@ try {
   await page.getByRole("button", { name: "Close", exact: true }).click();
   assert.equal(await page.locator("#viewer canvas").count(), 0);
   }
-  const moduleRoot = recipeOnly ? "/src/presentation" : "/player";
-  const flat = await page.evaluate(async moduleRoot => {
+  const moduleRoot = selfHosted ? "/src/presentation" : "/player";
+  let typography, flat, custom;
+  if (typographyOnly) {
+    typography = await page.evaluate(async moduleRoot => {
+      const [{ imagePackage }, { createProject }, { addText }, { mountStudio }, { browserResolver }, { createPlayerStage }] = await Promise.all([
+        import(moduleRoot + "/authoring.js"), import(moduleRoot + "/project.js"),
+        import(moduleRoot + "/authoring-tools.js"), import(moduleRoot + "/studio.js"),
+        import(moduleRoot + "/package.js"), import(moduleRoot + "/player.js"),
+      ]);
+      const style = document.createElement("style");
+      style.textContent = ".dcs-region{width:300px!important;height:450px!important;aspect-ratio:auto;border:0!important;border-radius:0!important}";
+      document.head.append(style);
+      const source = document.createElement("canvas"); source.width = 300; source.height = 450;
+      const background = source.getContext("2d"); background.fillStyle = "#111111"; background.fillRect(0, 0, 300, 450);
+      const blob = await new Promise(resolve => source.toBlob(resolve, "image/png")),
+        project = createProject(await imagePackage({ bytes: new Uint8Array(await blob.arrayBuffer()), mediaType: "image/png", id: "typography", title: "Typography" }));
+      const variable = await project.addFont(await (await fetch("/typography-fonts/variable.woff2")).blob(), { id: "variable", license: "SIL Open Font License 1.1" }),
+        hebrew = await project.addFont(await (await fetch("/typography-fonts/hebrew.ttf")).blob(), { id: "hebrew", license: "SIL Open Font License 1.1" });
+      for (const [weight, y] of [[200, 20], [900, 105]]) addText(project, "front", {
+        text: "Aé 123", x: 10, y, width: 280, height: 70, readingOrder: weight,
+        typography: { fontAsset: variable.id, axes: { wght: weight }, size: 32, color: "#ff3333", overflow: "clip" },
+      });
+      addText(project, "front", { x: 10, y: 235, width: 280, height: 80, readingOrder: 0,
+        runs: [{ text: "ABC ", color: "#ff0000" }, { text: "שלום ", color: "#0000ff" }, { text: "123", color: "#00ff00" }],
+        typography: { fontAsset: hebrew.id, size: 28, direction: "rtl", language: "he", overflow: "clip" },
+      });
+      const studioRoot = document.createElement("div"); document.body.append(studioRoot);
+      let studio, resolver, stage, view, target;
+      try {
+        studio = mountStudio(studioRoot, { initialPackage: await project.export() }); await studio.ready;
+        const previewLabel = studioRoot.querySelector(".dcs-slot [aria-label]")?.getAttribute("aria-label") ?? studioRoot.querySelector(".dcs-slot")?.getAttribute("aria-label");
+        await studio.capturePosters();
+        const pkg = await studio.getProject().export(), front = pkg.manifest.assets.find(a => a.id === pkg.manifest.faces.front.poster),
+          posterBlob = new Blob([pkg.files.get(front.path)], { type: front.mediaType });
+        const sample = async blob => {
+          const bitmap = await createImageBitmap(blob), canvas = document.createElement("canvas"); canvas.width = bitmap.width; canvas.height = bitmap.height;
+          const ctx = canvas.getContext("2d"); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          let light = 0, heavy = 0, blue = 0, green = 0;
+          for (let i = 0; i < pixels.length; i += 4) {
+            const y = Math.floor(i / 4 / canvas.width);
+            if (pixels[i] > 180 && pixels[i + 1] < 100 && pixels[i + 2] < 100) { if (y < 85) light++; else if (y < 190) heavy++; }
+            if (pixels[i + 2] > 180 && pixels[i] < 100) blue++;
+            if (pixels[i + 1] > 180 && pixels[i] < 100) green++;
+          }
+          const result = { width: canvas.width, height: canvas.height, hash: [...new Uint8Array(await crypto.subtle.digest("SHA-256", pixels))].join(","), light, heavy, blue, green };
+          canvas.width = canvas.height = 0; return result;
+        };
+        const previewPoster = await sample(posterBlob);
+        target = document.createElement("div"); Object.assign(target.style, { width: "300px", height: "450px", position: "relative" }); document.body.prepend(target);
+        resolver = browserResolver(pkg); stage = createPlayerStage({ root: target }); view = stage.mount(target, { resolver }, { quality: "standard" });
+        const ready = await view.ready; view.setInputs({ tilt: { x: 0, y: 0 }, angle: 0.5 });
+        const player = await sample(await view.snapshot()), playerLabel = view.element.getAttribute("aria-label");
+        await view.setQuality("poster"); const image = view.element.querySelector("img"); await image.decode();
+        const poster = await sample(await (await fetch(image.src)).blob()), posterLabel = image.alt, posterVisible = !image.hidden;
+        view.dispose(); const released = stage.diagnostics();
+        studio.dispose(); const studioDisposed = studioRoot.childElementCount === 0;
+        return { ready, previewPoster, player, poster, previewLabel, playerLabel, posterLabel, posterVisible,
+          released, studioDisposed, fontAssets: pkg.manifest.assets.filter(a => a.role === "font").length, png: [...new Uint8Array(await posterBlob.arrayBuffer())] };
+      } finally {
+        view?.dispose(); stage?.dispose(); resolver?.dispose(); studio?.dispose(); studioRoot.remove(); target?.remove();
+        style.remove(); source.width = source.height = 0;
+      }
+    }, moduleRoot);
+    const png = typography.png; delete typography.png;
+    await writeFile(path.join(out, "typography-preview-poster.png"), new Uint8Array(png));
+    assert.equal(typography.ready.mode, "interactive"); assert.equal(typography.fontAssets, 2);
+    assert.deepEqual([typography.player.width, typography.player.height], [300, 450]);
+    assert(typography.player.light > 0 && typography.player.heavy > typography.player.light);
+    assert(typography.player.blue > 0 && typography.player.green > 0);
+    assert.equal(typography.previewPoster.hash, typography.player.hash);
+    assert.equal(typography.poster.hash, typography.player.hash);
+    assert.equal(typography.previewLabel, typography.playerLabel); assert.equal(typography.posterLabel, typography.playerLabel);
+    assert(typography.playerLabel.includes("ABC שלום 123. Aé 123. Aé 123"));
+    assert(typography.posterVisible && typography.studioDisposed);
+    assert.equal(typography.released.views, 0); assert.equal(typography.released.textures, 0); assert.equal(typography.released.assetReferences, 0);
+  } else {
+  flat = await page.evaluate(async moduleRoot => {
     const { createAuthoring } = await import(moduleRoot + "/authoring.js"),
       { browserResolver } = await import(moduleRoot + "/package.js"),
       { createPlayerStage } = await import(moduleRoot + "/player.js");
@@ -95,7 +182,7 @@ try {
   assert.equal(flat.ready.mode, "interactive");
   assert(flat.different);
   assert.equal(flat.resources.textures, 0);
-  const custom = await page.evaluate(async moduleRoot => {
+  custom = await page.evaluate(async moduleRoot => {
     const [{createAuthoring},{browserResolver},{createPlayerStage}] = await Promise.all([
       import(moduleRoot + "/authoring.js"),import(moduleRoot + "/package.js"),import(moduleRoot + "/player.js")
     ]);
@@ -124,13 +211,14 @@ try {
   assert(custom.ready.every(value=>value.mode==="interactive"));assert(custom.before.painted>100&&custom.after.painted>100);assert.notEqual(custom.before.hash,custom.after.hash);assert.equal(custom.other.hash,custom.unchanged.hash);
   assert(custom.poster.visible);assert.equal(custom.poster.resources.textures,0);assert.equal(custom.poster.resources.assetReferences,0);assert(custom.posterCaptureRejected);
   assert(custom.restored.every(value=>value.mode==="interactive"));assert(custom.remounted.painted>100);assert.equal(custom.released.views,0);assert.equal(custom.released.textures,0);assert.equal(custom.released.assetReferences,0);
+  }
   assert.deepEqual(errors, []);
   await writeFile(
     path.join(out, "host-report.json"),
-    JSON.stringify({ engine, library: recipeOnly ? "not-run" : "passed", flatJpg: flat, customRecipe: custom, errors }, null, 2),
+    JSON.stringify({ engine, library: selfHosted ? "not-run" : "passed", flatJpg: flat, customRecipe: custom, typography, errors }, null, 2),
   );
   console.log(
-    JSON.stringify({ engine, library: recipeOnly ? "not-run" : "passed", flatJpg: flat, customRecipe: custom, errors }, null, 2),
+    JSON.stringify({ engine, library: selfHosted ? "not-run" : "passed", flatJpg: flat, customRecipe: custom, typography, errors }, null, 2),
   );
 } finally {
   await browser?.close();

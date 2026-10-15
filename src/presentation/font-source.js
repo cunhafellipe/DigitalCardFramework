@@ -1,4 +1,7 @@
 import { create } from "fontkit";
+import bidiFactory from "bidi-js/dist/bidi.mjs";
+
+export const textBidi = bidiFactory();
 
 export function openFont(bytes) {
   const font = create(bytes);

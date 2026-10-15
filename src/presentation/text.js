@@ -1,5 +1,5 @@
 import { ensure } from "./data.js";
-import { openFont } from "./font-engine.js";
+import { openFont, textBidi } from "./font-engine.js";
 
 export const FONT_TYPES = ["font/woff2", "font/woff", "font/ttf", "font/otf"];
 export function fontHeader(bytes, type) {
@@ -64,8 +64,11 @@ export function inspectFont(bytes, type) {
       axes: font.variationAxes ?? {},
       codepoints: font.characterSet,
       weight: font["OS/2"]?.usWeightClass,
-      style: font["OS/2"]?.fsSelection?.oblique ? "oblique" :
-        font["OS/2"]?.fsSelection?.italic || font.italicAngle !== 0 ? "italic" : "normal",
+      style: font["OS/2"]?.fsSelection?.oblique
+        ? "oblique"
+        : font["OS/2"]?.fsSelection?.italic || font.italicAngle !== 0
+          ? "italic"
+          : "normal",
       italicAngle: font.italicAngle,
     },
   };
@@ -428,12 +431,17 @@ export function layoutText(node, text, measure) {
       : t.verticalAlign === "bottom"
         ? Math.max(0, node.height - result.height)
         : 0;
-  const rtl =
-    t.direction === "rtl" ||
-    (t.direction === "auto" && /^[^A-Za-z]*[\u0590-\u08ff]/u.test(text));
+  const paragraphs = textBidi.getEmbeddingLevels(
+    text,
+    t.direction === "auto" ? undefined : t.direction,
+  ).paragraphs;
   for (const line of result.lines) {
     line.width = measure(line.text, result.size, line.start);
     const align = t.align ?? "left";
+    const rtl = Boolean(
+      (paragraphs.find((p) => line.start >= p.start && line.start <= p.end)
+        ?.level ?? 0) & 1,
+    );
     line.x =
       align === "center"
         ? (node.width - line.width) / 2
@@ -454,20 +462,25 @@ export function layoutText(node, text, measure) {
   };
 }
 function fragments(node, value, start = 0) {
-  if (!node.runs || node.stat) return [{ text: value }];
+  if (!node.runs || node.stat) return [{ text: value, start }];
   const spans = [];
   let offset = 0,
     end = start + value.length;
   for (const run of node.runs) {
     if (run.icon) {
       if (offset >= start && offset < end)
-        spans.push({ ...run, text: "", icon: run.icon });
+        spans.push({ ...run, text: "", icon: run.icon, start: offset });
       offset++;
     }
     const a = Math.max(0, start - offset),
       b = Math.min(run.text.length, end - offset);
     if (b > a)
-      spans.push({ ...run, icon: undefined, text: run.text.slice(a, b) });
+      spans.push({
+        ...run,
+        icon: undefined,
+        text: run.text.slice(a, b),
+        start: offset + a,
+      });
     offset += run.text.length;
   }
   if (value.endsWith("…")) {
@@ -482,29 +495,147 @@ function fragments(node, value, start = 0) {
         if (!last.text && !last.icon) spans.pop();
         else break;
       }
-      spans.push({ text: "…" });
+      spans.push({ text: "…", start: start + value.length - 1 });
     }
   }
   return spans;
+}
+function directionalFragments(node, paragraphText, manualMirroring = true) {
+  const direction = node.typography?.direction,
+    resolve = (text) =>
+      textBidi.getEmbeddingLevels(
+        text,
+        direction === "auto" ? undefined : direction,
+      ),
+    original = paragraphText ? resolve(paragraphText) : null,
+    segmenter = new Intl.Segmenter(node.typography?.language ?? "en", {
+      granularity: "grapheme",
+    });
+  return (value, start = 0) => {
+    let text = paragraphText || value,
+      offset = paragraphText ? start : 0,
+      embedding = original;
+    if (text.slice(offset, offset + value.length) !== value) {
+      text = text.slice(0, offset) + value + text.slice(offset + value.length);
+      embedding = null;
+    }
+    embedding ??= resolve(text);
+    const spans = [];
+    for (const [styleIndex, span] of fragments(node, value, start).entries()) {
+      const spanStart = paragraphText ? span.start : span.start - start;
+      if (span.icon) {
+        spans.push({
+          ...span,
+          styleIndex,
+          level: embedding.levels[spanStart] ?? 0,
+          end: spanStart + 1,
+          start: spanStart,
+        });
+        continue;
+      }
+      for (const part of segmenter.segment(span.text)) {
+        const index = spanStart + part.index,
+          level = embedding.levels[index] ?? 0;
+        spans.push({
+          ...span,
+          styleIndex,
+          text: part.segment,
+          start: index,
+          end: index + part.segment.length,
+          level,
+        });
+      }
+    }
+    const mirrors = manualMirroring
+      ? textBidi.getMirroredCharactersMap(
+          text,
+          embedding.levels,
+          offset,
+          offset + value.length - 1,
+        )
+      : new Map();
+    for (const span of spans) {
+      span.direction = span.level & 1 ? "rtl" : "ltr";
+      if (!span.icon) {
+        let position = span.start;
+        span.text = Array.from(span.text, (character) => {
+          const mirrored = mirrors.get(position) ?? character;
+          if (mirrored !== character) span.mirrored = true;
+          position += character.length;
+          return mirrored;
+        }).join("");
+      }
+    }
+    if (value.length) {
+      const indices = Array.from(
+        { length: value.length },
+        (_, i) => offset + i,
+      );
+      // Preserve paragraph resolution while reordering each wrapped line in local coordinates.
+      const lineEmbedding = {
+        levels: embedding.levels.slice(offset, offset + value.length),
+        paragraphs: embedding.paragraphs
+          .filter((p) => p.end >= offset && p.start < offset + value.length)
+          .map((p) => ({
+            ...p,
+            start: Math.max(0, p.start - offset),
+            end: Math.min(value.length - 1, p.end - offset),
+          })),
+      };
+      for (const [a, b] of textBidi.getReorderSegments(value, lineEmbedding)) {
+        const reversed = indices.slice(a, b + 1).reverse();
+        indices.splice(a, reversed.length, ...reversed);
+      }
+      const positions = new Map(indices.map((index, rank) => [index, rank]));
+      for (const span of spans) {
+        span.rank = Infinity;
+        for (let i = span.start; i < span.end; i++)
+          span.rank = Math.min(span.rank, positions.get(i) ?? Infinity);
+      }
+      spans.sort((a, b) => a.rank - b.rank);
+    }
+    const runs = [];
+    // Keep glyph input logical; merge adjacent clusters into runs after placing their boxes.
+    for (const span of spans) {
+      const previous = runs.at(-1),
+        rtl = span.direction === "rtl";
+      if (
+        previous &&
+        !previous.icon &&
+        !span.icon &&
+        previous.styleIndex === span.styleIndex &&
+        previous.level === span.level &&
+        (rtl ? span.end === previous.start : previous.end === span.start)
+      ) {
+        previous.text = rtl
+          ? span.text + previous.text
+          : previous.text + span.text;
+        previous.start = Math.min(previous.start, span.start);
+        previous.end = Math.max(previous.end, span.end);
+        previous.mirrored ||= span.mirrored;
+      } else runs.push({ ...span });
+    }
+    return runs;
+  };
 }
 const withSpan = (node, span) => ({
   ...node,
   typography: {
     ...node.typography,
     ...Object.fromEntries(
-      ["weight", "style", "color"]
+      ["weight", "style", "color", "direction"]
         .filter((k) => span[k] !== undefined)
         .map((k) => [k, span[k]]),
     ),
   },
 });
-function rawFontMeasure(font, node, value, size) {
+function rawFontMeasure(font, node, value, size, mirrored) {
   const active = fontForNode(font, node);
   return (
     (active
       .layout(
         value,
-        undefined,
+        mirrored ? { rtlm: false } : undefined,
         undefined,
         node.typography?.language,
         node.typography?.direction === "auto"
@@ -518,21 +649,32 @@ function rawFontMeasure(font, node, value, size) {
       (node.typography?.letterSpacing ?? 0)
   );
 }
-export function fontMeasure(font, node) {
+function makeFontMeasure(font, node, paragraphText) {
+  const parts = directionalFragments(node, paragraphText);
   return (value, size, start = 0) =>
-    fragments(node, value, start).reduce(
+    parts(value, start).reduce(
       (total, span) =>
         total +
         (span.icon
           ? size
-          : rawFontMeasure(font, withSpan(node, span), span.text, size)),
+          : rawFontMeasure(
+              font,
+              withSpan(node, span),
+              span.text,
+              size,
+              span.mirrored,
+            )),
       0,
     );
 }
-export function textMeasure(ctx, node, font) {
-  if (font) return fontMeasure(font, node);
+export function fontMeasure(font, node) {
+  return makeFontMeasure(font, node, node.stat ? "" : textValue(node, {}));
+}
+function makeTextMeasure(ctx, node, font, paragraphText) {
+  if (font) return makeFontMeasure(font, node, paragraphText);
+  const parts = directionalFragments(node, paragraphText, false);
   return (value, size, start = 0) =>
-    fragments(node, value, start).reduce((total, span) => {
+    parts(value, start).reduce((total, span) => {
       if (span.icon) return total + size;
       const t = withSpan(node, span).typography;
       ctx.font =
@@ -544,8 +686,12 @@ export function textMeasure(ctx, node, font) {
         "px " +
         (node.font ?? "Georgia");
       ctx.letterSpacing = (t.letterSpacing ?? 0) + "px";
+      ctx.direction = span.direction;
       return total + ctx.measureText(span.text).width;
     }, 0);
+}
+export function textMeasure(ctx, node, font) {
+  return makeTextMeasure(ctx, node, font, node.stat ? "" : textValue(node, {}));
 }
 export function fontDiagnostics(font, node, text) {
   return Array.from(
@@ -565,7 +711,9 @@ export function fontDiagnostics(font, node, text) {
 }
 export function accessibleText(manifest, scene) {
   const flatten = (nodes) =>
-    nodes.flatMap((n) => n.visible === false ? [] : [n, ...flatten(n.children ?? [])]);
+    nodes.flatMap((n) =>
+      n.visible === false ? [] : [n, ...flatten(n.children ?? [])],
+    );
   return flatten(scene?.nodes ?? [])
     .filter((n) => n.type === "text" && n.visible !== false)
     .sort((a, b) => (a.readingOrder ?? 0) - (b.readingOrder ?? 0))
@@ -576,7 +724,8 @@ export function accessibleText(manifest, scene) {
 export function drawText(ctx, node, manifest, font, icons = new Map()) {
   const t = node.typography ?? {},
     value = textValue(node, manifest),
-    layout = layoutText(node, value, textMeasure(ctx, node, font));
+    layout = layoutText(node, value, makeTextMeasure(ctx, node, font, value)),
+    parts = directionalFragments(node, value, Boolean(font));
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, node.width, layout.renderHeight);
@@ -609,8 +758,7 @@ export function drawText(ctx, node, manifest, font, icons = new Map()) {
   }
   for (const line of layout.lines) {
     let x = line.x;
-    const spans = fragments(node, line.text, line.start);
-    if (t.direction === "rtl") spans.reverse();
+    const spans = parts(line.text, line.start);
     for (const span of spans) {
       if (span.icon) {
         const bitmap = icons.get(span.icon);
@@ -632,7 +780,7 @@ export function drawText(ctx, node, manifest, font, icons = new Map()) {
           layout.size +
           "px " +
           (node.font ?? "Georgia");
-        ctx.direction = t.direction === "rtl" ? "rtl" : "ltr";
+        ctx.direction = span.direction;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.letterSpacing = (t.letterSpacing ?? 0) + "px";
@@ -644,10 +792,10 @@ export function drawText(ctx, node, manifest, font, icons = new Map()) {
       const scale = layout.size / active.unitsPerEm,
         run = active.layout(
           span.text,
-          undefined,
+          span.mirrored ? { rtlm: false } : undefined,
           undefined,
           t.language,
-          t.direction === "auto" ? undefined : t.direction,
+          span.direction,
         );
       const baseline = line.y + active.ascent * scale;
       for (let i = 0; i < run.glyphs.length; i++) {

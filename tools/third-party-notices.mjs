@@ -66,6 +66,7 @@ async function collect(name, from) {
     await collect(dep, join(folder, "package.json"));
 }
 await collect("fontkit", join(root, "package.json"));
+await collect("bidi-js", join(root, "package.json"));
 for (const name of ["ag-psd", "gifuct-js", "@xmldom/xmldom"])
   await collect(name, join(root, "src/presentation/package.json"));
 const apache = await readFile(
@@ -82,6 +83,10 @@ sections.push(
 await writeFile(
   join(root, "THIRD_PARTY_NOTICES.txt"),
   "Third-party notices for generated font and layered-artwork browser modules.\nOriginal notices are retained in generated code where supplied.\n\n" +
-    sections.sort().join("\n----------------------------------------\n\n").trimEnd() + "\n",
+    sections
+      .sort()
+      .join("\n----------------------------------------\n\n")
+      .trimEnd() +
+    "\n",
 );
 console.log("Recorded notices for " + seen.size + " dependency versions.");

@@ -724,3 +724,65 @@ const immediateToolsMigration:TemplateMigrationPreview=previewTemplateMigration(
 // @ts-expect-error Shared downloads return package bytes.
 createSharedLibrary({client:{cardPolicies:()=>toolsRegistry,saveCardResource:()=>{}},upload:()=>{},download:()=> 'archive'});
 void [toolsTextId,toolsStatIds,localToolsPut,localToolsRemove,memoryToolsPut,memoryToolsRemove,combinedToolsPut,appliedToolsStyle,loadedToolsTemplate,appliedToolsMask,toolsIssueMessage,immediateToolsMigration];
+
+import {validateInWorker,createPresentationStore,presentationRoutes,type PresentationImportJob,type PresentationValidation,type PresentationStore} from '@digital-card/framework/presentation/service';
+declare const serviceValidation:PresentationValidation;
+const workerValidation=validateInWorker('/tmp/example.dcard',{limits:{compressed:1024},performance:{mode:'reject'},timeoutMs:1000,maxHeapMb:64,signal:artworkAbort.signal});
+workerValidation.then(result=>{const ok:true=result.ok;const accepted:boolean=result.report.performance.accepted;const capability:string|undefined=result.capabilities.required[0];const fallback:string|undefined=result.capabilities.optional[0]?.fallback;void [ok,accepted,capability,fallback];});
+interface ServiceActor {id:string; role:'publisher'|'reviewer'}
+const serviceActor:ServiceActor={id:'publisher',role:'publisher'};
+const serviceOpening:Promise<PresentationStore<ServiceActor>>=createPresentationStore<ServiceActor>({
+  root:'/tmp/presentations',
+  authorize:async(actor,action,resource)=>{const role:'publisher'|'reviewer'=actor.role;const verb:string=action;const subject:unknown=resource;void [role,verb,subject];return true;},
+  limits:{entries:500},scanTimeoutMs:1000,performance:{mode:'warn'},allowCapabilities:['dc.scene2d@0.1'],maxPendingPerActor:2,maxConcurrentImports:1,maxPendingImports:4,validationTimeoutMs:1000,validationHeapMb:64,maxStoredUploadBytes:1024*1024,clock:()=>Date.now(),
+  scan:async input=>{const file:string=input.path;const digest:string=input.digest;const signal:AbortSignal=input.signal;void [file,digest,signal];},
+  validatePublication:async(actor,publication)=>{const bytes:Uint8Array=publication.archive;const digest:string=publication.digest;const id:string=actor.id;void [bytes,digest,id];},
+  onPublished:(actor,publication)=>{const digest:string=publication.digest;void [actor,digest];},
+  validate:async(file,options)=>{const input:string=file;const timeout:number|undefined=options.timeoutMs;options.signal?.throwIfAborted();void [input,timeout];return serviceValidation;},
+});
+serviceOpening.then(async store=>{
+  const access:Promise<void>=store.checkAccess(serviceActor,'import');
+  store.checkAccess(serviceActor,'custom-check',{id:'resource'});
+  const imported:PresentationImportJob=await store.import(serviceActor,new Uint8Array(0),{idempotencyKey:'example-import-1'});
+  const state:'received'|'validating'|'compiling'|'ready'|'rejected'|'cancelled'|'published'=imported.state;
+  const report:PresentationValidation['report']|undefined=imported.report;
+  const uploadHash:string=imported.uploadHash;
+  const publishedAt:number|undefined=imported.publishedAt;
+  const read:Promise<PresentationImportJob>=store.get(serviceActor,imported.id);
+  const cancelled:Promise<PresentationImportJob>=store.cancel(serviceActor,imported.id);
+  const published:Promise<PresentationImportJob>=store.publish(serviceActor,imported.id);
+  const moderated:Promise<void>=store.availability(serviceActor,'sha256:example',{state:'quarantined',reason:'Under review'});
+  const descriptor=await store.descriptor('sha256:example');const width:number=descriptor.canvas.width;
+  const file=await store.file('sha256:example','card.json');const bytes:Uint8Array=file.bytes;const mediaType:string=file.mediaType;
+  const plan=await store.retentionPlan({references:['sha256:example'],graceMs:1000});const action:'review-only'=plan.action;const generatedAt:number=plan.generatedAt;const candidates:string[]=plan.candidates;
+  const routes=presentationRoutes(store,{authenticate:async request=>request.headers.has('authorization')?serviceActor:null,maxUploadBytes:1024,prefix:'/art'});
+  const response:Promise<Response|null>=routes(new Request('https://example.test/art/imports'));
+  const closed:Promise<void>=store.close();
+  // @ts-expect-error Quarantine upload paths are not part of public job snapshots.
+  imported.uploadPath;
+  // @ts-expect-error Job reports may not exist before validation finishes.
+  const prematureReport:PresentationValidation['report']=imported.report;
+  // @ts-expect-error Import requires a stable idempotency key.
+  store.import(serviceActor,new Uint8Array(0));
+  // @ts-expect-error Imports consume byte arrays.
+  store.import(serviceActor,'archive',{idempotencyKey:'example-import-2'});
+  // @ts-expect-error Host-specific actor fields remain required.
+  store.publish({id:'publisher'},imported.id);
+  // @ts-expect-error Availability policy has two supported states.
+  store.availability(serviceActor,'sha256:example',{state:'deleted'});
+  // @ts-expect-error Route authentication must return a compatible actor.
+  presentationRoutes(store,{authenticate:()=>({id:'publisher',role:'unknown'})});
+  void [access,state,report,uploadHash,publishedAt,read,cancelled,published,moderated,width,bytes,mediaType,action,generatedAt,candidates,response,closed,prematureReport];
+});
+createPresentationStore({root:'/tmp/isolated-presentations',authorize:()=>true,importIsolation:{backend:'linux-cgroup',memoryBytes:512*1024*1024}});
+// @ts-expect-error Store creation requires a host authorization callback.
+createPresentationStore({root:'/tmp/presentations'});
+// @ts-expect-error Store roots are filesystem path strings.
+createPresentationStore({root:new URL('file:///tmp/presentations'),authorize:()=>true});
+// @ts-expect-error Worker validation is asynchronous.
+const immediateServiceValidation:PresentationValidation=validateInWorker('/tmp/example.dcard');
+// @ts-expect-error Worker limits are numeric.
+validateInWorker('/tmp/example.dcard',{maxHeapMb:'64'});
+// @ts-expect-error Validators return a digest, compiler report and capabilities.
+createPresentationStore({root:'/tmp/presentations',authorize:()=>true,validate:()=>({digest:'sha256:example'})});
+void [workerValidation,serviceOpening,immediateServiceValidation];

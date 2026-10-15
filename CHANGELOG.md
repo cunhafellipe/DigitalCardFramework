@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Create basic packs through Studio fields for line, variants, card count, currency and price, using reviewed publication and the existing purchase/opening flow.
+
 - Create card lines through named Studio fields and the existing reviewed publication flow; newly published lines become available when creating cards.
 
 - Create a catalog card from name, description, line and rarity fields in Creator Studio, then review and publish it without editing JSON. The new card becomes available for visual artwork editing.

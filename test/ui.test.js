@@ -336,3 +336,61 @@ test('new line form respects preview and publication permissions',async()=>{
   const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);publish.dispatchEvent(new x.window.Event('click'));await settle();assert.equal(x.calls.length,0);
  }finally{mounted?.dispose();x.close();}}
 });
+
+test('new pack form publishes a buyable pack with the reviewed variants and count',async()=>{
+ const x=setup();let mounted;try{
+  const actor={role:'admin'},before=x.core.catalog(),balance=x.core.wallet(x.alice).credits;let commits=0;
+  x.client.previewImport=async input=>x.core.previewImport(actor,input);
+  mounted=renderStudio(x.model,{...x.context,mutate:async(name,input)=>{commits++;return x.core.commitImport(actor,{...input,key:'new-pack-test'});}});
+  const view=x.mount(mounted),form=view.querySelector('.dc-new-pack');field(form,'Pack name').value='Morning pair';field(form,'Cards per pack').value='2';field(form,'Price per pack (currency units)').value='7';
+  const selected=['dawn.standard','cloud.standard'];for(const id of selected)form.querySelector('input[value="'+id+'"]').checked=true;
+  form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));await settle();
+  assert.equal(x.core.catalog().products.length,before.products.length);assert.equal(commits,0);assert.equal(field(view,'Import content').value,'');
+  assert(view.querySelector('.dc-import-preview').textContent.includes('2 cards per pack · 7 Credits per pack'));
+  const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);
+  const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));publish.click();publish.click();await settle();assert.equal(commits,1);
+  const product=x.core.catalog().products.find(row=>row.name==='Morning pair');assert(product);assert.equal(product.revision,1);assert.deepEqual(product.slots[0].pool,selected.map(variantId=>({variantId,weight:1})));assert.deepEqual(product.duplicatePolicy,{scope:'none',fallback:'allow'});
+  assert.deepEqual(x.core.catalog().variants,before.variants);assert.equal(view.querySelector('[aria-label="Destination pack"]').value,product.id);
+  const quote=x.core.quote(x.alice,{productId:product.id,quantity:1}),purchased=x.core.purchase(x.alice,{...quote,key:'buy-new-pack'});
+  assert.equal(x.core.wallet(x.alice).credits,balance-7);const opened=x.core.openPack(x.alice,{packId:purchased.packs[0].id,key:'open-new-pack'});assert.equal(opened.cards.length,2);assert(opened.cards.every(card=>selected.includes(card.variantId)));
+ }finally{mounted?.dispose();x.close();}
+});
+
+test('new pack form rejects missing fields, invalid numbers and unavailable prerequisites',async()=>{
+ const x=setup();let mounted;try{
+  let previews=0;x.client.previewImport=async input=>{previews++;return x.core.previewImport({role:'admin'},input);};
+  mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-pack'),submit=async()=>{form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));await settle();};
+  await submit();assert.equal(previews,0);field(form,'Pack name').value='  ';await submit();assert.equal(previews,0);field(form,'Pack name').value='Valid';await submit();assert.equal(previews,0);assert(form.textContent.includes('Select at least one included variant'));
+  form.querySelector('input[type="checkbox"]').checked=true;
+  for(const [label,values]of [['Price per pack (currency units)',['0','-1','1.5','9007199254740992','']],['Cards per pack',['0','101','1.5','']]]){const input=field(form,label);for(const value of values){input.value=value;await submit();assert.equal(previews,0);}input.value='1';}
+  const currency=form.querySelector('[aria-label="Pack currency"]');currency.value='';await submit();assert.equal(previews,0);
+ }finally{mounted?.dispose();x.close();}
+ for(const missing of ['lines','currencies','variants']){const x=setup();let mounted;try{
+  x.model.catalog[missing]=[];mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-pack');assert(form.querySelector('button').disabled);
+  assert(form.textContent.includes(missing==='lines'?'Create a card line':missing==='currencies'?'Add a currency':'no enabled variants'));
+ }finally{mounted?.dispose();x.close();}}
+});
+
+test('new pack form filters lines, fences late previews and preserves draft identity until cancellation',async()=>{
+ const x=setup();let mounted;try{
+  let request,finish;x.model.catalog.variants.find(row=>row.id==='dawn.standard').enabled=false;
+  x.client.previewImport=input=>{request=input;return new Promise(resolve=>finish=resolve);};
+  const localization=createLocalization({locale:'es',messages:{'studioShell.newPack':'Nuevo sobre','studioShell.newPackName':'Nombre del sobre','studioShell.cancelNewPack':'Cancelar sobre'}});
+  mounted=renderStudio(x.model,{...x.context,localization});const view=x.mount(mounted),form=view.querySelector('.dc-new-pack'),name=field(form,'Nombre del sobre'),line=form.querySelector('[aria-label="Pack card line"]');assert(form.textContent.includes('Nuevo sobre'));assert(!form.querySelector('input[value="dawn.standard"]'));
+  name.value='First';form.querySelector('input[value="cloud.standard"]').checked=true;const submit=()=>form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));submit();const id=request.source.products[0].id;
+  line.value='garden';line.dispatchEvent(new x.window.Event('change',{bubbles:true}));assert(!form.querySelector('input[value="cloud.standard"]'));assert.equal(form.querySelectorAll('input:checked').length,0);finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(view.querySelector('.dc-import-preview').children.length,0);
+  form.querySelector('input[value="fern.standard"]').checked=true;submit();assert.equal(request.source.products[0].id,id);assert.deepEqual(request.source.products[0].slots[0].pool,[{variantId:'fern.standard',weight:1}]);
+  click(form,'Cancelar sobre');finish(x.core.previewImport({role:'admin'},request));await settle();assert.equal(view.querySelector('.dc-import-preview').children.length,0);assert.equal(name.value,'');
+  name.value='Second';form.querySelector('input[type="checkbox"]').checked=true;submit();assert.notEqual(request.source.products[0].id,id);finish(x.core.previewImport({role:'admin'},request));await settle();
+ }finally{mounted?.dispose();x.close();}
+});
+
+test('new pack form respects preview and publication permissions',async()=>{
+ for(const canPreview of [false,true]){const x=setup();let mounted;try{
+  x.model.me={...x.model.me,role:'player',permissions:['catalog.read',...(canPreview?['catalog.preview']:[])]};let previews=0;
+  x.client.previewImport=async input=>{previews++;return x.core.previewImport({role:'admin'},input);};
+  mounted=renderStudio(x.model,x.context);const view=x.mount(mounted),form=view.querySelector('.dc-new-pack');assert.equal(form.querySelector('button').disabled,!canPreview);field(form,'Pack name').value='Review only';form.querySelector('input[type="checkbox"]').checked=true;
+  form.dispatchEvent(new x.window.Event('submit',{cancelable:true}));await settle();assert.equal(previews,canPreview?1:0);
+  const review=view.querySelector('.dc-review-check input');review.checked=true;review.dispatchEvent(new x.window.Event('change'));const publish=[...view.querySelectorAll('button')].find(button=>button.textContent==='Publish reviewed revision');assert(publish.disabled);publish.dispatchEvent(new x.window.Event('click'));await settle();assert.equal(x.calls.length,0);
+ }finally{mounted?.dispose();x.close();}}
+});

@@ -5775,6 +5775,90 @@
       "placeholders": [],
       "plural": false
     },
+    "studioShell.newPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackName": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackCurrency": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackPrice": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackCount": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackVariants": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.previewNewPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.cancelNewPack": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.newPackNameRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packPriceRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packCountRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packSelectionRequired": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packNeedsLine": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packNeedsCurrency": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packNeedsVariants": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.basicPackRules": {
+      "placeholders": [],
+      "plural": false
+    },
+    "studioShell.packReviewSummary": {
+      "placeholders": [
+        "amount",
+        "count",
+        "currency"
+      ],
+      "plural": false
+    },
+    "studioShell.packVariantLabel": {
+      "placeholders": [
+        "card",
+        "rarity",
+        "variant"
+      ],
+      "plural": false
+    },
     "studioShell.newLine": {
       "placeholders": [],
       "plural": false

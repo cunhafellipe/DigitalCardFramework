@@ -258,3 +258,50 @@ vault.open({version:1,keyId:'current',iv:'example',data:'example'},'context');
 // @ts-expect-error Fingerprint inputs must be JSON-compatible.
 vault.fingerprint({run:()=>true});
 void [externalObjectType,externalAdditionalProperties,defaultDefinitions,fingerprint,envelopeVersion,decryptedCode];
+
+import {signPackage, verifySignatures, type SignaturePackage} from '@digital-card/framework/presentation/signatures';
+import {createPresentationHandler, type PresentationHttpStore, type PresentationRouteActor} from '@digital-card/framework/presentation/node-http';
+import type {IncomingMessage, ServerResponse} from 'node:http';
+import {webcrypto} from 'node:crypto';
+declare const signingKeys:CryptoKeyPair;
+declare const nodeSigningKey:webcrypto.CryptoKey;
+declare const archiveBytes:Uint8Array;
+const signaturePackage:SignaturePackage={digest:'sha256:'+'ab'.repeat(32),files:new Map([['card.json',archiveBytes]])};
+const signedArchive:Promise<Uint8Array>=signPackage(archiveBytes,{keyId:'example.signer',privateKey:signingKeys.privateKey});
+signPackage(archiveBytes,{keyId:'example.node',privateKey:nodeSigningKey});
+verifySignatures(signaturePackage,{keys:new Map([['example.signer',signingKeys.publicKey]]),requireTrusted:true}).then(results=>{
+  for(const result of results){const trusted:boolean=result.trusted;result.keyId.toUpperCase();void trusted;}
+});
+verifySignatures(signaturePackage);verifySignatures(signaturePackage,{keys:new Map([['example.node',nodeSigningKey]])});
+// @ts-expect-error Signing requires a Web Crypto key, not encoded private-key text.
+signPackage(archiveBytes,{keyId:'example.signer',privateKey:'private-key'});
+// @ts-expect-error Archive inputs are bytes.
+signPackage('archive',{keyId:'example.signer',privateKey:signingKeys.privateKey});
+// @ts-expect-error Trust keys are keyed CryptoKey values.
+verifySignatures(signaturePackage,{keys:new Map([['example.signer','public-key']])});
+// @ts-expect-error Verification requires the validated package digest.
+verifySignatures({files:new Map()});
+interface HttpIdentity {userId:string;disabled?:boolean;role:'editor'|'admin'}
+type HttpRouteActor=PresentationRouteActor<HttpIdentity>;
+const httpStore:PresentationHttpStore<HttpRouteActor>={
+  async checkAccess(actor,action){actor.id.toUpperCase();actor.role.toUpperCase();const requested:'import'=action;void requested;},
+  async import(actor,bytes,options){bytes.byteLength.toFixed();options.idempotencyKey?.toUpperCase();return {actor:actor.id};},
+  async get(actor,id){return {actor:actor.id,id};},
+  async publish(actor,id){return {actor:actor.id,id};},
+  async cancel(actor,id){return {actor:actor.id,id};},
+  async file(digest,relative){return {bytes:new Uint8Array(),mediaType:relative.endsWith('.json')?'application/json':'application/zip'};},
+  async descriptor(digest){return {digest};},
+};
+const presentationHandler=createPresentationHandler<HttpIdentity>({store:httpStore,allowedOrigin:'https://cards.example',prefix:'/presentations',maxUploadBytes:1024,resolveIdentity:async request=>({userId:request.headers['x-user']?.toString()??'editor',role:'editor'}),rateLimit:({actor,request,mutation})=>actor.role==='admin'||(!mutation&&request.method==='GET')});
+declare const httpRequest:IncomingMessage;
+declare const httpResponse:ServerResponse;
+presentationHandler(httpRequest,httpResponse).then(handled=>{const routed:boolean=handled;void routed;});
+// @ts-expect-error Authentication must return an identity with userId.
+createPresentationHandler({store:httpStore,allowedOrigin:'https://cards.example',resolveIdentity:()=>({id:'editor'})});
+// @ts-expect-error Rate limits must resolve synchronously.
+createPresentationHandler<HttpIdentity>({store:httpStore,allowedOrigin:'https://cards.example',resolveIdentity:()=>({userId:'editor',role:'editor'}),rateLimit:async()=>true});
+// @ts-expect-error The Node adapter requires a Node request and response.
+presentationHandler(new Request('https://cards.example/presentations/imports'),new Response());
+// @ts-expect-error The handler does not own or close the store.
+presentationHandler.close();
+void signedArchive;

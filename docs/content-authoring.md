@@ -1,5 +1,7 @@
 # Content authoring and bulk imports
 
+For a runnable procedural card line with pack artwork, album layout, pinned digests and an acquisition check, see [Generate a complete example line](full-line-handoff.md).
+
 Version 0.2.0. All definitions are generic. A line groups subjects; a card defines a subject; a variant defines rarity/finish/edition; an owned copy contains identity, source, opener, time, serial, snapshot, bindings and current ownership.
 
 ## Import workflow

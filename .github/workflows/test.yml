@@ -30,6 +30,7 @@ jobs:
       - run: pnpm --dir src/presentation audit --prod
       - run: node examples/card-policies.mjs
       - run: node examples/capabilities.mjs
+      - run: node examples/full-line.mjs "$RUNNER_TEMP/full-line" --source-revision "$GITHUB_SHA" --base-url https://cards.example/content/
       - run: node examples/admin-headless.mjs
       - run: node examples/external-currency-provider.mjs
       - run: node examples/code-cards.mjs

@@ -585,3 +585,16 @@ externalPurchaseFingerprint({...purchaseFingerprintInput,quote:{...purchaseFinge
 // @ts-expect-error Both provider transaction identifiers are required.
 externalPurchaseId('provider');
 void [purchaseFingerprint,stablePurchaseId];
+
+import {tradingDefaults} from '../src/trading-policy.js';
+import {commerceDefaults} from '../src/commerce.js';
+const defaultTradeEnabled:boolean=tradingDefaults.enabled;
+const defaultTradeDecision:'allow'|'deny'=tradingDefaults.defaultDecision;
+const defaultTradeRules=tradingDefaults.rules.map(rule=>rule);
+const defaultShopLimit:number=commerceDefaults.maxListingsPerShop;
+const defaultShopCurrencies:string[]|null=commerceDefaults.allowedCurrencyIds;
+// @ts-expect-error The default policy's top-level object is frozen.
+tradingDefaults.enabled=false;
+// @ts-expect-error The default settings' top-level object is frozen.
+commerceDefaults.maxListingsPerShop=1;
+void [defaultTradeEnabled,defaultTradeDecision,defaultTradeRules,defaultShopLimit,defaultShopCurrencies];

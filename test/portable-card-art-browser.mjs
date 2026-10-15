@@ -88,7 +88,8 @@ try{
   try{
   await page.getByRole('button',{name:'Front emblem',exact:true}).click();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Front emblem'&&button.classList.contains('is-selected'))&&document.querySelector('.dcard-studio')?.getAttribute('aria-busy')!=='true');
-  await panel.getByLabel('Horizontal position',{exact:true}).fill('17');await panel.getByLabel('Horizontal position',{exact:true}).press('Tab');
+  await panel.getByLabel('Horizontal position',{exact:true}).fill('17');
+  await page.getByLabel('Card title',{exact:true}).click();
   await page.waitForFunction(()=>window.artistPanel.getProject().scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x===17);
   }catch(error){
     const diagnostic={engine,language,editorContribution,grants:{x:{minimum:-100,maximum:100}},trace:await page.evaluate(()=>window.artistPanelTrace.snapshot()).catch(()=>null)};

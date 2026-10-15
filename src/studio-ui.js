@@ -10,7 +10,7 @@ export function renderStudio(model,{client,cardRenderer,inspect,action,mutate,lo
   const options=el('div','dc-form-row'),format=select(options,t("studioShell.format"),[{id:'json',name:'JSON'},{id:'yaml',name:'YAML'}]),mode=select(options,t("studioShell.importMode"),[{id:'merge',name:t("studioShell.mergeRowsByID")},{id:'replace',name:t("studioShell.replaceCompleteCatalog")}]),upload=field(options,t("studioShell.chooseFile"),{type:'file'});upload.accept='.json,.yaml,.yml,application/json';
   const source=field(node,t("studioShell.importContent"),{type:'textarea',placeholder:t("studioShell.pasteJSONOrYAMLHereRowsWithExisting")});source.rows=14;source.spellcheck=false;source.classList.add('dc-code-input');
   const status=el('p','dc-muted'),preview=el('div','dc-import-preview'),review=el('label','dc-review-check'),confirm=el('input');confirm.type='checkbox';review.append(confirm,el('span','',t("studioShell.iReviewedThisCatalogRevisionAndItsAsset")));
-  const visualRoot=el('div','dc-visual-studio');node.append(visualRoot);let visual=mountVisualStudio(visualRoot,{client,model,localization:l});
+  const visualRoot=el('div','dc-visual-studio');node.append(visualRoot);let visual=mountVisualStudio(visualRoot,{client,model,localization:l,onCatalogChange:()=>action(async()=>{})});
   let prepared=null,generation=0,disposed=false,publishing=false,newCardId,newLineId,newPackId;
   function invalidate(){generation++;prepared=null;confirm.checked=false;publish.disabled=true;preview.replaceChildren();status.textContent=t("studioShell.contentChangedRunANewPreview");}
   const publish=button(t("studioShell.publishReviewedRevision"),()=>{
@@ -19,7 +19,7 @@ export function renderStudio(model,{client,cardRenderer,inspect,action,mutate,lo
     return action(async()=>{try{
       await mutate('commitImport',{manifest:revision.manifest,digest:revision.digest,expectedVersion:model.catalog.version,policyRevision:revision.policyRevision});
       if(disposed)return;
-      model={...model,catalog:revision.manifest};visual.dispose();visualRoot.replaceChildren();visual=mountVisualStudio(visualRoot,{client,model,localization:l});
+      model={...model,catalog:revision.manifest};visual.dispose();visualRoot.replaceChildren();visual=mountVisualStudio(visualRoot,{client,model,localization:l,onCatalogChange:()=>action(async()=>{})});
       if(newCardId){const destination=[...visualRoot.querySelectorAll('select')].find(input=>input.getAttribute('aria-label')===t('studioShell.destinationCard'));if(destination){destination.value=newCardId;destination.dispatchEvent(new document.defaultView.Event('change'));}}
       if(newPackId){
         const kind=[...visualRoot.querySelectorAll('select')].find(input=>input.getAttribute('aria-label')===t('studioShell.designDestination'));

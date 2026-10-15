@@ -243,3 +243,79 @@ sessions.verify('session', {message:'message',signature:123});
 // @ts-expect-error The ethers adapter requires block access.
 ethersOwnershipProvider({provider:null,getNetwork:async () => ({chainId:1n})});
 void [challengeVersion,tokenId,preservedCustom,forcedTransferPolicy,ethersBridge,rarity];
+
+import {FONT_TYPES, fontHeader, inspectFont, validateTypography, textValue, fontForNode, layoutText, fontMeasure, textMeasure, fontDiagnostics, accessibleText, drawText, type TextNode, type TextLayout, type FontType} from '@digital-card/framework/presentation/text';
+const fontType: FontType | undefined = FONT_TYPES[0];
+fontHeader(new Uint8Array(12), 'font/ttf');
+const inspectedFont = inspectFont(new Uint8Array(12), 'font/ttf');
+const familyName: string = inspectedFont.info.family;
+const optionalWeight: number | undefined = inspectedFont.info.weight;
+const defaultAxis: number | undefined = inspectedFont.info.axes.wght?.default;
+const textNode: TextNode = {
+  id:'caption', width:200, height:40,
+  typography:{size:16, weight:600, overflow:'ellipsis', direction:'auto'},
+  runs:[{text:'Caption',style:'italic',icon:'star'}],
+};
+validateTypography(textNode, new Map([['star',{mediaType:'image/png'}]]));
+validateTypography({height:40}, new Map());
+const caption: string = textValue(textNode, {});
+const statCaption: string = textValue({stat:{key:'power',scope:'variant',view:'bar'}}, {authoring:{values:{variant:{power:42}}}});
+const variedFont = fontForNode(inspectedFont.font, textNode);
+const measureFont = fontMeasure(variedFont, textNode);
+const measuredText: number = measureFont('Caption',16,0);
+const textLayout: TextLayout = layoutText(textNode, caption, (value,size,start) => value.length * size + (start ?? 0));
+const lineWidth: number | undefined = textLayout.lines[0]?.width;
+const canvasContext = document.createElement('canvas').getContext('2d')!;
+const measureCanvas = textMeasure(canvasContext, textNode);
+const measureEmbeddedFont = textMeasure(canvasContext, textNode, inspectedFont.font);
+const diagnostic = fontDiagnostics({hasGlyphForCodePoint:codepoint => codepoint < 128}, {id:'caption'}, caption)[0];
+const glyphCode: 'FONT_GLYPH' | undefined = diagnostic?.code;
+const readingText: string = accessibleText({}, {nodes:[{type:'group',children:[{type:'text',text:'Caption',readingOrder:1}]}]});
+const emptyReadingText: string = accessibleText({}, null);
+const drawnText: TextLayout = drawText(canvasContext, textNode, {}, variedFont, new Map([['star',document.createElement('canvas')]]));
+const offscreenContext = new OffscreenCanvas(200,40).getContext('2d')!;
+drawText(offscreenContext, textNode, {}, null);
+// @ts-expect-error Font data must be bytes.
+inspectFont('font data', 'font/ttf');
+// @ts-expect-error Font media types are restricted to supported formats.
+fontHeader(new Uint8Array(12), 'image/png');
+// @ts-expect-error Typography uses the public numeric size contract.
+layoutText({...textNode, typography:{size:'large'}}, caption, measureCanvas);
+// @ts-expect-error Text measurement callbacks return numbers.
+layoutText(textNode, caption, () => 'wide');
+// @ts-expect-error Presentation stat bindings exclude private per-copy values.
+textValue({stat:{key:'secret',scope:'copy'}}, {});
+// @ts-expect-error Inline icons must be drawable canvas sources.
+drawText(canvasContext,textNode,{},null,new Map([['star','star.png']]));
+void [fontType,familyName,optionalWeight,defaultAxis,statCaption,measuredText,lineWidth,measureEmbeddedFont,glyphCode,readingText,emptyReadingText,drawnText];
+
+import {validateExpression, evaluate, selectFrame, normalizedInputs, type MotionExpression, type MotionBudget} from '@digital-card/framework/presentation/motion';
+const motionExpression: MotionExpression = ['mix',['input','tilt.x'],['curve',['input','time.active'],[[0,0],[1,1]]],0.5];
+const expressionNodes: number = validateExpression(motionExpression, {maxNodes:64,hostInputs:['host.level']});
+validateExpression(JSON.parse('null'));
+const motionBudget: MotionBudget = {remaining:100};
+const normalized = normalizedInputs({tilt:{x:'0.5',y:0},pressed:true,host:{'host.level':3,'host.enabled':true,'host.invalid':'filtered'}});
+const numericTilt: number = normalized['tilt.x'];
+const hostValue: number | boolean | undefined = normalized['host.enabled'];
+const evaluatedMotion: number = evaluate(motionExpression, normalized, motionBudget);
+evaluate(['max',1,2,3,4,5,6,7,8]);
+const motionFrame = selectFrame({frames:[{asset:'frame.png',duration:100}],progress:motionExpression,loop:true},normalized,motionBudget);
+const optionalFrameAsset: string | undefined = motionFrame?.asset;
+const emptyFrame: {duration:number} | undefined = selectFrame({frames:[],progress:0});
+// @ts-expect-error Frame selection can return undefined for an empty animation.
+const requiredFrame: {duration:number} = selectFrame({frames:[],progress:0});
+// @ts-expect-error Binary operations require exactly two operands.
+evaluate(['sub',1]);
+// @ts-expect-error Variadic operations allow at most eight operands.
+evaluate(['add',1,2,3,4,5,6,7,8,9]);
+// @ts-expect-error Input expressions take an input name.
+evaluate(['input',1]);
+// @ts-expect-error Curve points are pairs of numeric values.
+evaluate(['curve',0,[[0,'zero'],[1,1]]]);
+// @ts-expect-error Evaluation budgets are mutable numeric counters.
+evaluate(1,{}, {remaining:'100'});
+// @ts-expect-error Evaluation inputs are numeric or boolean.
+evaluate(['input','host.level'], {'host.level':'high'});
+// @ts-expect-error Frame durations are numeric.
+selectFrame({frames:[{duration:'100'}],progress:0});
+void [expressionNodes,numericTilt,hostValue,evaluatedMotion,optionalFrameAsset,emptyFrame,requiredFrame];

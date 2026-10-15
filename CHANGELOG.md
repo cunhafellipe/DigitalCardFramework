@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add TypeScript declarations for purchase, listing, transfer and trade policy contracts.
+- Add TypeScript declarations for purchase, listing, transfer and trade policy contracts and adapters, plus code status, currency settlement and code issuance providers.
 
 - Create basic packs through Studio fields for line, variants, card count, currency and price, using reviewed publication and the existing purchase/opening flow.
 

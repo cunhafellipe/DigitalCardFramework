@@ -53,3 +53,71 @@ const wrongEntryError: CodeIssuanceResult = {...entry, state: 'error', errorCode
 // @ts-expect-error Result matching requires a complete request context.
 matchCodeIssuanceResults(identity, input);
 void [codeReply, resolved, settled, codeProviderSchema, currencyProviderSchema, codeIssuanceSchema, missingCode, unknownCode, numericSettlement, wrongOperation, missingResult, executableResult, wrongEntryError];
+
+import {createRemoteCodeProvider, createCodeProviderRegistry, codeProviderProtocol as remoteCodeProtocol} from '@digital-card/framework/remote-code-provider';
+import {createRemoteCurrencyProvider, createCurrencyProviderRegistry, currencyProviderProtocol as remoteCurrencyProtocol} from '@digital-card/framework/remote-currency-provider';
+import {createRemoteCodeIssuer, createCodeIssuerRegistry, codeIssuanceProtocol as remoteIssuanceProtocol} from '@digital-card/framework/remote-code-issuer';
+
+const remoteConfig = {providerId: 'example.provider', url: 'https://provider.example.test/status', token: 'configured-service-credential', timeoutMs: 5000, maxRequestBytes: 8192, maxResponseBytes: 8192, maxConcurrent: 2, allowLoopbackHttp: false};
+const signal = new AbortController().signal;
+const codeAdapter = createRemoteCodeProvider(remoteConfig);
+void codeAdapter.lookup({providerId: remoteConfig.providerId, codeId: 'example.code', code: 'EXAMPLE-CODE', signal}).then(result => {
+  if (result.status !== 'unknown') result.occurredAt.toUpperCase();
+  // @ts-expect-error Remote code lookups return a reduced result, not a wire envelope.
+  result.requestId;
+});
+codeAdapter.assertActive();codeAdapter.disable();
+const codes = createCodeProviderRegistry({codeProviders: {'direct.codes': {lookup: ({codeId}) => ({codeId, status: 'unknown'})}}, codeProviderEndpoints: {'remote.codes': {url: remoteConfig.url, token: remoteConfig.token}}});
+codes.providers['direct.codes']?.lookup({providerId: 'direct.codes', codeId: 'example.code', code: 'EXAMPLE-CODE'});
+codes.disable('remote.codes');codes.close();
+const currencies = {points: {currencyId: 'credits', numerator: 1, denominator: 100}};
+const currencyAdapter = createRemoteCurrencyProvider({...remoteConfig, currencies});
+void currencyAdapter.resolveAccount({userId: 'collector', signal}).then(accountId => accountId.toUpperCase());
+void currencyAdapter.lookup({transactionId: 'purchase-1', account: 'external-account', signal}).then(result => {
+  if (result.status === 'settled') {const units: string = result.amountUnits;BigInt(units);}
+  // @ts-expect-error Remote error frames reject and are not lookup results.
+  result.errorCode;
+});
+currencyAdapter.currencies.points?.currencyId.toUpperCase();currencyAdapter.assertActive();currencyAdapter.disable();
+const currencyRegistry = createCurrencyProviderRegistry({currencyProviders: {'direct.currency': {currencies, resolveAccount: async ({userId}) => 'account-'+userId, lookup: ({transactionId,account}) => ({transactionId,account,status:'pending'})}}, currencyProviderEndpoints: {'remote.currency': {url: remoteConfig.url, token: remoteConfig.token, currencies}}});
+currencyRegistry.disable('remote.currency');currencyRegistry.close();
+const externalIssuer = createRemoteCodeIssuer({...remoteConfig, kind: 'external'});
+externalIssuer.assertGrant(externalIssuer.grant());
+void externalIssuer.evaluate({...issuance, ...externalIssuer.grant()}, {signal}).then(reply => {
+  const processed: 'processed' = reply.status;
+  for (const row of reply.results) if (row.state === 'issued') row.result.code.toUpperCase();
+  return processed;
+});
+externalIssuer.setEnabled(false);externalIssuer.close();
+const issuers = createCodeIssuerRegistry({allocationCodeIssuers: {
+  'local.codes': {kind:'pure',providerId:'local.codes',generate: entry => ({code:'SAMPLE-'+entry.issuanceId,metadata:{attachment:entry.attachmentId}})},
+  'external.codes': {...remoteConfig,kind:'external'},
+}});
+const localIssuer = issuers.issuers['local.codes'];
+if (localIssuer?.kind === 'pure') {
+  void localIssuer.evaluate({...issuance, ...localIssuer.grant()}, {signal}).then(reply => {
+    for (const row of reply.results) {
+      const state: 'issued' | 'not-issued' | 'cancelled' = row.state;void state;
+    }
+  });
+  // @ts-expect-error Pure issuers expose close, not remote grant enablement.
+  localIssuer.setEnabled(false);
+}
+issuers.close();createCodeIssuerRegistry().close();createCodeProviderRegistry().close();createCurrencyProviderRegistry().close();
+// @ts-expect-error Remote currencies require explicit mappings.
+createRemoteCurrencyProvider(remoteConfig);
+// @ts-expect-error Currency ratios are numeric, not decimal-string settlement amounts.
+createRemoteCurrencyProvider({...remoteConfig,currencies:{points:{currencyId:'credits',numerator:'1'}}});
+// @ts-expect-error Remote provider URL configuration is a string.
+createRemoteCodeProvider({...remoteConfig,url:new URL(remoteConfig.url)});
+// @ts-expect-error Remote code providers disable; they do not expose a close method.
+codeAdapter.close();
+// @ts-expect-error Currency mappings exposed by remote adapters are immutable.
+currencyAdapter.currencies.points = {currencyId:'changed'};
+// @ts-expect-error Issuer generation must be synchronous.
+createCodeIssuerRegistry({allocationCodeIssuers:{'local.codes':{kind:'pure',providerId:'local.codes',generate:async entry=>({code:entry.issuanceId})}}});
+// @ts-expect-error The remote issuer constructor does not construct pure generators.
+createRemoteCodeIssuer({...remoteConfig,kind:'pure'});
+// @ts-expect-error A registry currency adapter requires both lookup callbacks.
+createCurrencyProviderRegistry({currencyProviders:{broken:{resolveAccount:()=> 'account'}}});
+void [remoteCodeProtocol,remoteCurrencyProtocol,remoteIssuanceProtocol];

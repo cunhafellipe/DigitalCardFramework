@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add TypeScript declarations for purchase, listing, transfer and trade policy contracts.
+
 - Create basic packs through Studio fields for line, variants, card count, currency and price, using reviewed publication and the existing purchase/opening flow.
 
 - Create card lines through named Studio fields and the existing reviewed publication flow; newly published lines become available when creating cards.

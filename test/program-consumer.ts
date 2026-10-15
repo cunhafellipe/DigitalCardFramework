@@ -786,3 +786,49 @@ validateInWorker('/tmp/example.dcard',{maxHeapMb:'64'});
 // @ts-expect-error Validators return a digest, compiler report and capabilities.
 createPresentationStore({root:'/tmp/presentations',authorize:()=>true,validate:()=>({digest:'sha256:example'})});
 void [workerValidation,serviceOpening,immediateServiceValidation];
+
+import {mountStudio, type Studio, type StudioPanel, type StudioPolicy} from '@digital-card/framework/presentation/studio';
+const visualStudioPanel:StudioPanel=({project,selected,side,edit,rebuild,localization})=>{
+  const current:Project=project;
+  const selectedId:string|undefined=selected?.id;
+  const face:'front'|'back'=side;
+  const updated:Promise<void>=edit(draft=>{draft.manifest.title='Edited card';});
+  const rebuilt:Promise<void>=rebuild();
+  const panel=document.createElement('section');panel.lang=localization.locale;
+  void [current,selectedId,face,updated,rebuilt];
+  return {element:panel,dispose(){panel.remove();}};
+};
+const visualStudio:Studio=mountStudio(document.createElement('div'),{
+  initialPackage:projectValidatedPackage,locale:'en',messages:{},performance:{mode:'warn'},
+  presets:materialPresets,library:combinedToolsLibrary,context:{cardId:'card'},
+  policyProvider:async destination=>{
+    const cardId:string|undefined=destination.cardId;void cardId;
+    const policy:StudioPolicy={revision:1,policy:toolsPolicy};return policy;
+  },
+  onPublish:async pkg=>{const archive:Uint8Array=pkg.archive;const title:string=pkg.manifest.title;void [archive,title];return false;},
+  panels:[visualStudioPanel,()=>document.createElement('aside'),()=>undefined],
+  editorContributions:[],editorContributionGrants:{x:{minimum:0,maximum:100}},
+});
+const visualStudioReady:Promise<void>=visualStudio.ready;
+const visualStudioProject:Project|undefined=visualStudio.getProject();
+const visualStudioOpen:Promise<void>=visualStudio.open(projectValidatedPackage);
+const visualStudioCapture:Promise<void>=visualStudio.capturePosters();
+const visualStudioPolicy:Promise<void>=visualStudio.refreshPolicy();
+visualStudio.setEditorContributionEnabled('position',true);
+visualStudio.setEditorProgramPanelEnabled('appearance',false);
+mountStudio(document.createElement('div'),{presets:{Custom:{kind:'foil',intensity:0.5}}});
+mountStudio(document.createElement('div'));
+// @ts-expect-error Studio project availability is optional even after initialization.
+const requiredStudioProject:Project=visualStudio.getProject();
+// @ts-expect-error The supplied root is owned by the studio; the handle has no node property.
+visualStudio.node;
+// @ts-expect-error Opening a package takes validated package data, not archive bytes.
+visualStudio.open(new Uint8Array(0));
+// @ts-expect-error Panels receive an optional selection.
+const selectedStudioPanel:StudioPanel=({selected})=>{const id:string=selected.id;void id;};
+// @ts-expect-error Policy providers supply the policy and revision together.
+mountStudio(document.createElement('div'),{policyProvider:()=>({policy:toolsPolicy})});
+// @ts-expect-error Panel wrappers expose their DOM element.
+mountStudio(document.createElement('div'),{panels:[()=>({node:document.createElement('div')})]});
+const visualStudioDisposed:void=visualStudio.dispose();
+void [visualStudioReady,visualStudioProject,visualStudioOpen,visualStudioCapture,visualStudioPolicy,requiredStudioProject,selectedStudioPanel,visualStudioDisposed];

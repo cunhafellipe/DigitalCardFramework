@@ -1,5 +1,6 @@
 import type {AlbumMotionConfiguration, AlbumMotionController, AlbumMotionInput, AlbumMotionState} from './album-motion.js';
 import type {PerformanceQuality} from './performance.js';
+import type {DirectoryResolver} from './resolver.js';
 
 export interface PresentationReference {
   contract: 'digital-card@0.1';
@@ -41,8 +42,8 @@ export interface PresentationDefinition {
 }
 export type PresentationResolverFactory<R extends PresentationResolver> =
   (baseURL: string, options: {digest: string; signal?: AbortSignal}) => Promise<R>;
-export function mountPresentation<R extends PresentationResolver, V extends PresentationView>(options: {
-  stage: PresentationStage<R, V>;
+export function mountPresentation<R extends PresentationResolver = DirectoryResolver, V extends PresentationView = PresentationView>(options: {
+  stage: PresentationStage<NoInfer<R>, V>;
   target: HTMLElement;
   definition: PresentationDefinition;
   resolve?: PresentationResolverFactory<R>;

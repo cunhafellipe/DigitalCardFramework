@@ -832,3 +832,65 @@ mountStudio(document.createElement('div'),{policyProvider:()=>({policy:toolsPoli
 mountStudio(document.createElement('div'),{panels:[()=>({node:document.createElement('div')})]});
 const visualStudioDisposed:void=visualStudio.dispose();
 void [visualStudioReady,visualStudioProject,visualStudioOpen,visualStudioCapture,visualStudioPolicy,requiredStudioProject,selectedStudioPanel,visualStudioDisposed];
+
+import * as presentationEntry from '@digital-card/framework/presentation';
+const entryProject:typeof createProject=presentationEntry.createProject;
+const entryBuild:typeof import('@digital-card/framework/presentation/package').buildPackage=presentationEntry.buildPackage;
+const entryImport:typeof import('@digital-card/framework/presentation/package').importPackage=presentationEntry.importPackage;
+const entryAuthoring:typeof createAuthoring=presentationEntry.createAuthoring;
+const entryPolicy:typeof performancePolicy=presentationEntry.performancePolicy;
+const entryError:Error=new presentationEntry.PresentationError('EXAMPLE','Example');
+// @ts-expect-error The presentation entry point preserves package byte input types.
+presentationEntry.importPackage('archive');
+// @ts-expect-error The entry point exports only its supported runtime surface.
+presentationEntry.mountStudio(document.createElement('div'));
+void [entryProject,entryBuild,entryImport,entryAuthoring,entryPolicy,entryError];
+
+type EntryPlayerView=ReturnType<ReturnType<typeof presentationEntry.createPlayerStage>['mount']>;
+type EntryPlayerResult=Awaited<EntryPlayerView['ready']>;
+const entryContract:'0.1.0'=presentationEntry.CONTRACT;
+const entryCapabilities:string[]=presentationEntry.CAPABILITIES;
+const entryManifestInfo=presentationEntry.validateManifest(projectValidatedPackage.manifest);
+const entryAssetHash:string|undefined=entryManifestInfo.assets.get('art')?.sha256;
+const entryCaps:Set<string>=entryManifestInfo.capabilities;
+const entrySceneInfo=presentationEntry.validateScene({dialect:'dc.scene2d@0.1',nodes:[]},projectValidatedPackage.manifest);
+const entryNodeCount:number=entrySceneInfo.nodes,entryOperations:number=entrySceneInfo.operations;
+const entryErrorCode:string=new presentationEntry.PresentationError('EXAMPLE','Example','faces.front').code;
+const entryErrorPath:string=new presentationEntry.PresentationError('EXAMPLE','Example').path;
+const entryResolver=presentationEntry.browserResolver(projectValidatedPackage);
+const entryStage=presentationEntry.createPlayerStage({root,budget:{estimatedGpuBytes:1048576},adapters:[gltf],motion:'static',onDiagnostic:event=>{const kind:string|undefined=event.type;void kind;}});
+const entryView:EntryPlayerView=entryStage.mount(root,{title:'Card',resolver:entryResolver},{quality:'lite',side:'back',inputMode:'host'});
+const entryReady:Promise<EntryPlayerResult>=entryView.ready;
+const entrySide:Promise<EntryPlayerResult|undefined>|undefined=entryView.setSide('front');
+const entryQuality:Promise<EntryPlayerResult|undefined>|undefined=entryView.setQuality('standard');
+const entryInputs:Promise<EntryPlayerResult|undefined>|undefined=entryView.setInputs({tilt:{x:0},flipProgress:1});
+const entrySceneUpdate:Promise<EntryPlayerResult|undefined>=entryView.updateScene({nodes:[]});
+const entrySnapshot:Promise<Blob>=entryView.snapshot();
+entryView.setVisibility('prewarm');entryView.setAudio({enabled:true,volume:0.5});entryView.setLayerVisible('art',false);entryView.activate();
+const entryBudget:Promise<void>=entryStage.setBudget({maxDpr:2});entryStage.invalidateLayout();
+const entryActiveViews:number=entryStage.diagnostics().activeViews;
+const entryResolutionWidth:number|undefined=entryStage.diagnostics().resolution?.width;
+presentationEntry.directoryResolver('https://example.test/card/',{digest:'sha256:example'}).then(resolver=>{
+  const digest:string=resolver.digest;
+  const poster:string=resolver.manifest.faces.front.poster;
+  resolver.asset('art').then(asset=>{const url:string=asset.url;const role:string=asset.role;const bytes:number=asset.bytes;void [url,role,bytes];});
+  const urls:number=resolver.diagnostics().objectURLs;resolver.dispose();void [digest,poster,urls];
+});
+const entryMounted:Promise<EntryPlayerView>=mountPresentation({stage:entryStage,target:root,definition:{title:'Card',presentation:presentationRef},resolve:presentationEntry.directoryResolver});
+const entryDefaultMounted:Promise<EntryPlayerView>=mountPresentation({stage:entryStage,target:root,definition:{title:'Card',presentation:presentationRef}});
+const entryCards=presentationEntry.createCardRenderer({mode:'interactive',adapters:[gltf],onDiagnostic:event=>{const type:string|undefined=event.type;void type;}});
+const entryCard:HTMLElement=entryCards({definition:{name:'Card',presentation:presentationRef}},{onSelect:copy=>{const name:string=copy.definition.name;void name;}});
+// @ts-expect-error A player stage requires a root element.
+presentationEntry.createPlayerStage({});
+// @ts-expect-error A mounted view requires a resolver from the model or options.
+entryStage.mount(root,{});
+// @ts-expect-error Ready resolves to a result object rather than an immediately available mode.
+const immediateEntryReady:EntryPlayerResult=entryView.ready;
+// @ts-expect-error View quality changes can be skipped without returning a promise.
+const requiredEntryQuality:Promise<EntryPlayerResult|undefined>=entryView.setQuality('lite');
+// @ts-expect-error Player visibility has three supported states.
+entryView.setVisibility('offscreen');
+// @ts-expect-error Card rendering can use an ordinary fallback element without portable methods.
+entryCard.setPresentationInputs({});
+entryView.dispose();entryStage.dispose();entryResolver.dispose();
+void [entryContract,entryCapabilities,entryAssetHash,entryCaps,entryNodeCount,entryOperations,entryErrorCode,entryErrorPath,entryReady,entrySide,entryQuality,entryInputs,entrySceneUpdate,entrySnapshot,entryBudget,entryActiveViews,entryResolutionWidth,entryMounted,entryDefaultMounted,immediateEntryReady,requiredEntryQuality];

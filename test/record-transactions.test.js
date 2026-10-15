@@ -9,9 +9,10 @@ import {fixture,admin,code} from './helpers.js';
 import {CardFramework} from '../src/core.js';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve,sep} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {summarizeRecords} from '../src/record-accounting.js';
+import {Worker} from 'node:worker_threads';
 
 for(const Store of [MemoryStore,SQLiteStore]){
  test(Store.name+' worker aggregates drain accepted work after admission is disabled',async()=>{
@@ -170,6 +171,47 @@ test('bounded encrypted trade cancellation survives rollback and restart at ordi
   assert.throws(()=>core.cancelTrade(x.alice,{key:'cancel',tradeId:trade.id}),/interrupted trade commit/);assert.deepEqual(store.read(s=>s),before);core.close();
   store=new SQLiteStore(path,{encryptionKey,maxStateBytes:cap});core=new CardFramework({store,clock});const metrics=store.diagnostics(),result=core.cancelTrade(x.alice,{key:'cancel',tradeId:trade.id});assert.equal(result.status,'cancelled');assert.equal(store.diagnostics().compatibilityMaterializations,metrics.compatibilityMaterializations);assert.equal(core.wallet(x.alice).credits,9990);assert.equal(store.read(s=>s.copies[copy.id].lockedBy),undefined);assert.deepEqual(core.cancelTrade(x.alice,{key:'cancel',tradeId:trade.id}),result);assert.equal(core.audit(admin).ok,true);
  }finally{core?.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('competing encrypted connections settle one funded trade and retain its original receipt',{timeout:15000},async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'record-trade-race-')),path=join(dir,'state.sqlite'),encryptionKey=randomBytes(32),at='2026-09-30T12:00:00.000Z',workers=[];
+ const subscriptions=[{id:'terminal',handler:'terminal',events:['trade.accepted','trade.declined']}];let core;
+ t.after(async()=>{await Promise.all(workers.map(worker=>worker.terminate()));core?.close();assert(resolve(dir).startsWith(resolve(tmpdir())+sep));assert(dir.startsWith(join(tmpdir(),'record-trade-race-')));rmSync(dir,{recursive:true,force:true});});
+ let store=new SQLiteStore(path,{encryptionKey}),x=fixture({store,eventSubscriptions:subscriptions});core=x.core;
+ const a=x.open()[0],b=x.open('common',x.bob)[0],before=store.read(s=>s);store.prepareRecordTransactions();
+ const trade=core.proposeTrade(x.alice,{key:'offer',toUserId:x.bob.userId,give:{copyIds:[a.id],currencies:[{currencyId:'credits',amount:50}]},receive:{copyIds:[b.id],currencies:[{currencyId:'credits',amount:10}]}}),pending=store.read(s=>s);
+ assert.equal(pending._tradeEscrow[x.alice.userId].credits,50);core.close();core=null;
+ const source=`import {parentPort,workerData,threadId} from 'node:worker_threads';
+ import {SQLiteStore} from ${JSON.stringify(new URL('../src/sqlite.js',import.meta.url).href)};
+ import {CardFramework} from ${JSON.stringify(new URL('../src/core.js',import.meta.url).href)};
+ const store=new SQLiteStore(workerData.path,{encryptionKey:Buffer.from(workerData.encryptionKey,'hex')}),core=new CardFramework({store,clock:()=>workerData.at,eventSubscriptions:workerData.subscriptions});
+ parentPort.postMessage({ready:true,threadId});parentPort.once('message',()=>{let result;try{result={ok:true,result:core[workerData.command](workerData.actor,workerData.input)};}catch(error){result={ok:false,code:error.code};}finally{core.close();}parentPort.postMessage(result);parentPort.close();});`;
+ const contenders=[{command:'acceptTrade',input:{key:'race-accept',tradeId:trade.id,expectedDigest:trade.digest}},{command:'cancelTrade',input:{key:'race-decline',tradeId:trade.id}}];
+ const attempts=contenders.map(request=>{
+  const worker=new Worker(source,{eval:true,workerData:{path,encryptionKey:encryptionKey.toString('hex'),at,subscriptions,actor:x.bob,...request}});workers.push(worker);
+  let readyResolve,readyReject,resultResolve,resultReject,settled=false;
+  const ready=new Promise((yes,no)=>{readyResolve=yes;readyReject=no;}),result=new Promise((yes,no)=>{resultResolve=yes;resultReject=no;});
+  worker.on('message',message=>{if(message.ready)readyResolve(message.threadId);else{settled=true;resultResolve({...message,...request});}});
+  worker.on('error',error=>{readyReject(error);resultReject(error);});worker.on('exit',status=>{if(!settled){const error=Error('Trade contender exited before its result: '+status);readyReject(error);resultReject(error);}});
+  return {worker,ready,result};
+ });
+ const resultsPromise=Promise.all(attempts.map(attempt=>attempt.result));
+ const ready=await Promise.all(attempts.map(attempt=>attempt.ready));assert.equal(new Set(ready).size,2);
+ for(const attempt of attempts)attempt.worker.postMessage('go');
+ const results=await resultsPromise;assert.equal(results.filter(row=>row.ok).length,1);assert.equal(results.find(row=>!row.ok).code,'TRADE_CLOSED');
+ const winner=results.find(row=>row.ok),loser=results.find(row=>!row.ok),accepted=winner.command==='acceptTrade';
+ store=new SQLiteStore(path,{encryptionKey});core=new CardFramework({store,clock:()=>at,eventSubscriptions:subscriptions});const state=store.read(s=>s);
+ assert.equal(state.trades[trade.id].status,accepted?'accepted':'declined');assert.deepEqual(state.requests[x.bob.userId+':'+winner.input.key].result,winner.result);assert.equal(state.requests[x.bob.userId+':'+loser.input.key],undefined);
+ assert.equal(state.copies[a.id].ownerId,accepted?x.bob.userId:x.alice.userId);assert.equal(state.copies[b.id].ownerId,accepted?x.alice.userId:x.bob.userId);for(const copy of [a,b])assert.equal(state.copies[copy.id].lockedBy,undefined);
+ assert.equal(Object.keys(state.copies).length,Object.keys(before.copies).length);assert.deepEqual(state.supply,before.supply);assert.deepEqual(state._tradeEscrow[x.alice.userId],{});
+ assert.equal(state.balances[x.alice.userId].credits,before.balances[x.alice.userId].credits-(accepted?40:0));assert.equal(state.balances[x.bob.userId].credits,before.balances[x.bob.userId].credits+(accepted?40:0));
+ assert.equal(state.balances[x.alice.userId].credits+state.balances[x.bob.userId].credits,before.balances[x.alice.userId].credits+before.balances[x.bob.userId].credits);
+ const ledger=state.ledger.slice(pending.ledger.length);assert.deepEqual(ledger.map(row=>[row.userId,row.delta,row.type,row.reference]),accepted?[[x.bob.userId,-10,'trade',trade.id],[x.alice.userId,10,'trade',trade.id],[x.bob.userId,50,'trade',trade.id]]:[[x.alice.userId,50,'trade.refund',trade.id]]);
+ const events=state.events.slice(pending.events.length);assert.deepEqual(events.map(event=>event.type).sort(),accepted?['card.transferred','card.transferred','trade.accepted']:['trade.cancelled','trade.declined']);
+ const jobs=Object.values(state.actionJobs).filter(job=>job.handler==='terminal');assert.equal(jobs.length,1);assert(events.some(event=>event.id===jobs[0].source.eventId));assert.equal(jobs[0].params.event.type,accepted?'trade.accepted':'trade.declined');assert.equal(state.completionObligations['trade:'+trade.id].status,'completed');
+ assert.equal(core.audit(admin).ok,true);core.close();store=new SQLiteStore(path,{encryptionKey});core=new CardFramework({store,clock:()=>at,eventSubscriptions:subscriptions});
+ assert.deepEqual(store.read(s=>s),state);assert.deepEqual(core[winner.command](x.bob,winner.input),winner.result);assert.throws(()=>core[loser.command](x.bob,loser.input),code('TRADE_CLOSED'));assert.deepEqual(store.read(s=>s),state);assert.equal(core.audit(admin).ok,true);
+ t.diagnostic('Two independently opened encrypted connections; winning terminal outcome: '+state.trades[trade.id].status);
 });
 
 test('stale escrow accounting cannot force allocation during full-capacity completion or replay',()=>{

@@ -130,7 +130,10 @@ try{
   actor={...artist,permissions:artist.permissions.filter(permission=>permission!=='catalog.publish')};
   const deniedCommit=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/operator/import/commit');await reviewed.click();assert.equal((await deniedCommit).status(),403);await idle();assert.deepEqual(x.core.operatorCatalog(admin),before);
   actor=artist;await page.getByRole('button',{name:'Publish',exact:true}).click();await reviewed.waitFor();
-  await reviewed.click();await idle();await page.getByText('Card published.',{exact:true}).waitFor();
+  const acceptedCommit=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/operator/import/commit');
+  await reviewed.click();assert.equal((await acceptedCommit).status(),200);
+  await page.locator('#root .dc-status.is-success').waitFor();
+  assert.equal(await reviewed.count(),0);assert.equal(await page.locator('.dcard-studio').count(),0);
   const published=x.core.operatorCatalog(admin),card=published.cards.find(card=>card.id==='dawn'),ref=card.presentation;
   assert.equal(card.name,'Celestial Study · published');assert.equal(published.version,before.version+1);assert(ref);
   assert.notEqual(ref.digest,generated.digest);assert.equal(ref.baseURL,origin+'/presentations/'+ref.digest+'/files/');

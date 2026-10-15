@@ -78,8 +78,12 @@ test("expanding native allocations remain in the OS envelope while host requests
   try {
     const file = path.join(root, "expanding.dcard"); await writeFile(file, expandingArchive());
     const load = executor.validate(file, { maxHeapMb: 256, limits: { ratio: 10000 }, timeoutMs: 15000 });
-    let completed = false;
-    const failure = load.then(() => assert.fail("Expanding input unexpectedly completed"), (error) => {
+    let completed = false, workerOutcome;
+    const failure = load.then((result) => {
+      workerOutcome = { status: "fulfilled", resources: result.resources, diagnostics: result.diagnostics };
+      assert.fail("Expanding input unexpectedly completed");
+    }, (error) => {
+      workerOutcome = { status: "rejected", name: error.name, code: error.code, message: error.message, resources: error.resources, diagnostics: error.diagnostics };
       assert.match(error.message, /resource envelope|allocat|memory|heap/i);
       assert.ok(error.resources?.peakJobMemoryBytes > 0);
       t.diagnostic(JSON.stringify({ ...error.resources, error: error.message, stages: error.diagnostics }));
@@ -93,7 +97,13 @@ test("expanding native allocations remain in the OS envelope while host requests
     void failure.catch(() => {});
     let requests = 0;
     while (!completed) {
-      assert.equal(await (await fetch("http://127.0.0.1:" + server.address().port, { signal: AbortSignal.timeout(2000) })).text(), "available");
+      const requestStarted = performance.now();
+      try {
+        assert.equal(await (await fetch("http://127.0.0.1:" + server.address().port, { signal: AbortSignal.timeout(2000) })).text(), "available");
+      } catch (error) {
+        t.diagnostic(JSON.stringify({ event: "host-request-failed", requestElapsedMs: performance.now() - requestStarted, completedRequests: requests, workerCompleted: completed, workerOutcome }));
+        throw error;
+      }
       requests++;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }

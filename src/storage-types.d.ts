@@ -3,6 +3,7 @@ import type {ActionJson} from './action-contracts.js';
 import type {CodeEnvelope} from './code-vault.js';
 import type {FrameworkCopy, FrameworkUser, FrameworkEventSubscription} from './core.js';
 import type {CoreCatalog, CoreEvent, CoreActionView} from './core-operations.js';
+import type {DurableCommand} from './client.js';
 
 type WithoutStorageFields<T, K> = {[P in keyof T as P extends K ? never : P]: T[P]};
 export type StoredPack = WithoutStorageFields<Schemas['PackView'], 'cardCount'> & {
@@ -36,6 +37,18 @@ export type StoredExternalPurchase = Schemas['ExternalPurchaseProjection'] & {
   legacy?: {purchaseKey: string; resolutionPurchaseKey?: string};
   [field: string]: unknown;
 };
+export type StoredListingUnit = {id: string; primary: boolean; status: 'available' | 'sold' | 'released'; orderId?: string} & (
+  {kind: 'copy'; copyId: string} | {kind: 'pack'; packId: string} |
+  {kind: 'action'; handler: string; params: Record<string, ActionJson>}
+);
+export type StoredListing = Pick<Schemas['ListingRecord'],
+  'id' | 'shopId' | 'sellerId' | 'title' | 'description' | 'price' | 'kind' | 'previewAt' |
+  'startsAt' | 'endsAt' | 'perBuyerLimit' | 'metadata' | 'raffle' | 'createdAt' | 'preview' | 'status'> & {
+    entries: Record<string, {userId: string; at: string}>;
+    draw: Schemas['RaffleDraw'] | null; units: StoredListingUnit[]; closedAt?: string;
+  };
+export type StoredOrder = Pick<Schemas['OrderRecord'],
+  'id' | 'listingId' | 'shopId' | 'buyerId' | 'sellerId' | 'quantity' | 'unitIds' | 'paid' | 'createdAt' | 'items' | 'actionJobIds'>;
 /** Detached logical snapshot. Extension fields retain their host-defined, unvalidated shapes. */
 export interface StorageState {
   schemaVersion: 1;
@@ -58,6 +71,20 @@ export interface StorageState {
   completionObligations?: Record<string, StoredCompletion>;
   commandIntents?: Record<string, Schemas['CommandIntent']>;
   externalPurchases?: Record<string, StoredExternalPurchase>;
+  shops?: Record<string, Schemas['ShopRecord']>;
+  listings?: Record<string, StoredListing>;
+  orders?: Record<string, StoredOrder>;
+  operatorRequests?: Record<string, StoredRequest>;
+  codeRequests?: Record<string, StoredRequest>;
+  actionRetryRequests?: Record<string, {jobId: string; result: CoreActionView}>;
+  commandIntentHeads?: Record<string, Partial<Record<DurableCommand, string>>>;
+  commandIntentCount?: number;
+  _copyReferences?: Record<string, {users: string[]; albums: string[]}>;
+  _tradeEscrow?: Record<string, Record<string, number>>;
+  _codeImportOrder?: Record<string, number>;
+  _codeImportOrderReady?: boolean;
+  _codePoolRevisions?: Record<string, number>;
+  _codePoolRevisionsReady?: boolean;
   [field: string]: unknown;
 }
 export type StorageRecordValue<T, K extends string = string> = unknown extends T ? unknown : T extends readonly (infer Row)[] ? Row :

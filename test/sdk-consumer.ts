@@ -696,3 +696,58 @@ hostMemory.query(queries=>queries.records('copies',{ids:[123]}));
 hostMemory.selectDueExpirations('copies',new Date().toISOString());
 hostMemory.close();
 void [hostInitialCatalog,hostReadRevision,hostTransactionResult,hostDetachedId,hostStorageCursor,hostStoredBytes,hostDueTrades,hostDueRaffles,hostPrepared,requiredStoredUserId];
+
+import type {FrameworkStorage, RecordTransactionOptions, StorageRecordTransaction} from '../src/storage-record-types.js';
+const hostSharedStorage:FrameworkStorage=hostMemory;
+const hostRecordOptions:RecordTransactionOptions={maxRecords:4096,maxBytes:1048576,bindingFactories:false,codeIssuance:false,allocationJournal:false,allocationPurchase:false,allocationListing:false,intent:true,preferences:false,packCompletion:false,tradeProposal:false,tradeCompletion:false,tradeAcceptance:false,tradeCounter:false,actionDelivery:false,actionRetry:false,listingCompletion:false,listingCancellation:false,listingPurchase:false,listingCreation:false,raffle:false,raffleDraw:false};
+declare const hostStoredNotification:Schemas['Notification']&{userId:string};
+const hostRecordResult:{id:string|undefined;count:number}=hostSharedStorage.transactRecords(records=>{
+  const user=records.get('users',hostUser.id);const id:string|undefined=user?.id;
+  const revision:number=records.value('revision');
+  const ownerCount:number=records.ownerCounts(hostUser.id).ownedCopies;
+  const count:number=records.count('users');
+  const stock:StoredCode[]=records.availableCodeStock('pool',20,new Date().toISOString());
+  const prefix=records.importedCodePrefix('pool',20,new Date().toISOString());const ordinal:number|undefined=prefix[0]?.ordinal;
+  const presence:boolean|undefined=records.ownedCardPresence(hostUser.id,['card'])[0]?.owned;
+  const variantCount:number=records.ownedVariantCount(hostUser.id,['variant']);
+  if(user){const staged=records.put('users',user.id,user);const stagedId:string=staged.id;void stagedId;}
+  const appended:number=records.append('notifications',hostStoredNotification);
+  records.trimNotifications(hostUser.id,2000);
+  records.setScalar('commandIntentCount',(records.value('commandIntentCount')??0)+1);
+  records.reserveIntentCompletion('intent:example',{admission:true});
+  const listing=records.get('listings','listing');const unitKind:'copy'|'pack'|'action'|undefined=listing?.units[0]?.kind;
+  const refs=records.get('_copyReferences','copy');const favoriteUsers:string[]|undefined=refs?.users;
+  void [revision,ownerCount,stock,ordinal,presence,variantCount,appended,unitKind,favoriteUsers];
+  return {id,count};
+},hostRecordOptions);
+declare const hostRecordAPI:StorageRecordTransaction;
+hostRecordAPI.reserveTradeCompletion('trade:example');
+hostRecordAPI.reserveListingCompletion('listing:example');
+hostRecordAPI.reserveActionCompletion('action:example');
+hostRecordAPI.reservePackCompletion('pack:example');
+const hostAdmission=hostRecordAPI.admitBindingFactoryResult({invocationId:'invocation',jobId:'job',leaseToken:'lease',state:'active',data:{ready:true}});
+hostRecordAPI.admitBindingFactoryResult({invocationId:'dependent',jobId:'job',leaseToken:'lease',state:'activation_failed',dependencyOf:'invocation'});
+const hostAdmittedInvocation:string=hostAdmission.invocationId;
+// @ts-expect-error Record transaction callbacks must be synchronous.
+hostMemory.transactRecords(async records=>records.value('revision'));
+// @ts-expect-error Known object records retain required user fields.
+hostRecordAPI.put('users','account',{id:123});
+// @ts-expect-error Scalar fields are not object collections.
+hostRecordAPI.put('revision','account',1);
+// @ts-expect-error Append is for array fields.
+hostRecordAPI.append('users',hostUser);
+// @ts-expect-error User collections cannot be replaced by scalar writes.
+hostRecordAPI.setScalar('users',{});
+// @ts-expect-error Undefined cannot be staged as a record value.
+hostRecordAPI.put('hostExtension','record',undefined);
+// @ts-expect-error Notification retention is fixed at 2000.
+hostRecordAPI.trimNotifications(hostUser.id,100);
+// @ts-expect-error Active binding admission requires result data.
+hostRecordAPI.admitBindingFactoryResult({invocationId:'invocation',jobId:'job',leaseToken:'lease',state:'active'});
+// @ts-expect-error Failed binding admission cannot carry result data.
+hostRecordAPI.admitBindingFactoryResult({invocationId:'invocation',jobId:'job',leaseToken:'lease',state:'activation_failed',data:{}});
+// @ts-expect-error Admission tokens are frozen.
+hostAdmission.invocationId='replacement';
+// @ts-expect-error Record budgets and selected scopes use known option names.
+hostMemory.transactRecords(()=>undefined,{maxRows:100});
+void [hostRecordResult,hostAdmittedInvocation];

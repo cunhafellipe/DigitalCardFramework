@@ -13,21 +13,26 @@ import {authorizePresentation} from '../src/access.js';
 import {createPresentationStore} from '../src/presentation/service.js';
 import {createPresentationHandler} from '../src/presentation/node-http.js';
 import {importPackage} from '../src/presentation/package.js';
+import {validateApplicationShell} from '../src/application-shell.js';
+import {validateEditorContribution} from '../src/presentation/editor-contributions.js';
 
 // Real authoring, archive publication and catalog admission; the trusted identity
 // resolver supplies the artist's explicit grants, then the collector's account.
-const output=resolve(process.argv[2]??'test-results/portable-card-art'),engine=process.env.BROWSER_ENGINE??'chromium';
+const output=resolve(process.argv[2]??'test-results/portable-card-art'),engine=process.env.BROWSER_ENGINE??'chromium',language=process.env.DC_ART_LANGUAGE??'python';
+assert(['python','go'].includes(language),'Unsupported card-art generator');
 await mkdir(output,{recursive:true});
 const temp=await mkdtemp(resolve(tmpdir(),'portable-card-art-')),x=fixture();
 const artist={...x.alice,role:'artist',permissions:['catalog.read','catalog.preview','catalog.publish','card-policies.read','art.import','art.publish']};
 let actor=artist,api,presentationHTTP,browser;
 const checks=[],errors=[],requests=[];
+let authoredShell,editorContribution;
 const oldCopy=x.open()[0],oldInventory=structuredClone(x.core.inventory(x.alice));
 const before=structuredClone(x.core.operatorCatalog(admin));
 const server=createServer(async(request,response)=>{
   try{
     requests.push({method:request.method,path:new URL(request.url,'http://localhost').pathname});
     if(await api?.(request,response)||await presentationHTTP?.(request,response))return;
+    if(request.url==='/artist-shell.json'){response.setHeader('content-type','application/json');response.end(JSON.stringify(authoredShell));return;}
     if(request.url==='/artist-harness'){
       response.writeHead(200,{'content-type':'text/html; charset=utf-8'});
       response.end('<!doctype html><html lang="en"><title>Portable card artist</title><style>body{font:16px system-ui;margin:24px}button,input{font:inherit}main{min-height:600px}</style><main id="root"></main></html>');return;
@@ -36,9 +41,13 @@ const server=createServer(async(request,response)=>{
   }catch(error){response.writeHead(500);response.end(error.message);}
 });
 try{
+  const generate=(python,go,args=[])=>execFileSync(language==='python'?process.env.PYTHON??'python':process.env.GO??'go',language==='python'?[fileURLToPath(new URL(python,import.meta.url)),...args]:['run',fileURLToPath(new URL(go,import.meta.url)),...args],{windowsHide:true,timeout:60000,env:{...process.env,GOTOOLCHAIN:'local',GOPROXY:'off',GOSUMDB:'off'}});
+  authoredShell=validateApplicationShell(JSON.parse(generate('../examples/application-shell/generate.py','../examples/application-shell/generate.go',[language==='python'?'rail':'header'])));
+  editorContribution=validateEditorContribution(JSON.parse(generate('../examples/plugins/python-editor-panel.py','../examples/plugins/go-editor-panel/main.go')));
   const packagePath=process.env.CARD_ART_PACKAGE?resolve(process.env.CARD_ART_PACKAGE):resolve(temp,'generated.dcard');
   if(!process.env.CARD_ART_PACKAGE){
-    const stdout=execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-card-art.py',import.meta.url)),packagePath],{windowsHide:true,timeout:10000,maxBuffer:16384});
+    const source=fileURLToPath(new URL(language==='python'?'../examples/plugins/python-card-art.py':'../examples/plugins/go-card-art/main.go',import.meta.url));
+    const stdout=execFileSync(language==='python'?process.env.PYTHON??'python':process.env.GO??'go',language==='python'?[source,packagePath]:['run',source,packagePath],{windowsHide:true,timeout:60000,maxBuffer:16384,env:{...process.env,GOTOOLCHAIN:'local',GOPROXY:'off',GOSUMDB:'off'}});
     assert.equal(stdout.length,0,'Generator success must be silent');
   }
   const generated=await importPackage(new Uint8Array(await readFile(packagePath)));
@@ -53,19 +62,32 @@ try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(30000);
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin+'/artist-harness');
-  await page.evaluate(async()=>{
-    const [{createClient},{renderStudio}]=await Promise.all([import('/src/client.js'),import('/src/studio-ui.js')]);
-    const client=createClient(),model={me:await client.me(),catalog:await client.operatorCatalog()};
-    window.artistView=renderStudio(model,{client});document.querySelector('#root').append(window.artistView.node);
-  });
+  await page.evaluate(async({archive,editorContribution})=>{
+    const [{createClient},{renderStudio},{mountFramework},{loadApplicationShell},{mountStudio},{importPackage}]=await Promise.all([import('/src/client.js'),import('/src/studio-ui.js'),import('/src/ui.js'),import('/src/application-shell.js'),import('/src/presentation/studio.js'),import('/src/presentation/package.js')]);
+    const client=createClient(),pkg=await importPackage(new Uint8Array(archive));window.artistPanelMode=true;
+    window.artistView=mountFramework(document.querySelector('#root'),{client,sections:['studio'],shell:loadApplicationShell('/artist-shell.json'),views:{studio:(model,context)=>{
+      if(!window.artistPanelMode)return renderStudio(model,context);
+      const node=document.createElement('section'),studio=mountStudio(node,{initialPackage:pkg,editorContributions:[editorContribution],editorContributionGrants:{x:{minimum:-100,maximum:100}}});
+      window.artistPanel=studio;return {node,dispose(){studio.dispose();}};
+    }}});await window.artistView.ready;await window.artistView.shellReady;await window.artistPanel.ready;
+  },{archive:Array.from(await readFile(packagePath)),editorContribution});
+  await page.getByRole('button',{name:'Front emblem',exact:true}).click();
+  const panel=page.locator('[data-editor-contribution="example.print-layout"]');await panel.getByLabel('Horizontal position',{exact:true}).fill('17');await panel.getByLabel('Horizontal position',{exact:true}).press('Tab');
+  await page.waitForFunction(()=>window.artistPanel.getProject().scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x===17);
+  const panelDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Save project',exact:true}).click();const panelArchive=await panelDownload,panelPath=resolve(temp,'panel-edited.dcproject');await panelArchive.saveAs(panelPath);
+  const panelSaved=await importPackage(new Uint8Array(await readFile(panelPath)));assert.equal(panelSaved.scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x,17);
+  await page.evaluate(async()=>{window.artistPanelInput=document.querySelector('[data-editor-contribution] input');window.artistPanelMode=false;await window.artistView.refresh();});
+  assert.equal(await panel.count(),0);assert(await page.evaluate(()=>!window.artistPanelInput.isConnected));
+  checks.push('Authored shell hosts generated data-only panel; Save project and native file-chooser import hand off edited archive; view replacement disposes panel');
   const idle=()=>page.waitForFunction(()=>document.querySelector('.dcard-studio')?.getAttribute('aria-busy')!=='true');
   await page.getByRole('button',{name:'Open visual card editor',exact:true}).click();
   await page.getByRole('button',{name:'Open card',exact:true}).waitFor();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Open visual card editor'&&!button.disabled));
-  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'Open card',exact:true}).click();await(await chooser).setFiles(packagePath);
+  const chooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'Open card',exact:true}).click();await(await chooser).setFiles(panelPath);
   await page.getByRole('button',{name:'Front emblem',exact:true}).waitFor();await idle();
   assert.equal(await page.getByLabel('Card title',{exact:true}).inputValue(),generated.manifest.title);
   await page.getByRole('button',{name:'Front emblem',exact:true}).click();await idle();
+  assert.equal(await page.getByLabel('x',{exact:true}).inputValue(),'17');
   await page.getByLabel('x',{exact:true}).fill('42');await page.getByLabel('x',{exact:true}).press('Tab');await idle();
   await page.getByLabel('Card title',{exact:true}).fill('Celestial Study · published');await page.getByLabel('Card title',{exact:true}).press('Tab');await idle();
   await page.getByRole('button',{name:'Capture posters',exact:true}).click();await idle();
@@ -77,11 +99,21 @@ try{
   const reviewed=page.getByRole('button',{name:'Publish reviewed card',exact:true});await reviewed.waitFor();
   assert.deepEqual(x.core.operatorCatalog(admin),before,'Catalog admission requires the explicit reviewed publication');
   assert.equal(requests.filter(request=>request.path==='/api/operator/import/commit').length,0);
+  const editedDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Keep as draft',exact:true}).click();await idle();await page.getByRole('button',{name:'Save project',exact:true}).click();const edited=await editedDownload,editedPath=resolve(temp,'reviewed-edit.dcproject');await edited.saveAs(editedPath);
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await reviewed.waitFor();
+  await page.evaluate(async()=>{window.staleReview=[...document.querySelectorAll('dialog button')].find(button=>button.textContent==='Publish reviewed card');await window.artistView.refresh();window.staleReview.click();});
+  assert.equal(await reviewed.count(),0);assert.equal(requests.filter(request=>request.path==='/api/operator/import/commit').length,0);assert.deepEqual(x.core.operatorCatalog(admin),before);
+  await page.getByRole('button',{name:'Open visual card editor',exact:true}).click();await page.getByRole('button',{name:'Open card',exact:true}).waitFor();
+  const restoreChooser=page.waitForEvent('filechooser');await page.getByRole('button',{name:'Open card',exact:true}).click();await(await restoreChooser).setFiles(editedPath);await page.getByRole('button',{name:'Front emblem',exact:true}).waitFor();await idle();
+  await page.getByRole('button',{name:'Publish',exact:true}).click();await reviewed.waitFor();
+  actor={...artist,permissions:artist.permissions.filter(permission=>permission!=='catalog.publish')};
+  const deniedCommit=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/operator/import/commit');await reviewed.click();assert.equal((await deniedCommit).status(),403);await idle();assert.deepEqual(x.core.operatorCatalog(admin),before);
+  actor=artist;await page.getByRole('button',{name:'Publish',exact:true}).click();await reviewed.waitFor();
   await reviewed.click();await idle();await page.getByText('Card published.',{exact:true}).waitFor();
   const published=x.core.operatorCatalog(admin),card=published.cards.find(card=>card.id==='dawn'),ref=card.presentation;
   assert.equal(card.name,'Celestial Study · published');assert.equal(published.version,before.version+1);assert(ref);
   assert.notEqual(ref.digest,generated.digest);assert.equal(ref.baseURL,origin+'/presentations/'+ref.digest+'/files/');
-  assert.equal(requests.filter(request=>request.method==='POST'&&request.path==='/api/operator/import/commit').length,1);
+  assert.equal(requests.filter(request=>request.method==='POST'&&request.path==='/api/operator/import/commit').length,2);
   assert(requests.some(request=>request.method==='POST'&&/^\/presentations\/imports\/[^/]+\/publish$/.test(request.path)));
   const archiveResponse=await fetch(origin+'/presentations/'+ref.digest+'/download');assert.equal(archiveResponse.status,200);
   const saved=await importPackage(new Uint8Array(await archiveResponse.arrayBuffer()));assert.equal(saved.digest,ref.digest);
@@ -93,6 +125,7 @@ try{
   }
   assert.deepEqual(x.core.inventory(x.alice).find(copy=>copy.id===oldCopy.id),oldInventory.find(copy=>copy.id===oldCopy.id));
   checks.push('Actual archive upload/publication and policy preview precede one explicit authorized catalog commit; published archive preserves edited layer and captured posters');
+  checks.push('Disposed reviewed button cannot commit; revoked catalog.publish is rejected over HTTP; only the subsequent authorized review changes catalog');
 
   const newCopy=x.open()[0],inventory=x.core.inventory(x.alice),newView=inventory.find(copy=>copy.id===newCopy.id);
   assert.deepEqual(newView.definition.presentation,ref);assert.equal(newView.definition.name,card.name);
@@ -120,7 +153,7 @@ try{
   await inspector.getByRole('button',{name:'Close inspection',exact:true}).click();await page.evaluate(()=>window.collectorView.dispose());
   assert.equal(await page.locator('#root').evaluate(root=>root.childNodes.length),0);
   checks.push('New issued copy retains the published digest; existing copy stays unchanged; default collector poster and keyboard-driven foil/rotation/reverse-face inspection use the real hosted archive');
-  assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({engine,checks,errors},null,2));console.log(JSON.stringify({engine,checks,errors}));
+  assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({engine,language,externalPackage:!!process.env.CARD_ART_PACKAGE,checks,errors},null,2));console.log(JSON.stringify({engine,language,checks,errors}));
 }finally{
   await browser?.close();server.closeAllConnections();if(server.listening)await new Promise(resolve=>server.close(resolve));x.core.close();await rm(temp,{recursive:true,force:true});
 }

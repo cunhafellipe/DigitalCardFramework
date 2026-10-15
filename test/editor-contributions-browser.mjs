@@ -9,8 +9,10 @@ import {serveReference} from '../src/static.js';
 import {build,fixture} from './presentation-fixtures.mjs';
 import {validateEditorContribution} from '../src/presentation/editor-contributions.js';
 
-const output=resolve(process.argv[2]??'test-results/editor-contributions'),engine=process.env.BROWSER_ENGINE??'chromium';
-const manifest=validateEditorContribution(JSON.parse(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-editor-panel.py',import.meta.url))],{encoding:'utf8',windowsHide:true,timeout:10000,maxBuffer:16384}))),pkg=await build(fixture()),errors=[];
+const output=resolve(process.argv[2]??'test-results/editor-contributions'),engine=process.env.BROWSER_ENGINE??'chromium',language=process.env.DC_EDITOR_LANGUAGE??'python';
+assert(['python','go'].includes(language),'Unsupported editor-panel generator');
+const source=fileURLToPath(new URL(language==='python'?'../examples/plugins/python-editor-panel.py':'../examples/plugins/go-editor-panel/main.go',import.meta.url));
+const manifest=validateEditorContribution(JSON.parse(execFileSync(language==='python'?process.env.PYTHON??'python':process.env.GO??'go',language==='python'?[source]:['run',source],{encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:16384,env:{...process.env,GOTOOLCHAIN:'local',GOPROXY:'off',GOSUMDB:'off'}}))),pkg=await build(fixture()),errors=[];
 await mkdir(output,{recursive:true});
 const server=createServer(async(request,response)=>{
  try{if(request.url==='/editor-harness'){response.writeHead(200,{'content-type':'text/html'});response.end('<!doctype html><html lang="en"><title>Editor contributions</title><link rel="stylesheet" href="/src/presentation/studio.css"><style>body{font:16px system-ui}main{width:900px;min-height:900px;margin-bottom:32px}button,input,select{font:inherit;min-height:32px}</style><main id="first"></main><main id="second"></main><main id="invalid"></main></html>');return;}if(await serveReference(request,response))return;response.writeHead(404);response.end();}catch{response.writeHead(500);response.end();}
@@ -41,5 +43,5 @@ try{
  await page.evaluate(()=>{window.editorStudios[0].dispose();});assert.equal(await first.locator('*').count(),0);assert.equal(await second.locator('[data-editor-contribution] input').count(),3);
  await second.locator('[data-editor-contribution]').getByLabel('Vertical position',{exact:true}).fill('30');await second.locator('[data-editor-contribution]').getByLabel('Vertical position',{exact:true}).press('Tab');await page.waitForFunction(()=>window.editorStudios[1].getProject().scenes.get('scenes/front.json').nodes[0].y===30);
  await page.evaluate(()=>{for(const studio of window.editorStudios)studio.dispose();});assert.equal(await page.locator('main input').count(),0);assert.deepEqual(errors,[]);
- await writeFile(join(output,'results.json'),JSON.stringify({engine,checks:['Python manifest standard host installation','scoped controls and live preview','two independent studios','undo redo visible save and reopen','locked layer and disable fences','invalid contribution ordinary editor fallback','terminal disposal'],pageErrors:errors},null,2));console.log('Editor contribution browser workflow passed ('+engine+')');
+ await writeFile(join(output,'results.json'),JSON.stringify({engine,language,checks:['Generated manifest standard host installation','scoped controls and live preview','two independent studios','undo redo visible save and reopen','locked layer and disable fences','invalid contribution ordinary editor fallback','terminal disposal'],pageErrors:errors},null,2));console.log('Editor contribution browser workflow passed ('+engine+', '+language+')');
 }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

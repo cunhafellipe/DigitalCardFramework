@@ -124,6 +124,11 @@ jobs:
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
+      - run: xvfb-run --auto-servernum node test/editor-contributions-browser.mjs test-results/editor-contributions-go
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          DC_EDITOR_LANGUAGE: go
       - run: xvfb-run --auto-servernum node test/program-collection-browser.mjs test-results/program-collection
         env:
           HEADED: '1'
@@ -190,6 +195,11 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
+      - run: xvfb-run --auto-servernum node test/portable-card-art-browser.mjs test-results/portable-card-art-go
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          DC_ART_LANGUAGE: go
       - run: xvfb-run --auto-servernum node test/portable-lottie-browser.mjs test-results/portable-lottie
         env:
           HEADED: '1'
@@ -214,6 +224,14 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3
       - run: node test/rewards-shell-browser.mjs test-results/rewards-shell
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: node test/trading-controls-shell-browser.mjs test-results/trading-controls-shell
+        env:
+          BROWSER_ENGINE: ${{ matrix.engine }}
+          PYTHON: python3
+      - run: node test/admin-shell-browser.mjs test-results/admin-shell
         env:
           BROWSER_ENGINE: ${{ matrix.engine }}
           PYTHON: python3

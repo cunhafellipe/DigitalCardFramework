@@ -12,9 +12,12 @@ import {createApiHandler} from '../src/http.js';
 import {serveReference} from '../src/static.js';
 import {programHeaders} from '../src/presentation/program.js';
 
-const output=resolve(process.argv[2]??'test-results/program-album'),engine=process.env.BROWSER_ENGINE??'chromium';
+const baseOutput=resolve(process.argv[2]??'test-results/program-album'),languages=(process.env.DC_PROGRAM_LANGUAGES??'python,go').split(',');
+if(languages.some(language=>!['python','go'].includes(language)))throw Error('Unsupported program generator');
+async function qualify(language){
+const output=languages.length===1?baseOutput:resolve(baseOutput,language),engine=process.env.BROWSER_ENGINE??'chromium';
 await mkdir(output,{recursive:true});
-const temp=await mkdtemp(resolve(tmpdir(),'program-album-')),x=fixture(),pkg=await build(artworkFixture()),checks=[],errors=[];
+const temp=await mkdtemp(resolve(tmpdir(),'program-album-')),x=fixture(),pkg=await build(artworkFixture()),checks=[],errors=[],saves=[];
 let browser,api,hostOrigin,actor=x.alice,gate=false,posterArrived,paused=[];
 const posterPath=pkg.manifest.assets.find(asset=>asset.id===pkg.manifest.faces.front.poster).path;
 const programServer=createServer(async(request,response)=>{
@@ -38,13 +41,16 @@ const hostServer=createServer(async(request,response)=>{
   }catch(error){response.writeHead(500);response.end(error.message);}
 });
 try{
-  assert.equal(execFileSync(process.env.PYTHON??'python',[fileURLToPath(new URL('../examples/plugins/python-program-card.py',import.meta.url)),'--album',temp],{windowsHide:true,timeout:10000,maxBuffer:16384}).length,0);
+  let author=process.env.PYTHON??'python',authorArgs=[fileURLToPath(new URL('../examples/plugins/python-program-card.py',import.meta.url))];
+  if(language==='go'){author=resolve(temp,process.platform==='win32'?'program-author.exe':'program-author');assert.equal(execFileSync(process.env.GO??'go',['build','-trimpath','-o',author,fileURLToPath(new URL('../examples/plugins/go-program-card/main.go',import.meta.url))],{windowsHide:true,timeout:60000,maxBuffer:16384,env:{...process.env,GOTOOLCHAIN:'local',GOPROXY:'off',GOSUMDB:'off'}}).length,0);authorArgs=[];}
+  assert.equal(execFileSync(author,[...authorArgs,'--album',temp],{windowsHide:true,timeout:10000,maxBuffer:16384}).length,0);
   await new Promise(resolve=>hostServer.listen(0,'127.0.0.1',resolve));hostOrigin='http://127.0.0.1:'+hostServer.address().port;
   await new Promise(resolve=>programServer.listen(0,'127.0.0.1',resolve));const programOrigin='http://127.0.0.1:'+programServer.address().port;
   api=createApiHandler({framework:x.core,resolveIdentity:()=>actor,allowedOrigin:hostOrigin,requirePrincipal:true});
   await x.core.registerCardPresentation(admin,pkg.archive);const catalog=x.core.operatorCatalog(admin);catalog.version++;catalog.cards.find(card=>card.id==='dawn').presentation={contract:'digital-card@0.1',digest:pkg.digest,baseURL:hostOrigin+'/pinned/'};x.core.publishCatalog(admin,catalog);
   const copies=[...x.open(),...x.open('unique')],layout={id:'journal',pageSize:1,debugSecret:'PRIVATE-LAYOUT',artwork:{pages:[{id:'first',title:'First <page>'},{id:'second',title:'Second page'}]}},placements=copies.map((copy,index)=>({copyId:copy.id,position:index,data:{pageId:index?'second':'first',privateNote:'PRIVATE-PLACEMENT'}}));
   const privateAlbum=x.core.saveAlbum(x.alice,{key:'private-album',name:'Private <album>',visibility:'private',layout,placements}),publicAlbum=x.core.saveAlbum(x.alice,{key:'public-album',name:'Public album',visibility:'public',layout,placements});
+  const save=x.core.saveAlbum.bind(x.core);x.core.saveAlbum=(actor,input)=>{const result=save(actor,input);saves.push({input:structuredClone(input),result:structuredClone(result)});return result;};
   const actual=x.core.viewAlbum(x.alice,privateAlbum.id);assert(JSON.stringify(actual).includes('PRIVATE-DEMO-CODE'));
   try{browser=await pw[engine].launch({headless:process.env.HEADED!=='1'});}catch(error){if(engine!=='chromium')throw error;browser=await pw.chromium.launch({headless:true,channel:'msedge'});}
   const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(20000);page.on('pageerror',error=>errors.push(error.message));await page.goto(hostOrigin+'/album-harness');
@@ -71,13 +77,31 @@ try{
   const freshness=await page.evaluate(()=>{const old=window.albumTest.stale,current=window.albumTest.payloads.at(-1);old.handler({data:{version:1,type:'intent',intent:'select-item',nonce:old.nonce,snapshotId:old.snapshot.snapshotId,handle:old.snapshot.items[0].handle}});return {fresh:current.snapshotId!==old.snapshot.snapshotId&&current.items.every(item=>!old.snapshot.items.some(old=>old.handle===item.handle)),noSelection:window.albumTest.inspected.length===old.inspections,order:current.items.map(item=>item.name)};});assert(freshness.fresh&&freshness.noSelection);assert.deepEqual(freshness.order,['One Solstice','Dawn']);
   checks.push('Actual private album and unsaved reorder render current full contents/pages; granted pinned raster bytes display, private records/IDs/URLs stay parent-side, current handles inspect the correct copy and obsolete sessions cannot select');
 
+  await page.getByText('Cover, spine & pages',{exact:true}).click();
+  await page.getByLabel('Page 1 title',{exact:true}).fill('Edited first page');
+  await page.getByRole('button',{name:'Move page 1 later',exact:true}).click();
+  await page.locator('.dc-arrange-tile').filter({has:page.getByRole('button',{name:'Move Dawn earlier',exact:true})}).getByRole('combobox').selectOption('second');
+  await page.getByLabel('Album name',{exact:true}).fill('Edited private album');
+  await page.getByRole('button',{name:'Preview album',exact:true}).click();await album.scrollIntoViewIfNeeded();await album.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();
+  await page.getByRole('button',{name:'Save album',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#root').hasAttribute('aria-busy'));assert.equal(saves.length,1,await page.locator('.dc-status').textContent());
+  const saved=saves[0];assert.equal(saved.result.id,privateAlbum.id);assert.equal(saved.input.visibility,'private');assert.equal(saved.input.layout.id,'journal');
+  assert.deepEqual(saved.input.layout.artwork.pages,[{id:'second',title:'Second page'},{id:'first',title:'Edited first page'}]);
+  assert.deepEqual(saved.input.placements,[{copyId:copies[1].id,position:0,data:{pageId:'second',privateNote:'PRIVATE-PLACEMENT'}},{copyId:copies[0].id,position:1,data:{pageId:'second',privateNote:'PRIVATE-PLACEMENT'}}]);
+  const reloaded=await page.evaluate(async id=>window.albumTest.client.viewAlbum(id),privateAlbum.id);assert.deepEqual(reloaded.layout,saved.input.layout);assert.deepEqual(reloaded.cards.map(card=>({copyId:card.copy.id,position:card.placement.position,data:card.placement.data})),saved.input.placements);assert.equal(reloaded.name,'Edited private album');assert.deepEqual(x.core.viewAlbum(x.alice,privateAlbum.id).layout,saved.input.layout);
+  const beforeInvalid=structuredClone(x.core.albums(x.alice));
+  const invalid=await page.evaluate(async ({id,copyId,version})=>{try{await window.albumTest.client.saveAlbum({key:'invalid-page-assignment',albumId:id,expectedVersion:version,name:'Invalid assignment',visibility:'private',layout:{pageSize:1,artwork:{pages:[]}},placements:[{copyId,position:0,data:{pageId:'missing'}}]});return false;}catch(error){return error.code==='INVALID_INPUT';}},{id:privateAlbum.id,copyId:copies[0].id,version:saved.result.version});assert(invalid);assert.deepEqual(x.core.albums(x.alice),beforeInvalid);
+  await page.waitForFunction(()=>!document.querySelector('#root').hasAttribute('aria-busy'));await page.getByLabel('Your albums',{exact:true}).selectOption(publicAlbum.id);await page.getByLabel('Your albums',{exact:true}).selectOption(privateAlbum.id);
+  assert.equal(await page.getByLabel('Album name',{exact:true}).inputValue(),'Edited private album');assert.equal(await page.getByLabel('Page 2 title',{exact:true}).inputValue(),'Edited first page');
+  await album.scrollIntoViewIfNeeded();await album.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();assert.equal(await album.frameLocator('iframe').locator('[data-dc-album-name]').textContent(),'Edited private album');
+  checks.push('Native card/page reorder and explicit assignment save through real HTTP; reload preserves exact layout/private placement data and current program display; invalid assignment rejects without mutation');
+
   await page.evaluate(()=>window.albumTest.renderer.setEnabled(false));assert.equal(await album.locator('iframe').count(),0);
   await album.getByRole('button',{name:/Dawn, common/}).click();assert.equal(await page.evaluate(()=>window.albumTest.inspected.at(-1)),copies[0].id);await page.getByRole('button',{name:'Close inspection',exact:true}).click();
   await page.evaluate(()=>{window.albumTest.renderer.setEnabled(true);});await album.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();
   await page.evaluate(()=>{const entry=window.albumTest.registry.get('example.album');window.albumTest.registry.set('example.album',{...entry,albumDisplay:{profile:'dc.album-display@1',fields:[]}});window.albumTest.renderer.setEnabled(false);window.albumTest.renderer.setEnabled(true);});
   await page.waitForFunction(()=>window.albumTest.diagnostics.some(value=>value.code==='PROGRAM_UNAVAILABLE'));assert.equal(await album.locator('iframe').count(),0);
   await album.getByRole('button',{name:/Dawn, common/}).click();assert.equal(await page.evaluate(()=>window.albumTest.inspected.at(-1)),copies[0].id);await page.getByRole('button',{name:'Close inspection',exact:true}).click();
-  await page.evaluate(()=>{window.albumTest.renderer.dispose();window.albumTest.view.dispose();});actor=x.bob;
+  const beforeDispose=structuredClone(x.core.albums(x.alice));await page.evaluate(()=>{window.albumTest.retainedSave=[...document.querySelectorAll('button')].find(button=>button.textContent==='Save album');window.albumTest.renderer.dispose();window.albumTest.view.dispose();window.albumTest.retainedSave.click();});assert.equal(await page.locator('#root iframe').count(),0);assert.deepEqual(x.core.albums(x.alice),beforeDispose);actor=x.bob;
   await page.evaluate(async()=>{const fields=['albumName','cardName','rarity','pageName','preview'],entry=window.albumTest.registry.get('example.album');window.albumTest.registry.set('example.album',{...entry,albumDisplay:{profile:'dc.album-display@1',fields}});window.albumTest.renderer=window.albumTest.createProgramAlbumRenderer({registry:window.albumTest.registry,programId:'example.album',displayFields:fields});await window.albumTest.mount();});
   const denied=await page.evaluate(async id=>{try{await window.albumTest.client.viewAlbum(id);return false;}catch(error){return error.code==='NOT_FOUND';}},privateAlbum.id);assert(denied);
   await page.getByText('Visit public albums',{exact:true}).click();await page.getByRole('button',{name:'Explore',exact:true}).click();await page.getByRole('button',{name:'Public album · Alice',exact:true}).click();await album.scrollIntoViewIfNeeded();await album.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();assert.equal(await album.frameLocator('iframe').locator('.album-item').count(),2);
@@ -85,9 +109,9 @@ try{
 
   await page.evaluate(()=>{window.albumTest.view.dispose();window.albumTest.renderer.dispose();});actor=x.alice;
   await page.evaluate(async privateId=>{
-    const client=window.albumTest.client=window.albumTest.createClient();await client.me();const model=await client.viewAlbum(privateId),fields=['albumName','cardName','rarity','pageName','preview'];
+    const client=window.albumTest.client=window.albumTest.createClient();await client.me();const model=await client.viewAlbum(privateId),previewCopy=model.cards.find(item=>item.copy.definition.presentation).copy,fields=['albumName','cardName','rarity','pageName','preview'];
     window.albumTest.largeRenderer=window.albumTest.createProgramAlbumRenderer({registry:window.albumTest.registry,programId:'example.album',displayFields:fields,fallbackRenderer(){const node=document.createElement('div');node.textContent='Native fallback';return node;}});
-    window.albumTest.large=window.albumTest.largeRenderer({...model,layout:{},cards:Array.from({length:1000},(_,position)=>({placement:{position,data:{privateNote:'NEVER-SEND'}},copy:{...model.cards[0].copy,definition:{...model.cards[0].copy.definition,name:'Card '+position}}}))});document.querySelector('#probes').append(window.albumTest.large);
+    window.albumTest.large=window.albumTest.largeRenderer({...model,layout:{},cards:Array.from({length:1000},(_,position)=>({placement:{position,data:{privateNote:'NEVER-SEND'}},copy:{...previewCopy,definition:{...previewCopy.definition,name:'Card '+position}}}))});document.querySelector('#probes').append(window.albumTest.large);
   },privateAlbum.id);
   const large=page.locator('#probes dc-program-album');await large.scrollIntoViewIfNeeded();await large.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();
   assert.equal(await large.frameLocator('iframe').locator('.album-item').count(),1000);await(await frameOf(large)).waitForFunction(()=>document.querySelectorAll('img[src]').length===1000);
@@ -102,6 +126,10 @@ try{
   await page.evaluate(()=>window.albumTest.gateRenderer.setEnabled(true));await gated.frameLocator('iframe').locator('html[data-dc-album-state="ready"]').waitFor();await(await frameOf(gated)).waitForFunction(()=>{const image=document.querySelector('img[src]');return image?.complete&&image.naturalWidth>0;});
   await page.screenshot({path:resolve(output,'album-program.png'),fullPage:true});await page.evaluate(()=>{window.albumTest.gateRenderer.dispose();window.albumTest.gateRenderer.setEnabled(true);});assert.equal(await page.locator('#probes iframe').count(),0);
   checks.push('All 1000 projected placements render without truncation; optional previews arrive once per bounded batch; disabled late preview cannot update an obsolete session, fresh remount works and final disposal is terminal');
-  assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({engine,checks,errors},null,2));console.log(JSON.stringify({engine,checks,errors}));
-}catch(error){const page=browser?.contexts()[0]?.pages()[0];if(page)await writeFile(resolve(output,'failure.json'),JSON.stringify({message:error.message,errors},null,2));throw error;
+  assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({engine,language,checks,errors},null,2));console.log(JSON.stringify({engine,language,checks,errors}));return {engine,language,checks,errors};
+}catch(error){const page=browser?.contexts()[0]?.pages()[0];if(page)await writeFile(resolve(output,'failure.json'),JSON.stringify({message:error.message,errors,status:await page.locator('.dc-status').allTextContents(),editorErrors:await page.locator('.dc-error').allTextContents()},null,2));throw error;
 }finally{await browser?.close();for(const item of paused)if(!item.response.destroyed)item.response.end(item.bytes);for(const server of [hostServer,programServer]){server.closeAllConnections();if(server.listening)await new Promise(resolve=>server.close(resolve));}x.core.close();await rm(temp,{recursive:true,force:true});}
+
+}
+const results=[];for(const language of languages)results.push(await qualify(language));
+if(languages.length>1)await writeFile(resolve(baseOutput,'result.json'),JSON.stringify({engine:process.env.BROWSER_ENGINE??'chromium',languages,results},null,2));

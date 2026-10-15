@@ -174,3 +174,22 @@ remoteExternal.evaluate(v4);
 // @ts-expect-error Stock envelopes cannot be sent to the external adapter.
 remoteExternal.evaluate(stockV4);
 void [remoteExternalScope,remoteExternalSupports];
+
+import {allocationAlgorithm, allocationAlgorithmV2, allocationAlgorithmV3, allocationAlgorithmV4, validateAllocationSelector, planAllocation, allocationOutcome, allocationCodeDemand} from '@digital-card/framework/allocation-planner';
+const plannerAlgorithms: ['weighted-deck@1','weighted-deck@2','weighted-deck@3','weighted-deck@4']=[allocationAlgorithm,allocationAlgorithmV2,allocationAlgorithmV3,allocationAlgorithmV4];
+const selectedAlgorithm:1|2|3|4=validateAllocationSelector(input).version;
+for(const snapshot of [v1.context,v2.context,v3.context,v4.context,stockV2.context,stockV4.context]){
+  planAllocation(snapshot).forEach(row=>{const index:number=row.packIndex;row.variantIds.map(id=>id.toUpperCase());void index;});
+  const pity:number|null=allocationOutcome(snapshot).pityCount;void pity;
+}
+const resourceDemand:Map<string,number>=allocationCodeDemand(v4.context.product,v4.context.variants,1);
+allocationCodeDemand(v1.context.product,v1.context.variants,1);
+// @ts-expect-error The planner requires a complete allocation context.
+planAllocation(v4);
+// @ts-expect-error Resource quantities are numbers.
+allocationCodeDemand(v4.context.product,v4.context.variants,'1');
+// @ts-expect-error v4 snapshots require shared code-pool availability.
+allocationOutcome({...v4.context,codePools:undefined});
+// @ts-expect-error Planner results are allocation rows, not a protocol response.
+planAllocation(v1.context).status;
+void [plannerAlgorithms,selectedAlgorithm,resourceDemand];

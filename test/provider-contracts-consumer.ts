@@ -373,3 +373,25 @@ createCurrencyGateway({framework:currencyFramework,timeoutMs:'5000'});
 // @ts-expect-error Gateways reconcile provider evidence and have no client settlement method.
 currencyGateway.settleExternalCredit({amount:100});
 void [settlementContract,mappedCurrencyId];
+
+import {contentDigest, parseContent, prepareImport, exportContent, type PreparedImport} from '@digital-card/framework/importer';
+import type {Schemas as ImportSchemas} from '@digital-card/framework/wire-types';
+declare const importBase:ImportSchemas['CatalogManifest'];
+const importedData:unknown=parseContent('cards: []',{format:'yml',maxBytes:1024});
+const preparedImport:PreparedImport=prepareImport({source:'{}',format:'yaml',mode:'merge',base:importBase,expectedVersion:importBase.version});
+prepareImport({source:importBase,mode:'replace',base:null,expectedVersion:0});
+const importedCount:number=preparedImport.counts.cards;
+preparedImport.changes.forEach(change=>{const action:'add'|'update'|'remove'=change.action;void action;});
+const exportedCatalog:string=exportContent(preparedImport.manifest,{format:'yaml'});
+const importedDigest:string=contentDigest(preparedImport.manifest);
+// @ts-expect-error Parsing accepts source text.
+parseContent({cards:[]});
+// @ts-expect-error Import preparation requires the expected catalog version.
+prepareImport({source:'{}',mode:'replace'});
+// @ts-expect-error Byte limits are numeric.
+parseContent('{}',{maxBytes:'1024'});
+// @ts-expect-error Policy revision is supplied separately by the admin preview endpoint.
+preparedImport.policyRevision;
+// @ts-expect-error Parsing leaves the imported shape unvalidated.
+const uncheckedCatalog:ImportSchemas['CatalogManifest']=parseContent('{}');
+void [importedData,importedCount,exportedCatalog,importedDigest,uncheckedCatalog];

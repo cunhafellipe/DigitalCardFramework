@@ -1,31 +1,53 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {serveReference} from '../src/static.js';
 import path from "node:path";
 import assert from "node:assert/strict";
+const advancedOnly=process.argv[2]==='--gltf-rive';
+if(advancedOnly&&!process.env.RIVE_FIXTURE)throw new Error('Set RIVE_FIXTURE to an approved local ball.riv animation fixture; no asset is downloaded.');
+let server;
 const [
     playwrightPath,
     url = "http://127.0.0.1:4173/portable.html",
     out = "../PortableCardQA",
-  ] = process.argv.slice(2),
-  { chromium } = await import(pathToFileURL(path.resolve(playwrightPath)).href),
-  browser = await chromium.launch({ channel: "msedge", headless: true });
-const page = await browser.newPage({ viewport: { width: 1000, height: 900 } }),
-  errors = [];
-page.on("pageerror", (e) => errors.push(e.message));
+  ] = advancedOnly?[undefined,undefined,process.argv[3]??'test-results/advanced-media']:process.argv.slice(2);
+await mkdir(out,{recursive:true});
+let target=url;
+if(advancedOnly){
+  const require=createRequire(new URL('../src/presentation/package.json',import.meta.url));
+  const bundle=await require('esbuild').build({entryPoints:[fileURLToPath(new URL('../src/presentation/adapters.js',import.meta.url))],bundle:true,format:'esm',platform:'browser',external:['node:*'],write:false});
+  const wasm=await readFile(new URL('../src/presentation/node_modules/@rive-app/canvas/rive.wasm',import.meta.url));
+  server=createServer(async(request,response)=>{try{
+    if(request.url==='/advanced'){response.setHeader('content-type','text/html');response.end('<!doctype html><html><title>GLTF and Rive probe</title><body></body></html>');return;}
+    if(request.url==='/adapters-bundle.js'){response.setHeader('content-type','text/javascript');response.end(bundle.outputFiles[0].contents);return;}
+    if(request.url==='/rive.wasm'){response.setHeader('content-type','application/wasm');response.end(wasm);return;}
+    if(await serveReference(request,response))return;response.writeHead(404).end();
+  }catch{response.writeHead(500).end();}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));target='http://127.0.0.1:'+server.address().port+'/advanced';
+}
+const engine=process.env.BROWSER_ENGINE??'chromium',errors=[];
+let browser;
 try {
-  await page.goto(url);
-  await page.waitForFunction(() => window.portableCards?.ready);
-  const rive = Buffer.from(await readFile(path.join(out, "ball.riv"))).toString(
+  const playwright=await import(playwrightPath?pathToFileURL(path.resolve(playwrightPath)).href:'playwright');
+  browser=await playwright[engine].launch({headless:true,...(!advancedOnly&&engine==='chromium'?{channel:'msedge'}:{})});
+  const page=await browser.newPage({viewport:{width:1000,height:900}});
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(target);
+  if(!advancedOnly)await page.waitForFunction(() => window.portableCards?.ready);
+  const rive = Buffer.from(await readFile(advancedOnly?process.env.RIVE_FIXTURE:path.join(out, "ball.riv"))).toString(
     "base64",
   );
-  const result = await page.evaluate(async (rive) => {
-    const { createPlayerStage } = await import("/player/player.js"),
+  const result = await page.evaluate(async ({rive,advancedOnly}) => {
+    const moduleRoot=advancedOnly?'/src/presentation':'/player';
+    const { createPlayerStage } = await import(moduleRoot+"/player.js"),
       { buildPackage, browserResolver, writeZip } =
-        await import("/player/package.js"),
-      { blankPackage } = await import("/player/project.js"),
+        await import(moduleRoot+"/package.js"),
+      { blankPackage } = await import(moduleRoot+"/project.js"),
       { gltfAdapter, riveAdapter, dotLottieAdapter } =
-        await import("/player/adapters-bundle.js");
-    window.portableCards.stage.dispose();
+        await import(advancedOnly?'/adapters-bundle.js':"/player/adapters-bundle.js");
+    if(!advancedOnly)window.portableCards.stage.dispose();
     const root = document.createElement("div");
     Object.assign(root.style, {
       position: "relative",
@@ -176,8 +198,46 @@ try {
             ["scenes/back.json", base.scenes.get("scenes/back.json")],
           ]),
           assets,
-        ),
-        resolver = browserResolver(pkg),
+        );
+      if(advancedOnly){
+        root.style.width='640px';root.style.display='flex';
+        const slots=[0,1].map(()=>{const slot=document.createElement('div');Object.assign(slot.style,{position:'relative',width:'300px',height:'450px',flex:'none'});root.append(slot);return slot;});
+        const resolver=browserResolver(pkg),stage=createPlayerStage({root,adapters:[adapterFactory(pkg.digest)],budget:{estimatedGpuBytes:96*1024*1024}}),
+          views=slots.map(slot=>stage.mount(slot,{resolver}));
+        for(const view of views)if((await view.ready).mode!=='interactive')throw Error(name+' did not enter interactive mode');
+        const capture=async view=>{
+          const bitmap=await createImageBitmap(await view.snapshot()),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+          const context=canvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+          let painted=0;for(let index=3;index<pixels.length;index+=4)if(pixels[index]>20)painted++;
+          const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',pixels))].join(',');canvas.width=canvas.height=0;return {painted,hash};
+        };
+        views[0].setInputs({angle:0.1,tilt:{x:-0.7,y:-0.2}});views[1].setInputs({angle:0.35,tilt:{x:0,y:0}});
+        const first=await capture(views[0]),other=await capture(views[1]);views[0].setInputs({angle:0.9,tilt:{x:0.7,y:0.2}});
+        const changed=await capture(views[0]),independent=await capture(views[1]);
+        if(first.painted<100||changed.painted<100||other.painted<100)throw Error(name+' did not paint');
+        if(first.hash===changed.hash)throw Error(name+' inputs did not alter pixels');
+        if(other.hash!==independent.hash)throw Error(name+' input leaked across instances');
+        const poster=await views[0].setQuality('poster');if(poster?.mode!=='poster')throw Error(name+' quality downgrade did not select poster');
+        let posterCaptureRejected=false;try{await views[0].snapshot();}catch{posterCaptureRejected=true;}
+        if(!posterCaptureRejected)throw Error(name+' poster unexpectedly captured interactive media');
+        if((await capture(views[1])).hash!==other.hash)throw Error(name+' downgrade changed independent instance');
+        const restored=await views[0].setQuality('standard');if(restored?.mode!=='interactive')throw Error(name+' quality readmission failed');
+        if((await capture(views[0])).painted<100)throw Error(name+' readmission did not paint');
+        views[0].dispose();const remount=stage.mount(slots[0],{resolver});if((await remount.ready).mode!=='interactive'||(await capture(remount)).painted<100)throw Error(name+' remount failed');
+        await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        const frames=stage.diagnostics().frames;await new Promise(resolve=>setTimeout(resolve,100));const idle=stage.diagnostics().frames===frames;
+        remount.dispose();views[1].dispose();const after=stage.diagnostics();stage.dispose();resolver.dispose();slots.forEach(slot=>slot.remove());
+        const fallback=async adapters=>{
+          const slot=document.createElement('div');Object.assign(slot.style,{width:'300px',height:'450px'});root.append(slot);
+          const resolver=browserResolver(pkg),stage=createPlayerStage({root,adapters}),view=stage.mount(slot,{resolver}),ready=await view.ready;
+          if(ready.mode!=='poster'||!view.element.querySelector('img')?.src)throw Error(name+' unavailable adapter did not use declared poster');
+          view.dispose();const released=stage.diagnostics();if(released.assetReferences||released.textures)throw Error(name+' fallback leaked resources');stage.dispose();resolver.dispose();slot.remove();return ready;
+        };
+        const missingRuntime=await fallback([]),unapproved=name==='dc.rive'?await fallback([riveAdapter({wasmURL:'/rive.wasm',approvedDigests:[]})]):null;
+        if(unapproved&&!unapproved.fallbackReason?.includes('approved'))throw Error('Rive approval denial not observed');
+        reports.push({name,painted:first.painted,inputChanged:true,independent:true,posterCaptureRejected,qualityReadmitted:true,remounted:true,missingRuntime,unapproved,idle,after});return;
+      }
+      const resolver = browserResolver(pkg),
         stage = createPlayerStage({
           root,
           adapters: [adapterFactory(pkg.digest)],
@@ -211,7 +271,7 @@ try {
       reports.push({ name, painted, idle, after });
     }
     await probe("dc.gltf", glb, "model/gltf-binary", () => gltfAdapter());
-    await probe("dc.dotlottie", dot, "application/zip", () =>
+    if(!advancedOnly)await probe("dc.dotlottie", dot, "application/zip", () =>
       dotLottieAdapter({ wasmURL: "/player/wasm/dotlottie.wasm" }),
     );
     await probe(
@@ -220,10 +280,11 @@ try {
       "application/x-rive",
       (digest) =>
         riveAdapter({
-          wasmURL: "/player/wasm/rive.wasm",
+          wasmURL: advancedOnly?'/rive.wasm':"/player/wasm/rive.wasm",
           approvedDigests: [digest],
         }),
     );
+    if(advancedOnly){root.remove();return {reports,video:null};}
     // Generate a real browser-encoded video; no binary test art is stored in Git.
     const videoCanvas = document.createElement("canvas");
     videoCanvas.width = 64;
@@ -295,15 +356,15 @@ try {
     resolver.dispose();
     root.remove();
     return { reports, video: { playing, paused, released } };
-  }, rive);
+  }, {rive,advancedOnly});
   for (const report of result.reports) {
     assert.equal(report.idle, true);
     assert.equal(report.after.textures, 0);
     assert.equal(report.after.assetReferences, 0);
   }
-  assert.equal(result.video.playing.requestedVideoDecoders, 1);
+  if(!advancedOnly){assert.equal(result.video.playing.requestedVideoDecoders, 1);
   assert.equal(result.video.paused.requestedVideoDecoders, 0);
-  assert.equal(result.video.released.textures, 0);
+  assert.equal(result.video.released.textures, 0);}
   assert.deepEqual(errors, []);
   await writeFile(
     path.join(out, "advanced-report.json"),
@@ -311,5 +372,6 @@ try {
   );
   console.log(JSON.stringify(result, null, 2));
 } finally {
-  await browser.close();
+  await browser?.close();
+  if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 }

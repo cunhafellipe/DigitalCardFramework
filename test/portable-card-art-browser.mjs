@@ -72,6 +72,7 @@ try{
     }}});await window.artistView.ready;await window.artistView.shellReady;await window.artistPanel.ready;
   },{archive:Array.from(await readFile(packagePath)),editorContribution});
   await page.getByRole('button',{name:'Front emblem',exact:true}).click();
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(button=>button.textContent==='Front emblem'&&button.classList.contains('is-selected'))&&document.querySelector('.dcard-studio')?.getAttribute('aria-busy')!=='true');
   const panel=page.locator('[data-editor-contribution="example.print-layout"]');await panel.getByLabel('Horizontal position',{exact:true}).fill('17');await panel.getByLabel('Horizontal position',{exact:true}).press('Tab');
   await page.waitForFunction(()=>window.artistPanel.getProject().scenes.get('scenes/front.json').nodes.find(node=>node.id==='front-emblem').x===17);
   const panelDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Save project',exact:true}).click();const panelArchive=await panelDownload,panelPath=resolve(temp,'panel-edited.dcproject');await panelArchive.saveAs(panelPath);

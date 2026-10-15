@@ -77,7 +77,10 @@ try{
   const freshness=await page.evaluate(()=>{const old=window.albumTest.stale,current=window.albumTest.payloads.at(-1);old.handler({data:{version:1,type:'intent',intent:'select-item',nonce:old.nonce,snapshotId:old.snapshot.snapshotId,handle:old.snapshot.items[0].handle}});return {fresh:current.snapshotId!==old.snapshot.snapshotId&&current.items.every(item=>!old.snapshot.items.some(old=>old.handle===item.handle)),noSelection:window.albumTest.inspected.length===old.inspections,order:current.items.map(item=>item.name)};});assert(freshness.fresh&&freshness.noSelection);assert.deepEqual(freshness.order,['One Solstice','Dawn']);
   checks.push('Actual private album and unsaved reorder render current full contents/pages; granted pinned raster bytes display, private records/IDs/URLs stay parent-side, current handles inspect the correct copy and obsolete sessions cannot select');
 
-  await page.getByText('Cover, spine & pages',{exact:true}).click();
+  const artworkSummary=page.getByText('Cover, spine & pages',{exact:true});
+  await artworkSummary.scrollIntoViewIfNeeded();
+  await artworkSummary.click();
+  assert.equal(await artworkSummary.evaluate(node=>node.parentElement.open),true,'Native album artwork disclosure must open after pointer activation');
   await page.getByLabel('Page 1 title',{exact:true}).fill('Edited first page');
   await page.getByRole('button',{name:'Move page 1 later',exact:true}).click();
   await page.locator('.dc-arrange-tile').filter({has:page.getByRole('button',{name:'Move Dawn earlier',exact:true})}).getByRole('combobox').selectOption('second');

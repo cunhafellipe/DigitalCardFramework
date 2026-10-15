@@ -5,7 +5,11 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {createRemoteActionHandler,validateActionAcknowledgment} from '@digital-card/framework/remote-actions';
+import {createRemoteActionHandler,validateActionAcknowledgment,validateFrameworkEvent} from '@digital-card/framework/remote-actions';
+
+import {CardFramework} from '../src/index.js';
+import {SQLiteStore} from '../src/sqlite.js';
+import {fixture,admin} from './helpers.js';
 
 const executable=process.argv[2];
 if(!executable)throw Error('Usage: node test/action-receiver-conformance.mjs GO_RECEIVER|--python-only [PYTHON]');
@@ -46,6 +50,44 @@ function inspect(database,expected,digests=true){
   const result=spawnSync(python,['-c',"import sqlite3,sys,json,hashlib; db=sqlite3.connect(sys.argv[1]); rows=db.execute('SELECT digest,payload FROM deliveries').fetchall(); print(json.dumps({'count':len(rows),'integrity':db.execute('PRAGMA integrity_check').fetchone()[0],'digests':all(hashlib.sha256(p.encode()).hexdigest()==d for d,p in rows),'sqlite':sqlite3.sqlite_version}))",database],{windowsHide:true,encoding:'utf8'});
   assert.equal(result.status,0);const view=JSON.parse(result.stdout);assert.equal(view.count,expected);assert.equal(view.integrity,'ok');assert.equal(view.digests,digests);assertions+=4;return view;
 }
+function receipts(database){
+  const result=spawnSync(python,['-c',"import sqlite3,sys,json; db=sqlite3.connect(sys.argv[1]); print(json.dumps([{'jobId':j,'payload':json.loads(p)} for j,p in db.execute('SELECT job_id,payload FROM deliveries ORDER BY rowid')]))",database],{windowsHide:true,encoding:'utf8'});
+  assert.equal(result.status,0);assertions++;return JSON.parse(result.stdout);
+}
+async function qualifyOutbox(language){
+  const database=join(root,language+'-outbox-receiver.sqlite'),frameworkPath=join(root,language+'-framework.sqlite');
+  let receiver=await start(language,database,8),core,store,now=Date.parse('2026-10-01T00:00:00.000Z'),lose=true;
+  const attempts=[],subscriptions=[{id:'opened-only',handler:golden.handlerId,events:['card.opened']}],actionOptions={retryMs:1000},clock=()=>new Date(now).toISOString();
+  const handler=job=>createRemoteActionHandler({url:receiver.url,pluginId:golden.pluginId,handlerId:golden.handlerId,token,fetchImpl:async(...args)=>{
+    const delivery=JSON.parse(args[1].body);attempts.push(delivery);validateFrameworkEvent(delivery.params.event);
+    const response=await fetch(...args);
+    if(lose){lose=false;assert.equal(response.status,200);await response.arrayBuffer();throw Error('Acknowledgment lost after subscription receipt commit');}
+    return response;
+  }})(job),actionHandlers={[golden.handlerId]:handler};
+  try{
+    store=new SQLiteStore(frameworkPath);const x=fixture({store,clock,eventSubscriptions:subscriptions,actionOptions,actionHandlers});core=x.core;
+    const firstCopy=x.open()[0],firstId=core.actionJobs(admin).items[0].id,first=store.query(q=>q.get('actionJobs',firstId));
+    assert.equal(core.actionJobs(admin).total,1);assert.equal(first.source.subscriptionId,subscriptions[0].id);assert.equal(first.params.event.type,'card.opened');assert.equal(first.params.event.data.copyId,firstCopy.id);assert.equal(first.source.eventId,first.params.event.id);
+    assert(core.events(admin,{limit:1000}).some(event=>event.type!=='card.opened'));assert.equal(core.fulfillments(x.bob).total,0);
+    const failed=await core.dispatchActions(admin,{limit:1});assert.equal(failed[0].status,'pending');inspect(database,1);
+    now+=500;const secondCopy=x.open()[0],secondId=core.actionJobs(admin).items.find(job=>job.id!==first.id).id,second=store.query(q=>q.get('actionJobs',secondId));
+    assert.equal(core.actionJobs(admin).total,2);assert.equal(second.params.event.data.copyId,secondCopy.id);assert(second.params.event.sequence>first.params.event.sequence);
+    assert.equal((await core.dispatchActions(admin,{limit:1}))[0].id,second.id);assert.equal(core.actionJobs(admin).items.find(job=>job.id===second.id).status,'succeeded');
+    const before=receipts(database);assert.deepEqual(before.map(row=>row.jobId),[first.id,second.id]);assert.deepEqual(before.map(row=>row.payload),attempts);
+    assert.equal(core.fulfillments(x.alice).total,2);assert.equal(core.fulfillments(x.bob).total,0);
+    core.close();core=null;await stop(receiver);receiver=await start(language,database,8);now+=2000;
+    store=new SQLiteStore(frameworkPath);core=new CardFramework({store,clock,eventSubscriptions:subscriptions,actionOptions,actionHandlers});
+    const pending=store.query(q=>q.get('actionJobs',first.id));assert.equal(pending.status,'pending');assert.deepEqual(pending.source,first.source);assert.deepEqual(pending.params,first.params);
+    const completed=await core.dispatchActions(admin,{limit:1});assert.equal(completed[0].id,first.id);assert.equal(completed[0].status,'succeeded');
+    assert.deepEqual(attempts.map(delivery=>delivery.jobId),[first.id,second.id,first.id]);assert.deepEqual(attempts[2],attempts[0]);assert(attempts[2].params.event.sequence<attempts[1].params.event.sequence);
+    assert.equal(attempts[0].beneficiaryId,x.alice.userId);assert.deepEqual(attempts[0].source,first.source);assert.deepEqual(attempts[0].params,first.params);
+    assert.deepEqual(receipts(database),before);inspect(database,2);assert(core.actionJobs(admin).items.every(job=>job.status==='succeeded'));assert.equal(core.inventory(x.alice).length,2);assert.equal(core.inventory(x.bob).length,0);assert.equal(core.audit(admin).ok,true);
+    const future={id:'future-event',sequence:second.params.event.sequence+1,type:'extension.future',data:{label:'Unknown event record'},at:clock()};validateFrameworkEvent(future);
+    const futureJob={idempotencyKey:'future-event-job',userId:null,source:{type:'event',eventId:future.id},params:{event:future}};
+    await handler(futureJob);await handler(futureJob);const retained=receipts(database);assert.equal(retained.length,3);assert.deepEqual(retained.at(-1).payload.params.event,future);assert.equal(retained.at(-1).payload.beneficiaryId,null);inspect(database,3);
+    assert.equal(core.actionJobs(admin).total,2);assert.equal(core.inventory(x.alice).length,2);assert.equal(core.audit(admin).ok,true);assertions+=39;
+  }finally{core?.close();await stop(receiver);}
+}
 function reordered(value){return Array.isArray(value)?value.map(reordered):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse().map(([key,child])=>[key,reordered(child)])):value;}
 try{
   for(const language of languages){
@@ -77,6 +119,7 @@ try{
     inspect(database,3);await stop(receiver);
     receiver=await start(language,database,1);await post(receiver);await post(receiver,{...golden,jobId:'still-refused'},507,{key:'still-refused'});inspect(database,3);await stop(receiver);
   }
+  for(const language of languages)await qualifyOutbox(language);
   const sharedDatabase=join(root,'interchange.sqlite');let receiver=await start('python',sharedDatabase);
   const job={idempotencyKey:golden.jobId,userId:golden.beneficiaryId,source:golden.source,params:golden.params};
   const options={url:receiver.url,pluginId:golden.pluginId,handlerId:golden.handlerId,token};
@@ -90,7 +133,7 @@ try{
   await stop(receiver);await stop(other);
   const corrupt=spawnSync(python,['-c',"import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute('UPDATE deliveries SET digest=? WHERE job_id=?', ('corrupt', 'golden-delivery')); db.commit(); db.close()",sharedDatabase],{windowsHide:true});assert.equal(corrupt.status,0);assertions++;
   for(const language of languages){const receiver=await start(language,sharedDatabase);await post(receiver,golden,503);inspect(sharedDatabase,2,false);await stop(receiver);}
-  console.log(JSON.stringify({receivers:languages,assertions,scenarios:['golden Unicode/numbers','authenticated identity','malformed/unknown/duplicate fields','bounded JSON/UTF-8','numeric and boolean intent conflicts','concurrent duplicates and final receipt capacity','restart and reduced capacity','retained receipt digests and corruption refusal','committed acknowledgment loss',languages.includes('go')?'cross-language database replay':'same-language database replay'],status:'passed'},null,2));
+  console.log(JSON.stringify({receivers:languages,assertions,scenarios:['real filtered subscription outbox and exact event/job terms','out-of-order retry after framework and receiver restart','receiver receipt reconciliation and terminal audit','generic unknown event record/deduplication','golden Unicode/numbers','authenticated identity','malformed/unknown/duplicate fields','bounded JSON/UTF-8','numeric and boolean intent conflicts','concurrent duplicates and final receipt capacity','restart and reduced capacity','retained receipt digests and corruption refusal','committed acknowledgment loss',languages.includes('go')?'cross-language database replay':'same-language database replay'],status:'passed'},null,2));
 }finally{
   for(const child of processes){if(child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill();await ended;}}
   if(!resolve(root).startsWith(temporaryBase+sep))throw Error('Unsafe conformance cleanup target');

@@ -200,6 +200,10 @@ jobs:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}
           DC_ART_LANGUAGE: go
+      - run: xvfb-run --auto-servernum node test/presentation-host-browser.mjs --recipe test-results/presentation-host-recipe
+        env:
+          HEADED: '1'
+          BROWSER_ENGINE: ${{ matrix.engine }}
       - run: xvfb-run --auto-servernum node test/portable-lottie-browser.mjs test-results/portable-lottie
         env:
           HEADED: '1'

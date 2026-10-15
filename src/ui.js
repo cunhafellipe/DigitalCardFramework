@@ -295,7 +295,11 @@ export function mountFramework(root,{client,theme={},css='',cardRenderer=renderC
       const preview=element('p','dc-conversion-preview');
       function update(){const a=eligible.find(c=>c.id===from.value),b=eligible.find(c=>c.id===to.value),spent=Number(amount.value),received=a&&b?spent*a.value.numerator*b.value.denominator/(a.value.denominator*b.value.numerator):NaN;preview.textContent=a&&b&&Number.isFinite(spent)&&Number.isFinite(received)?num(spent)+' '+a.name+' → '+num(received)+' '+b.name:'';}
       [amount,from,to].forEach(x=>x.addEventListener('input',update));update();
-      form.append(row,preview,button(t('wallet.convert'),()=>action(()=>mutate('convert',{from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version}),{message:r=>t('wallet.converted',{amount:r.amount,from:currencyName(r.from),received:r.received,to:currencyName(r.to)})})),element('p','dc-muted',t('wallet.wholeUnits')));node.append(form);
+      const submitConversion=()=>{
+        const input={from:from.value,to:to.value,amount:Number(amount.value),catalogVersion:model.catalog.version};
+        return mutate.pending('convert')?._confirmed?mutate.beginNew('convert',input):mutate('convert',input);
+      };
+      form.append(row,preview,button(t('wallet.convert'),()=>action(submitConversion,{message:r=>t('wallet.converted',{amount:r.amount,from:currencyName(r.from),received:r.received,to:currencyName(r.to)})})),element('p','dc-muted',t('wallet.wholeUnits')));node.append(form);
     }return node;
   }
   function packArt(product,small=false,onSelect,onRendered,ownDispose) {

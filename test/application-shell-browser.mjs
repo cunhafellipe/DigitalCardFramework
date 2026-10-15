@@ -13,8 +13,9 @@ import {programHeaders} from '../src/presentation/program.js';
 import {validateApplicationShell} from '../src/application-shell.js';
 const engine=process.env.BROWSER_ENGINE??'chromium',output=resolve(process.argv[2]??'test-results/application-shell'),languages=(process.env.DC_SHELL_LANGUAGES??'python,go').split(',');
 if(languages.some(language=>!['python','go'].includes(language)))throw new Error('Unsupported shell generator');
-await mkdir(output,{recursive:true});const temp=await mkdtemp(resolve(tmpdir(),'application-shell-')),manifests=new Map(),checks=[],errors=[],failedRequests=[];let requestPhase='exercise';
+await mkdir(output,{recursive:true});const temp=await mkdtemp(resolve(tmpdir(),'application-shell-')),manifests=new Map(),checks=[],errors=[],failedRequests=[];let requestPhase='exercise';const walletCases=[],conversionCalls=[];let dropExecuteReply=false,lostExecuteReplies=0,holdWalletReply=false,releaseWalletReply,walletReplyCaptured;
 const x=fixture();x.open('common');x.open('rare');let actor={...x.alice,role:'admin'},api,hostOrigin,browser,holdExecute=false,releaseExecute,capabilitiesOverride;
+const convert=x.core.convert.bind(x.core);x.core.convert=(principal,input)=>{const result=convert(principal,input);conversionCalls.push({userId:principal.userId,input:structuredClone(input),result:structuredClone(result)});return result;};
 const capabilities=x.core.capabilities.bind(x.core);x.core.capabilities=(...args)=>capabilitiesOverride??capabilities(...args);
 const programServer=createServer(async(req,res)=>{try{
   for(const [key,value]of Object.entries(programHeaders(hostOrigin)))res.setHeader(key,value);res.setHeader('access-control-allow-origin','*');
@@ -24,6 +25,12 @@ const programServer=createServer(async(req,res)=>{try{
 }catch{res.writeHead(500).end();}});
 const hostServer=createServer(async(req,res)=>{try{
   if(holdExecute&&req.url==='/api/command-intents/execute')await new Promise(resolve=>releaseExecute=resolve);
+  if(dropExecuteReply&&req.url==='/api/command-intents/execute'){
+    dropExecuteReply=false;res.end=()=>{lostExecuteReplies++;res.destroy();return res;};
+  }
+  if(holdWalletReply&&req.url==='/api/wallet'){
+    holdWalletReply=false;const end=res.end.bind(res);res.end=(...args)=>{releaseWalletReply=()=>end(...args);walletReplyCaptured?.();return res;};
+  }
   if(await api?.(req,res))return;
   const path=new URL(req.url,'http://localhost').pathname;
   if(manifests.has(path)){res.setHeader('content-type','application/json');res.end(JSON.stringify(manifests.get(path)));return;}
@@ -84,10 +91,46 @@ try{
     assert.deepEqual(mismatches,[]);
     const regions=await page.locator('#root [data-dc-shell] [data-dc-region]').evaluateAll(nodes=>nodes.map(node=>node.dataset.dcRegion));assert.deepEqual(regions,expected.filter(node=>node.name).map(node=>node.name));
   }
+  const currencies=x.core.catalog().currencies,formatWallet=new Intl.NumberFormat('en',{maximumFractionDigits:20});
+  async function assertNativeWallet(principal){
+    const expected=currencies.map(currency=>({name:currency.name,amount:formatWallet.format(x.core.wallet(principal)[currency.id]??0)}));
+    assert.deepEqual(await page.locator('#root .dc-wallet-grid .dc-balance').evaluateAll(items=>items.map(item=>({name:item.querySelector('span').textContent,amount:item.querySelector('strong').textContent}))),expected);
+    assert.deepEqual(await page.locator('#root [data-dc-region="balances"] > div').evaluateAll(items=>items.map(item=>({name:item.querySelector('span').textContent,amount:item.querySelector('strong').textContent}))),expected);
+    assert.equal(await page.locator('#root [data-dc-region="account"] > strong').textContent(),x.core.me(principal).displayName);
+  }
+  async function captureWalletRefresh(){
+    let timer;const captured=new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Wallet reply was not captured')),15000);walletReplyCaptured=()=>{clearTimeout(timer);resolve();};});
+    holdWalletReply=true;releaseWalletReply=undefined;
+    await page.evaluate(()=>{shellTest.walletRefresh=shellTest.app.refresh();});
+    try{await captured;}finally{clearTimeout(timer);walletReplyCaptured=undefined;}
+    assert.equal(typeof releaseWalletReply,'function');
+  }
+  async function qualifyWalletConversion(url){
+    requestPhase='wallet-conversion '+url.split('/').at(-1);
+    await navigate('wallet');await assertNativeWallet(x.alice);const bobBefore=structuredClone(x.core.wallet(x.bob));
+    await captureWalletRefresh();actor={...x.bob,role:'admin'};await page.evaluate(()=>shellTest.app.refresh());await assertNativeWallet(x.bob);
+    releaseWalletReply();await page.evaluate(()=>shellTest.walletRefresh);await assertNativeWallet(x.bob);
+    actor={...x.alice,role:'admin'};await page.evaluate(()=>shellTest.app.refresh());await assertNativeWallet(x.alice);
+    const before=structuredClone(x.core.wallet(x.alice)),eventCount=()=>x.core.events({role:'admin'},{limit:1000}).filter(event=>event.type==='currency.converted').length,eventsBefore=eventCount(),callsBefore=conversionCalls.length,lostBefore=lostExecuteReplies;
+    const chooseConversion=async()=>{await page.getByLabel('Amount to spend',{exact:true}).fill('300');await page.getByLabel('From',{exact:true}).selectOption('credits');await page.getByLabel('To',{exact:true}).selectOption('gems');};
+    await chooseConversion();dropExecuteReply=true;await page.getByRole('button',{name:'Convert currencies',exact:true}).click();await page.locator('#root .dc-status.dc-error').waitFor();await page.waitForFunction(()=>!document.querySelector('#root').hasAttribute('aria-busy'));
+    assert.equal(lostExecuteReplies,lostBefore+1);assert.equal(x.core.wallet(x.alice).credits,before.credits-300);assert.equal(x.core.wallet(x.alice).gems,(before.gems??0)+3);assert.equal(eventCount(),eventsBefore+1);
+    const original=conversionCalls[callsBefore],pending=x.core.commandIntents(actor,{command:'convert'}).items;assert.equal(pending.length,1);assert.equal(pending[0].input.key,original.input.key);assert.equal(pending[0].state,'completed');
+    await page.evaluate(()=>shellTest.app.refresh());await recovery.getByRole('button',{name:'Recover currency conversion',exact:true}).click();await recovery.getByRole('button',{name:'Recover currency conversion',exact:true}).waitFor({state:'detached'});await page.waitForFunction(()=>!document.querySelector('#root').hasAttribute('aria-busy'));
+    assert.equal(eventCount(),eventsBefore+1);assert.equal(x.core.wallet(x.alice).credits,before.credits-300);assert.equal(new Set(conversionCalls.slice(callsBefore).map(call=>call.input.key)).size,1);assert(conversionCalls.slice(callsBefore).every(call=>call.result.id===original.result.id));await assertNativeWallet(x.alice);
+    await chooseConversion();await page.getByRole('button',{name:'Convert currencies',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#root').hasAttribute('aria-busy')&&document.querySelector('#root .dc-status').classList.contains('is-success'));
+    assert.equal(eventCount(),eventsBefore+2);assert.equal(x.core.wallet(x.alice).credits,before.credits-600);assert.equal(x.core.wallet(x.alice).gems,(before.gems??0)+6);const repeated=conversionCalls.at(-1);assert.notEqual(repeated.input.key,original.input.key);assert.notEqual(repeated.result.id,original.result.id);assert.deepEqual({...repeated.input,key:original.input.key},original.input);assert.deepEqual(x.core.wallet(x.bob),bobBefore);await assertNativeWallet(x.alice);
+    await captureWalletRefresh();await page.evaluate(()=>shellTest.app.dispose());assert.equal(await page.locator('#root').evaluate(root=>root.childElementCount),0);actor={...x.bob,role:'admin'};
+    await page.evaluate(async url=>{shellTest.app=shellTest.mountFramework(document.querySelector('#root'),{...shellTest.options,shell:shellTest.loadApplicationShell(url)});await shellTest.app.ready;await shellTest.app.shellReady;},url);await navigate('wallet');await assertNativeWallet(x.bob);
+    releaseWalletReply();await page.evaluate(()=>shellTest.walletRefresh);await assertNativeWallet(x.bob);actor={...x.alice,role:'admin'};await page.evaluate(()=>shellTest.app.refresh());await assertNativeWallet(x.alice);
+    walletCases.push({manifest:url.split('/').at(-1),principalSwitch:true,staleWalletReplyIgnored:true,lostReplyRecovered:true,oneRecoveredConversion:true,deliberateSecondConversion:true,bobWalletUnchanged:true,disposeRemount:true});
+    checks.push(url.split('/').at(-1)+': actual native wallet/current-principal privacy, stale reply fencing, dropped HTTP conversion reply/original intent recovery with one debit, deliberate second conversion, dispose/remount');requestPhase='exercise';
+  }
   for(const [url,manifest]of manifests){
     await page.evaluate(async url=>{await shellTest.app.setShell(shellTest.loadApplicationShell(url));},url);
     assert.equal(await page.locator('#root [data-dc-shell]').count(),1);assert.equal(await page.locator('#root [data-dc-region="overlays"]').evaluate(node=>node.parentElement.id),'root');
     await assertTopology(manifest,false);
+    await qualifyWalletConversion(url);
     await navigate('collection');const frame=page.locator('#root dc-program-collection').frameLocator('iframe');
     const inspectInvoker=await frame.locator('[data-dc-item-inspect]').first().elementHandle();assert(inspectInvoker);await inspectInvoker.click();const inspector=page.locator('#root dialog.dc-inspector-dialog');await inspector.waitFor();assert(await inspector.evaluate(node=>node.open&&node.matches(':modal')));await inspector.press('Escape');await inspector.waitFor({state:'hidden'});await waitForInvokerFocus(inspectInvoker,'#root dialog.dc-inspector-dialog');
     for(let index=0;index<2;index++)await frame.locator('[data-dc-item-select]').nth(index).check();await frame.locator('[data-dc-collection-intent="compare"]').click();await inspector.waitFor();assert(await inspector.evaluate(node=>node.matches(':modal')));await inspector.press('Escape');
@@ -111,6 +154,6 @@ try{
   requestPhase='remount';
   await page.evaluate(async()=>{shellTest.remount=shellTest.mountFramework(document.querySelector('#root'),{client:shellTest.client,sections:['collection','wallet'],navigation:'sections',shell:shellTest.loadApplicationShell('/examples/application-shell/python-rail.json')});await shellTest.remount.ready;await shellTest.remount.shellReady;});assert.equal(await page.locator('#root [data-dc-region="account"]').isVisible(),false);assert.equal(await page.locator('#root .dc-content > section').count(),1);await page.evaluate(()=>shellTest.remount.dispose());
   checks.push('Native admin dirty leave cancellation/approval, two independent instances/styles, invalid fallback recovery, late account fencing, capability active fallback, sections mode, remount/dispose/lang/dir cleanup');assert.deepEqual(errors,[]);
-  await writeFile(resolve(output,'report.json'),JSON.stringify({engine,languages,checks,errors},null,2)+'\n');console.log(JSON.stringify({engine,languages,checks},null,2));
+  await writeFile(resolve(output,'report.json'),JSON.stringify({engine,languages,checks,walletCases,errors},null,2)+'\n');console.log(JSON.stringify({engine,languages,checks,walletCases},null,2));
 }catch(error){console.error({failedRequests});console.error(await browser?.contexts()[0]?.pages()[0]?.evaluate(()=>({status:document.querySelector('[role="status"]')?.textContent,active:document.querySelector('[aria-current="page"]')?.dataset.view,diagnostics:window.shellTest?.diagnostics,snapshot:window.shellTest?.lastSnapshot,intent:window.shellTest?.lastIntent})).catch(()=>null));throw error;}
-finally{holdExecute=false;releaseExecute?.();await browser?.close();x.core.close();for(const server of [hostServer,programServer]){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await rm(temp,{recursive:true,force:true});}
+finally{holdExecute=false;releaseExecute?.();releaseWalletReply?.();await browser?.close();x.core.close();for(const server of [hostServer,programServer]){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await rm(temp,{recursive:true,force:true});}

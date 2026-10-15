@@ -242,6 +242,27 @@ test('the reference conversion control executes a deliberate repeated amount twi
   }finally{mounted?.dispose();x.close();}
 });
 
+for(const boundary of ['remount','account switch'])for(const lostReply of [false,true])test('native conversion distinguishes '+(lostReply?'uncertain recovery':'confirmed repetition')+' after '+boundary,async()=>{
+  const window=new Window({url:'http://localhost/'}),x=fixture();globalThis.document=window.document;globalThis.sessionStorage=window.sessionStorage;
+  let actor=x.alice,key=0,lose=lostReply,app;const executions=[],root=document.createElement('main');document.body.append(root);
+  const client={requestKey:()=>`conversion-${++key}`,principal:()=>actor.userId,me:async()=>x.core.me(actor),catalog:async()=>x.core.catalog(actor)};
+  for(const name of ['wallet','packs','inventory','albums','trades','commandIntents','registerCommandIntent','acknowledgeCommandIntent'])client[name]=async input=>x.core[name](actor,input);
+  client.executeCommandIntent=async input=>{const response=x.core.executeCommandIntent(actor,input);executions.push(structuredClone(response));if(lose){lose=false;throw new Error('Committed conversion response lost');}return response;};
+  const mount=async()=>{app=mountFramework(root,{client,sections:['wallet']});await app.ready;};
+  const submit=async()=>{field(root,'Amount to spend').value='300';field(root,'From').value='credits';field(root,'To').value='gems';click(root,'Convert currencies');await settle();};
+  try{
+    await mount();await submit();assert.equal(x.core.wallet(x.alice).credits,9700);assert.equal(x.core.wallet(x.alice).gems,3);const original=executions[0];assert(original);
+    if(lostReply)assert(root.querySelector('.dc-status.dc-error'));else assert(root.querySelector('.dc-status.is-success'));
+    if(boundary==='remount'){app.dispose();await mount();}
+    else{actor=x.bob;await app.refresh();assert.equal(root.querySelector('.dc-balance strong').textContent,'10,000');actor=x.alice;await app.refresh();}
+    if(lostReply){
+      await submit();assert.equal(x.core.wallet(x.alice).credits,9700);assert.equal(x.core.wallet(x.alice).gems,3);assert.equal(executions.at(-1).intent.input.key,original.intent.input.key);assert.deepEqual(executions.at(-1).result,original.result);
+    }
+    await submit();assert.equal(x.core.wallet(x.alice).credits,9400);assert.equal(x.core.wallet(x.alice).gems,6);assert.notEqual(executions.at(-1).intent.input.key,original.intent.input.key);assert.notEqual(executions.at(-1).result.id,original.result.id);
+    assert.equal(x.core.events({role:'admin'}).filter(event=>event.type==='currency.converted').length,2);assert.equal(x.core.wallet(x.bob).credits,10000);
+  }finally{app?.dispose();x.core.close();await window.happyDOM.abort();delete globalThis.document;delete globalThis.sessionStorage;}
+});
+
 test('new card form previews without mutation and publishes a selectable artwork destination',async()=>{
  const x=setup();let mounted;try{
   let previews=0,commits=0;const actor={role:'admin'},before=x.core.catalog().cards.length;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add TypeScript interfaces for admin and Studio lifecycles, the presentation entry point and the exported HTTP contract document; preserve concrete player view inference when mounting presentations.
+
 - Tighten marketplace session types for state, command execution, editable drafts and guarded action results.
 
 - Preserve required command fields in TypeScript inputs while keeping retry keys optional; add inspector and activity view interfaces.

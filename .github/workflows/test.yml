@@ -78,6 +78,14 @@ jobs:
       - run: node test/csharp-conformance.mjs
         env:
           DOTNET: dotnet
+      - run: rustup toolchain install 1.99.0 --profile minimal --no-self-update
+      - run: cargo fetch --locked --manifest-path examples/plugins/rust-conformance/Cargo.toml
+        env:
+          RUSTUP_TOOLCHAIN: '1.99.0'
+      - run: node test/rust-conformance.mjs
+        env:
+          CARGO: cargo
+          RUSTUP_TOOLCHAIN: '1.99.0'
       - run: node --test test/editor-panel-examples.mjs
         env:
           PYTHON: python3

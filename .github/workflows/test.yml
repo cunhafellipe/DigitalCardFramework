@@ -38,6 +38,7 @@ jobs:
       - run: node examples/shops.mjs
       - run: node examples/raffles.mjs
       - run: docker build --tag digital-card-framework:ci .
+      - run: node test/container-smoke.mjs
   receivers:
     runs-on: ubuntu-latest
     steps:
@@ -224,6 +225,7 @@ jobs:
           BROWSER_ENGINE: ${{ matrix.engine }}
           DC_ART_LANGUAGE: go
       - run: xvfb-run --auto-servernum node test/presentation-host-browser.mjs --recipe test-results/presentation-host-recipe
+      - run: xvfb-run --auto-servernum node test/presentation-host-browser.mjs --typography test-results/presentation-host-typography
         env:
           HEADED: '1'
           BROWSER_ENGINE: ${{ matrix.engine }}

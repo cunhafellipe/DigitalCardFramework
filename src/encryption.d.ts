@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import type {Buffer} from 'node:buffer';
 import type {ActionJson} from './action-contracts.js';
 

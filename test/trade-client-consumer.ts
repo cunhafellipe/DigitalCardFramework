@@ -79,3 +79,33 @@ createTradingSession({me:{userId:'account'},catalog:{currencies:[]}});
 // @ts-expect-error Status text expects a string status.
 tradeStatusText({status:3},tradingContext.localization);
 void [tradingRole,sameTradingClient,tradingEnabled,tradingCurrent,tradingBusy,tradingGeneration,tradingPrivate,tradingCounter,tradingError,tradingDiagnosticCode,removedTrading,tradingDirectoryLoad,tradingDirectoryName,tradingEligible,mayDecline,mayCounter,tradingRun,statusText,optionalTradingDraft,requiredTradingDraft,requiredTradingRecipient,immediateTradingRun,guaranteedTradingRun];
+
+import {renderTrading,type TradingView,type TradingUIRenderingContext} from '@digital-card/framework/trading-ui';
+const nativeTradingView:TradingView=renderTrading(tradingModel,tradingContext);
+const nativeTradingNode:HTMLElement=nativeTradingView.node;
+document.body.append(nativeTradingNode);
+const nativeTradingDispose:void=nativeTradingView.dispose();
+renderTrading(tradingModel,tradingContext,null).dispose();
+renderTrading(tradingModel,{...tradingContext,client:{directory:tradingContext.client.directory,tradeInventory:tradingContext.client.tradeInventory}}).dispose();
+const sharedTradingRendering:TradingUIRenderingContext<typeof tradingModel>={
+  locale:'en',messages:{'trades.title':'Trading'},
+  cardRenderer(copy,options){const id:string=copy.id;const interactive:false=options.interactive;options.onSelect(copy);const locale:string=options.localization.locale;void [id,interactive,locale];return document.createElement('article');},
+  inspect(copy){const id:string=copy.id;void id;},
+};
+const sharedTradingView:TradingView=renderTrading(tradingModel,sharedTradingRendering,tradingSession);
+sharedTradingView.dispose();
+// @ts-expect-error Native trading models provide the offer list.
+renderTrading({me:tradingModel.me,catalog:tradingModel.catalog},tradingContext);
+// @ts-expect-error Native currency displays require a currency name.
+renderTrading({me:tradingModel.me,catalog:{features:{},currencies:[{id:'credits'}]},trades:[]},tradingContext);
+// @ts-expect-error Creating an owned session requires its host dependencies.
+renderTrading(tradingModel,sharedTradingRendering);
+// @ts-expect-error The view synchronously returns a lifecycle object, not a DOM element.
+const bareTradingNode:HTMLElement=renderTrading(tradingModel,tradingContext);
+// @ts-expect-error A trading view is not asynchronous.
+const promisedTradingView:Promise<TradingView>=renderTrading(tradingModel,tradingContext);
+// @ts-expect-error Card renderers return elements or disposable node wrappers.
+renderTrading(tradingModel,{...tradingContext,cardRenderer:()=> 'card'});
+// @ts-expect-error Shared sessions need their subscription and review lifecycle.
+renderTrading(tradingModel,sharedTradingRendering,{draft:tradingSession.draft});
+void [nativeTradingNode,nativeTradingDispose,sharedTradingView,bareTradingNode,promisedTradingView];

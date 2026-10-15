@@ -1,5 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
 import { fixture, admin, code } from "./helpers.js";
 import {
   resolveCardPolicy,
@@ -21,8 +27,13 @@ import {
   applyMask,
   configureAuthoring,
   setStat,
+  addStatBlock,
 } from "../src/presentation/authoring-tools.js";
-import { layoutText } from "../src/presentation/text.js";
+import { layoutText, accessibleText } from "../src/presentation/text.js";
+import { importPackage, browserResolver } from "../src/presentation/package.js";
+import { SQLiteStore } from "../src/sqlite.js";
+import { createApiHandler } from "../src/http.js";
+import { createAuthoring } from "../src/presentation/authoring.js";
 import { redactGovernedCard } from "../src/card-policy-service.js";
 import { contentDigest } from "../src/importer.js";
 
@@ -377,6 +388,107 @@ test("publication retries preserve policy evidence and private stat snapshots", 
   const publicView = x.core.viewAlbum(null, album.id);
   assert(!JSON.stringify(publicView).includes("owner value"));
   assert(!JSON.stringify(publicView).includes("operator value"));
+});
+test("public packages exclude private values from scenes, accessibility and cached posters", async (t) => {
+  const project = createProject(await build(presentationFixture())),
+    { core } = fixture(),
+    privateValues = ["owner-projection-sentinel-73", "operator-projection-sentinel-91"];
+  t.after(() => core.close());
+  configureAuthoring(project, { policy: { defaults: {}, fields: [
+    { key: "public", label: "Public", type: "string" },
+    { key: "owner", label: "Owner", type: "string", visibility: "owner" },
+    { key: "operator", label: "Operator", type: "string", visibility: "operator" },
+  ] } });
+  setStat(project, "public", "Visible projection");
+  setStat(project, "owner", privateValues[0]);
+  setStat(project, "operator", privateValues[1]);
+  addStatBlock(project, "front", ["public"]);
+  const source = project.serialize();
+  for (const key of ["owner", "operator"]) {
+    assert.throws(() => addStatBlock(project, "front", [key]), (error) => error.code === "STAT");
+    assert.deepEqual(project.serialize(), source);
+  }
+  const retained = await project.export({ retainSources: true }),
+    before = core.cardPolicies(admin);
+  for (const value of privateValues) assert(Buffer.from(retained.files.get("card.json")).includes(value));
+  await assert.rejects(core.registerCardPresentation(admin, retained.archive), code("PRIVATE_SNAPSHOT"));
+  assert.deepEqual(core.cardPolicies(admin), before);
+  const pkg = await importPackage((await project.export()).archive),
+    resolver = browserResolver(pkg),
+    assertPublic = (value) => {
+      const bytes = value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(JSON.stringify(value));
+      for (const secret of privateValues) assert(!bytes.includes(secret));
+    };
+  t.after(() => resolver.dispose());
+  assertPublic(pkg.manifest);
+  assert.deepEqual({ ...pkg.manifest.authoring.values.card }, { public: "Visible projection" });
+  assert.deepEqual(pkg.manifest.authoring.fields.map((field) => field.key), ["public"]);
+  for (const scene of pkg.scenes.values()) assertPublic(scene);
+  for (const face of Object.values(pkg.manifest.faces)) {
+    const label = face.description + ". " + accessibleText(pkg.manifest, pkg.scenes.get(face.scene));
+    assertPublic(label);
+    if (face === pkg.manifest.faces.front) assert.match(label, /Visible projection/);
+    const poster = await resolver.asset(face.poster);
+    assert.deepEqual(await resolver.asset(face.poster), poster);
+    assertPublic(poster);
+    assertPublic(new Uint8Array(await (await fetch(poster.url)).arrayBuffer()));
+  }
+  for (const bytes of pkg.files.values()) assertPublic(bytes);
+  assert.equal(resolver.diagnostics().objectURLs, 2);
+  resolver.dispose();
+  assert.equal(resolver.diagnostics().objectURLs, 0);
+  await assert.rejects(resolver.asset(pkg.manifest.faces.front.poster), (error) => error.code === "DISPOSED");
+  assert.equal((await core.registerCardPresentation(admin, (await project.export()).archive)).digest, pkg.digest);
+  assert.deepEqual(project.serialize(), source);
+});
+test("the same invalid governed card rejects through import, HTTP, content CLI and extension publication", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "governed-routes-")),
+    database = join(directory, "cards.sqlite"),
+    encryptionKey = Buffer.alloc(32, 73),
+    store = new SQLiteStore(database, { encryptionKey }),
+    { core, alice } = fixture({ store });
+  t.after(() => { core.close(); rmSync(directory, { recursive: true, force: true }); });
+  activate(core, document({ fields: [
+    { key: "public", label: "Public", type: "integer", maximum: 10 },
+    { key: "owner", label: "Owner", type: "string", visibility: "owner" },
+  ] }));
+  const base = core.operatorCatalog(admin),
+    invalid = { ...base.cards[0], stats: { public: 11, owner: "owner-route-sentinel-73" } },
+    source = { cards: [invalid] },
+    input = { source, expectedVersion: base.version },
+    before = store.read((state) => state),
+    manifest = { ...base, version: base.version + 1, cards: base.cards.map((card) => card.id === invalid.id ? invalid : card) };
+  assert.throws(() => core.previewImport(admin, input), code("CARD_POLICY"));
+  assert.throws(() => core.publishCatalog(admin, manifest), code("CARD_POLICY"));
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = "http://127.0.0.1:" + server.address().port;
+  server.on("request", createApiHandler({ framework: core, resolveIdentity: () => ({ ...admin, userId: alice.userId }), allowedOrigin: origin, exposeOperators: true }));
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const response = await fetch(origin + "/api/operator/import/preview", { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, "CARD_POLICY");
+  const file = join(directory, "invalid.json");
+  writeFileSync(file, JSON.stringify(source));
+  for (const command of ["preview", "apply"]) {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL("../tools/content.js", import.meta.url)), command, "--database", database, "--file", file], {
+      encoding: "utf8", env: { ...process.env, STATE_ENCRYPTION_KEY: encryptionKey.toString("hex"), STATE_ENCRYPTION_KEY_FILE: "" },
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /CARD_POLICY/);
+  }
+  const art = presentationFixture();
+  art.manifest.id = invalid.id;
+  const pkg = await build(art);
+  let published = 0, committed = 0;
+  const extension = createAuthoring({ validateCatalog: (candidate) => core.previewImport(admin, { source: candidate, mode: "replace", expectedVersion: base.version }),
+    publish: async () => { published++; throw new Error("Unexpected publication"); },
+    commitCatalog: async () => { committed++; throw new Error("Unexpected commit"); } });
+  await assert.rejects(extension.publishPack({ cards: [{ id: invalid.id, source: { format: "dcard", bytes: pkg.archive } }], catalog: manifest, key: "invalid-extension" }), code("CARD_POLICY"));
+  assert.equal(published, 0);
+  assert.equal(committed, 0);
+  assert.deepEqual(store.read((state) => state), before);
 });
 test("a template name alone cannot satisfy protected geometry or mask requirements", () => {
   const policy = resolveCardPolicy(

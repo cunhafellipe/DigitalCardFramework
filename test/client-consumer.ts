@@ -274,11 +274,10 @@ const policyAdmin:CardPolicyAdmin=mountCardPolicyAdmin(cardPolicyRoot,{client,lo
 const policyAdminReady:Promise<void|string>=policyAdmin.ready;
 policyAdmin.ready.then(result=>{if(typeof result==='string'){const errorMessage:string=result;void errorMessage;}});
 policyAdmin.dispose();
-// @ts-expect-error A narrowed marketplace client needs a supplied command runner.
+// @ts-expect-error A read client alone does not supply the marketplace command path.
 renderMarketplace(marketplaceUIModel,{client:marketplaceClientSubset});
 // @ts-expect-error Marketplace listing renderers return DOM nodes or node wrappers.
 renderMarketplace(marketplaceUIModel,{client,listingRenderer:()=> 'listing'});
-// @ts-expect-error Custom shared sessions may carry a non-void readiness result.
 const narrowedSharedMarketplaceReady:Promise<void>=sharedMarketplaceView.ready;
 // @ts-expect-error Marketplace returns its lifecycle object synchronously.
 const promisedMarketplace:Promise<MarketplaceUIView>=renderMarketplace(marketplaceUIModel,marketplaceUIContext);
@@ -307,7 +306,8 @@ if('node' in studioResult){document.body.append(studioResult.node);const studioD
 else {const explanation:HTMLElement=studioResult;document.body.append(explanation);}
 const deniedStudioResult=renderStudio({...studioModel,me:{userId:'viewer',role:'player',permissions:[]}},studioContext);
 if(!('node' in deniedStudioResult)){const explanation:HTMLElement=deniedStudioResult;void explanation;}
-const committedStudio:Promise<UIConsumerSchemas['ImportReceipt']>=studioContext.mutate('commitImport',{manifest:marketplaceUIModel.catalog,digest:'sha256:example',expectedVersion:1});
+declare const studioImportManifest:UIConsumerSchemas['CatalogManifest'];
+const committedStudio:Promise<UIConsumerSchemas['ImportReceipt']>=studioContext.mutate('commitImport',{manifest:studioImportManifest,digest:'sha256:example',expectedVersion:1});
 // @ts-expect-error Permission checks can return an explanatory element without a disposable view.
 const alwaysDisposableStudio:StudioView=renderStudio(studioModel,studioContext);
 // @ts-expect-error Studio shell exposes no readiness promise on either return shape.
@@ -319,5 +319,5 @@ renderStudio(studioModel,{...studioContext,cardRenderer:()=>({node:document.crea
 // @ts-expect-error Embedded visual studio needs policy and library client methods too.
 renderStudio(studioModel,{...studioContext,client:{operatorCatalog:client.operatorCatalog,previewImport:client.previewImport,commitImport:client.commitImport}});
 // @ts-expect-error Catalog publication retains the checked expected revision.
-studioContext.mutate('commitImport',{manifest:marketplaceUIModel.catalog,digest:'sha256:example'});
+studioContext.mutate('commitImport',{manifest:studioImportManifest,digest:'sha256:example'});
 void [studioResult,deniedStudioResult,committedStudio,alwaysDisposableStudio,promisedStudio];

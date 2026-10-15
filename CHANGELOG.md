@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tighten marketplace session types for state, command execution, editable drafts and guarded action results.
+
 - Preserve required command fields in TypeScript inputs while keeping retry keys optional; add inspector and activity view interfaces.
 
 - Preserve host control focus when selecting embedded card or pack artwork with the mouse; keyboard activation remains supported.

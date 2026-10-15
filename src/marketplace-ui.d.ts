@@ -1,7 +1,7 @@
-import type {Client, CommandRunner} from './client.js';
+import type {Client} from './client.js';
 import type {Schemas} from './wire-types.js';
 import type {Localization, LocalizationMessages} from './localization.js';
-import type {MarketplaceModel, MarketplaceSession} from './marketplace-session.js';
+import type {MarketplaceModel, MarketplaceSession, MarketplaceClient, MarketplaceListingRenderer as SessionListingRenderer, MarketplaceListingTarget, MarketplaceContext} from './marketplace-session.js';
 
 export interface MarketplaceLocalizationOptions {
   locale?: string; messages?: LocalizationMessages; localization?: Localization;
@@ -27,35 +27,16 @@ export interface MarketplaceUIModel extends Omit<MarketplaceModel, 'inventory' |
   inventory: Schemas['InventoryCopy'][];
   packs: Schemas['PackView'][];
 }
-export type MarketplaceUIClient = Pick<Client,
-  'listings' | 'orders' | 'shops' | 'commerceSettings' | 'configureCommerce' | 'quoteListing' |
-  'quoteMintPackStock' | 'stockAllocationStatus' | 'acknowledgeAllocation' | 'raffleStatus' | 'requestKey'> &
-  Partial<Pick<Client, 'principal'>>;
-export type MarketplacePurchaseTarget = Pick<Schemas['ListingRecord'], 'id'> & Partial<Pick<Schemas['ListingRecord'], 'kind'>>;
-export type MarketplaceListingRenderer = (listing: Schemas['ListingRecord'], options: {
-  purchase(listing: MarketplacePurchaseTarget, options?: {newPurchase?: boolean}): ReturnType<MarketplaceSession['purchase']>;
-  defaultRenderer(listing: Schemas['ListingRecord']): HTMLElement;
-  client: MarketplaceUIClient | undefined;
-  localization: Localization;
-}) => (HTMLElement & {dispose?(): void}) | {node: HTMLElement; dispose?(): void};
+export type MarketplaceUIClient = MarketplaceClient;
+export type MarketplacePurchaseTarget = MarketplaceListingTarget;
+export type MarketplaceListingRenderer = SessionListingRenderer;
 export interface MarketplaceRenderingContext {
   client?: MarketplaceUIClient;
   listingRenderer?: MarketplaceListingRenderer;
 }
-export interface MarketplaceHostOptions extends MarketplaceLocalizationOptions {
-  refresh?(): Promise<unknown>;
-  storage?: Storage;
-  getPrincipal?(): string | null;
-  isCurrentModel?(model: MarketplaceUIModel): boolean;
-  isActionBusy?(): boolean;
-  cardRenderer?(copy: Schemas['Copy'], options: {interactive: false; localization: Localization}):
-    (HTMLElement & {dispose?(): void}) | {node: HTMLElement; dispose?(): void};
-  listingRenderer?: MarketplaceListingRenderer;
-}
-/** A checked command runner can be supplied; otherwise the view creates one from the full client. */
-export type MarketplaceUIContext = MarketplaceHostOptions & (
-  {client: Client; mutate?: CommandRunner} | {client: MarketplaceUIClient; mutate: CommandRunner}
-);
+export interface MarketplaceHostOptions extends Omit<MarketplaceContext<MarketplaceUIModel>, 'client' | 'mutate'> {}
+/** Command execution uses a host runner, direct write methods, or the complete recovery transport. */
+export type MarketplaceUIContext = MarketplaceContext<MarketplaceUIModel>;
 export function renderMarketplace(model: MarketplaceUIModel, context: MarketplaceUIContext, sharedSession?: null): MarketplaceUIView;
 /** Disposing this view preserves the supplied session; ready passes through its readiness result. */
 export function renderMarketplace<S extends MarketplaceSession>(model: {catalog: {currencies: {id: string; name: string}[]}}, context: MarketplaceRenderingContext, sharedSession: S): MarketplaceUIView<Awaited<S['ready']>>;

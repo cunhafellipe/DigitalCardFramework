@@ -181,3 +181,67 @@ void runner.recover('consumeBinding',{copyId:'copy'});
 // @ts-expect-error Union inputs require one complete command member.
 const incompleteIndexedUnion:CheckedCommandInput<'consumeBinding'|'readNotifications'>={copyId:'copy'};
 void [indexedBindingWithoutKey,indexedBindingWithKey,indexedRead,indexedUnion,incompleteIndexedUnion];
+
+import {renderCollection,renderAlbums,type CollectionModel,type CollectionContext,type AlbumsContext,type AlbumsView} from '@digital-card/framework/collection-ui';
+import {renderShop,shopProductInformation,type ShopModel,type ShopProduct,type ShopContext,type ShopView} from '@digital-card/framework/shop-ui';
+declare const collectionOwned:UIConsumerSchemas['InventoryCopy'] & {displayNote:string};
+const collectionModel:CollectionModel<typeof collectionOwned>={me:{preferences:{favoriteCopyIds:['copy'],wishlistCardIds:['card']}},inventory:[collectionOwned],catalog:{version:1,features:{cardTrading:true,tradeUps:true},lines:[{id:'sky',name:'Sky'}],rarities:[{id:'common',name:'Common',rank:1}],cards:[collectionOwned.definition],variants:[{id:'variant',cardId:'card',rarityId:'common',finish:'foil'}],recipes:[{id:'recipe',name:'Combine'}]}};
+const collectionContext:CollectionContext<typeof collectionOwned>={
+  cardRenderer(copy,options){const id:string=copy.id;const locale:string=options.localization.locale;options.onSelect(copy);void [id,locale];return document.createElement('article');},
+  inspect:copy=>{const name:string=copy.definition.name;void name;},
+  inspectTogether:copies=>{const originalNote:string|undefined=copies[0]?.displayNote;void originalNote;},
+  action:async(fn,options)=>{const message:string=options.message;void message;return fn();},mutate:runner,locale:'en',messages:{'collection.title':'Collection'},
+};
+const collectionNode:HTMLElement=renderCollection(collectionModel,collectionContext);
+const albumState:{selectedAlbumId?:string|null}={selectedAlbumId:null};
+const albumsContext:AlbumsContext<typeof collectionOwned>={
+  client,mutate:runner,action:collectionContext.action,state:albumState,inspect:copy=>{const id:string=copy.id;void id;},
+  cardRenderer:(copy,options)=>{const selected=options?.onSelect;selected?.(copy);return document.createElement('article');},
+  albumRenderer:(model,options)=>{const name:string=model.name;const id:string|undefined=model.cards[0]?.copy.id;const locale:string=options.localization.locale;const columns:number|undefined=model.layout.columns;const pageSize:number|undefined=model.layout.pageSize;const publicOwner:string|undefined=model.ownerName;void [name,id,locale,columns,pageSize,publicOwner];return {node:document.createElement('section'),dispose(){}};},
+  layouts:{custom:(model,options)=>{const count:number=model.cards.length;const locale:string=options.localization.locale;void [count,locale];return document.createElement('div');}},
+};
+const albumsModel={me:{userId:'collector',role:'player',permissions:[]},catalog:{features:{publicAlbums:true}},inventory:[collectionOwned],albums:[]};
+const albumsView:AlbumsView=renderAlbums(albumsModel,albumsContext);
+document.body.append(collectionNode,albumsView.node);albumsView.dispose();
+const savedAlbum:Promise<UIConsumerSchemas['AlbumRecord']>=albumsContext.mutate('saveAlbum',{name:'Journal',placements:[{copyId:collectionOwned.id}],layout:{pageSize:12}});
+// @ts-expect-error Collection card renderers return elements directly.
+renderCollection(collectionModel,{...collectionContext,cardRenderer:()=>({node:document.createElement('div')})});
+// @ts-expect-error Collection returns a raw element without a disposal wrapper.
+collectionNode.dispose();
+// @ts-expect-error Album UI requires the host album renderer.
+renderAlbums(albumsModel,{client,cardRenderer:albumsContext.cardRenderer,inspect:albumsContext.inspect,action:albumsContext.action,mutate:runner});
+// @ts-expect-error Album renderer results must contain DOM nodes.
+renderAlbums(albumsModel,{...albumsContext,albumRenderer:()=> 'album'});
+// @ts-expect-error Album save retains its required name.
+albumsContext.mutate('saveAlbum',{placements:[]});
+// @ts-expect-error Album editing exposes no readiness promise.
+albumsView.ready;
+
+const shopProduct:ShopProduct & {displayNote:string}={id:'starter',name:'Starter',lineId:'sky',displayNote:'Example',maxQuantity:10,price:{currencyId:'credits',amount:10},slots:[{count:1,pool:[{variantId:'variant',weight:1}]}],duplicatePolicy:{scope:'none',fallback:'allow'},allocationStrategy:{algorithm:'weighted-deck@4',version:4,deckScope:'purchase-slot'}};
+const shopModel:ShopModel<typeof shopProduct>={me:{userId:'collector'},wallet:{credits:100},pity:{starter:0},catalog:{products:[shopProduct],currencies:[{id:'credits',name:'Credits'}],lines:[{id:'sky',name:'Sky'}],rarities:[{id:'common',name:'Common'}],cards:[{id:'card',name:'Example'}],variants:[{id:'variant',cardId:'card',rarityId:'common'}]}};
+const shopContext:ShopContext<typeof shopModel>={client,mutate:runner,refresh:async()=>{},action:async(fn,options)=>{const result=await fn();const message:string=typeof options.message==='function'?options.message(result):options.message;const refreshAfter:boolean|undefined=options.refreshAfter;void [message,refreshAfter];return result;},getPrincipal:()=> 'collector',isCurrentModel:model=>model.me.userId==='collector',onPurchased:()=>{},
+  packArt(product,small,onSelect,preview,registerDispose){const note:string=product.displayNote;const compact:boolean=small;const absent:undefined=preview;registerDispose(()=>{});onSelect();void [note,compact,absent];return document.createElement('div');},
+};
+const nativeShop:ShopView=renderShop(shopModel,shopContext,{productId:'starter',quantity:2,forceReview:true});
+document.body.append(nativeShop.node);const shopDisposed:void=nativeShop.dispose();
+renderShop(shopModel,{...shopContext,client:{quote:client.quote}}).dispose();
+const productInformation=shopProductInformation(shopModel,shopProduct);
+const deckVersion:0|1|2|3|4=productInformation.deckVersion;
+const cardCount:number=productInformation.count;
+const rateSupply:number|null|undefined=productInformation.ratesGroups[0]?.rows[0]?.remaining;
+const publicRateLabel:string|undefined=productInformation.ratesGroups[0]?.rows[0]?.publicLabel;
+const rateNote:string=productInformation.explanation;
+shopProductInformation({catalog:{cards:shopModel.catalog.cards,variants:shopModel.catalog.variants,rarities:shopModel.catalog.rarities},pity:{}},{id:'starter',slots:shopProduct.slots,duplicatePolicy:shopProduct.duplicatePolicy});
+// @ts-expect-error Shop views return lifecycle objects synchronously.
+const promisedShop:Promise<ShopView>=renderShop(shopModel,shopContext);
+// @ts-expect-error Shop quantities use numbers.
+renderShop(shopModel,shopContext,{quantity:'2'});
+// @ts-expect-error Shop artwork adapters return appendable nodes or text.
+renderShop(shopModel,{...shopContext,packArt:()=>({node:document.createElement('div')})});
+// @ts-expect-error Native shop requires its host command path.
+renderShop(shopModel,{client,refresh:()=>{},action:shopContext.action});
+// @ts-expect-error Product disclosure needs slots and duplicate policy.
+shopProductInformation(shopModel,{id:'starter'});
+// @ts-expect-error Product rate weights remain numeric.
+const invalidShopProduct:ShopProduct={...shopProduct,slots:[{count:1,pool:[{variantId:'variant',weight:'1'}]}]};
+void [collectionNode,albumsView,savedAlbum,nativeShop,shopDisposed,deckVersion,cardCount,rateSupply,publicRateLabel,rateNote,promisedShop,invalidShopProduct];

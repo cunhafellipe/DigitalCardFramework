@@ -572,3 +572,16 @@ importPackage(packageZip,{entries:10});
 // @ts-expect-error Asset resolution accepts string IDs.
 browserResolver({} as ValidatedPackage).asset(1);
 void [packageCompressedLimit,packageCRC,packageEntries,packageImport,synchronousZip];
+
+import {externalPurchaseFingerprint, externalPurchaseId} from '../src/external-purchases.js';
+import type {ExternalPurchaseFingerprintInput} from '../src/external-purchases.js';
+const purchaseFingerprintInput:ExternalPurchaseFingerprintInput={providerId:'provider',transactionId:'transaction',userId:'collector',externalCurrency:'credits',externalUnits:'10',quote:{productId:'pack',quantity:1,productRevision:1,catalogVersion:1,adminRevision:0,price:{currencyId:'credits',amount:10}}};
+const purchaseFingerprint:string=externalPurchaseFingerprint(purchaseFingerprintInput);
+const stablePurchaseId:`ep_${string}`=externalPurchaseId('provider','transaction');
+// @ts-expect-error External units retain their exact decimal string representation.
+externalPurchaseFingerprint({...purchaseFingerprintInput,externalUnits:10});
+// @ts-expect-error Fingerprint normalization accepts the reviewed quote fields only.
+externalPurchaseFingerprint({...purchaseFingerprintInput,quote:{...purchaseFingerprintInput.quote,bindingActivation:{maximum:1}}});
+// @ts-expect-error Both provider transaction identifiers are required.
+externalPurchaseId('provider');
+void [purchaseFingerprint,stablePurchaseId];

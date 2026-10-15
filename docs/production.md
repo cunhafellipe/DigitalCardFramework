@@ -60,6 +60,12 @@ Storage schema 8 persists encrypted entity records and indexed identity, collect
 
 The server command-intent journal defaults to 100,000 retained intents (`limits.commandIntents`). Each registered input is bounded to 1 MiB and has reserved space for finalization and acknowledgement. Current recovery heads are indexed by account and command kind; discovery reads at most one head for each of the 22 supported command kinds. Completed and failed heads remain until explicit acknowledgement. Acknowledged records and original receipts remain retained, so reaching this limit rejects new registrations without deleting unresolved evidence. Previously admitted recovery and acknowledgement remain available within their completion reservations. Plan journal capacity before reaching the retained-intent limit.
 
+For a community deployment, plan at least 4 GiB of host RAM, with separate space for the database, WAL, artwork, staging and backups. This is sizing guidance, not a hard memory cap or a guarantee for arbitrary hardware.
+
+A measured Windows/Node 24.19 worker-backed burst at revision `e0a658c` started with 5,000 copies and 100 packs, served 20 concurrent readers requesting ten 200-item pages each, and admitted 30 purchases allocating 50 cards each at 20 ms intervals. With explicitly raised limits (6,500 copies, 2,500 copies per collector, 128 MiB ordinary payload and 512 MiB completion space), inventory and purchase p95 were approximately 2.8 and 3.6 seconds; sampled host-process RSS peaked near 1.49 GiB. All operations completed and their purchase receipts replayed after restart.
+
+These results describe one finite burst, not sustained throughput or a latency guarantee. Keep loading and original-request recovery controls available, monitor your actual workload, and do not assume a 512 MiB or 1 GiB container can support this profile.
+
 `node tools/benchmark.js` creates isolated temporary encrypted state, seeds 5 users/5,000 copies and exercises read/write/trade paths. Measure on your deployment hardware and include concurrent traffic and provider delays. Serial fixture timings do not establish a service SLA.
 
 ## Upgrade the state schema

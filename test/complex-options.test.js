@@ -137,7 +137,7 @@ test("album motion can be disabled, host driven, and validates limits before mou
     assert.throws(() => createAlbumMotion({ members: [{ id: "a", motion }] }));
 });
 
-for (const disposal of [1, 2, 3])
+for (const disposal of [0, 1, 2, 3])
   test(
     "transparent GIF compositing preserves disposal " +
       disposal +
@@ -154,7 +154,7 @@ for (const disposal of [1, 2, 3])
       assert.deepEqual(decoded[1], [255, 0, 0, 255, 0, 255, 0, 255]);
       assert.deepEqual(
         decoded[2],
-        disposal === 1
+        disposal <= 1
           ? decoded[1]
           : disposal === 2
             ? Array(8).fill(0)
@@ -171,10 +171,46 @@ for (const disposal of [1, 2, 3])
 test("GIF limits run before decoding; truncated, excessive and malformed input rejected", () => {
   const bytes = gifFixture();
   assert.equal(inspectGIF(bytes).frames, 3);
+  assert.deepEqual(inspectGIF(bytes, { frames: 3, pixels: 6, edge: 2 }), { width: 2, height: 1, frames: 3 });
   assert.throws(() => inspectGIF(bytes, { frames: 2 }), { code: "GIF_LIMIT" });
   assert.throws(() => inspectGIF(bytes, { pixels: 5 }), { code: "GIF_LIMIT" });
+  assert.throws(() => inspectGIF(bytes, { edge: 1 }), { code: "GIF_LIMIT" });
+  const plainText = Uint8Array.from([...bytes.subarray(0, 25), 33, 1, 12, ...Array(12).fill(0), 0, ...bytes.subarray(25)]);
+  assert.throws(() => inspectGIF(plainText), { code: "GIF", message: "Unsupported GIF extension; export raster frames" });
   for (let i = 0; i < bytes.length; i++)
     assert.throws(() => inspectGIF(bytes.subarray(0, i)));
+});
+
+test("GIF offset rectangles, local palettes and interlaced rows preserve exact pixels", async () => {
+  const localPalette = [0, 0, 0, 255, 255, 0, 0, 255, 255, 255, 0, 255], local = [1, 2, 3, 1, 2, 3, 1, 3];
+  const bytes = gifFramesFixture({ width: 3, height: 5, frames: [
+    { width: 1, height: 1, pixels: [1] },
+    { x: 1, y: 1, width: 2, height: 4, pixels: local, localPalette, interlaced: true },
+  ] });
+  const decoded = [];
+  const doc = await parseGIFSource(bytes, { encodeRGBA: async image => { decoded.push([...image.data]); return pngRGBA(image.width, image.height, image.data); } });
+  const expected = Array(3 * 5 * 4).fill(0); expected.splice(0, 4, 255, 0, 0, 255);
+  assert.deepEqual(decoded[0], expected);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 2; x++) expected.splice(((y + 1) * 3 + x + 1) * 4, 4, ...localPalette.slice(local[y * 2 + x] * 3, local[y * 2 + x] * 3 + 3), 255);
+  assert.deepEqual(decoded[1], expected);
+  const pkg = await layeredPackage(doc, { poster: doc.poster });
+  assert.equal(pkg.scenes.get(pkg.manifest.faces.front.scene).nodes[0].animation.frames.length, 2);
+});
+
+test("GIF opaque background disposal and delay rules preserve decoded frame terms", async () => {
+  const bytes = gifFramesFixture({ background: 3, frames: [
+    { width: 1, pixels: [1], transparentIndex: null, disposal: 2, delay: 0 },
+    { x: 1, width: 1, pixels: [2], transparentIndex: null, delay: 1 },
+    { width: 1, pixels: [1], control: false },
+  ] });
+  const decoded = [];
+  const doc = await parseGIFSource(bytes, { encodeRGBA: async image => { decoded.push([...image.data]); return pngRGBA(image.width, image.height, image.data); } });
+  assert.deepEqual(decoded, [
+    [255, 0, 0, 255, 0, 0, 255, 255],
+    [0, 0, 255, 255, 0, 255, 0, 255],
+    [255, 0, 0, 255, 0, 255, 0, 255],
+  ]);
+  assert.deepEqual(doc.layers[0].animation.frames.map(frame => frame.duration), [20, 20, 100]);
 });
 test("custom colored glitter and host effect recipes work on a single flat image", async () => {
   const api = createAuthoring({
@@ -206,7 +242,7 @@ test("custom colored glitter and host effect recipes work on a single flat image
   assert.throws(() => validateScene(scene, pkg.manifest));
 });
 
-import { gifFixture } from "./gif-fixture.mjs";
+import { gifFixture, gifFramesFixture } from "./gif-fixture.mjs";
 
 test("canvas-independent PNG encoder retains exact RGBA with and without CompressionStream", async () => {
   const saved = globalThis.CompressionStream;

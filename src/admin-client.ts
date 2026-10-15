@@ -29,7 +29,8 @@ export interface AdminController {
 }
 
 type AdminCommand='configureAdmin'|'administerCards';
-type StoredReview={command:AdminCommand;input:Operations[AdminCommand]['request']|Omit<Operations['configureAdmin']['request'],'key'>|Omit<Operations['administerCards']['request'],'key'>;title:string;description:string;changes:AdminReviewChange[]};
+type StoredReviewInput<T>=T extends object?Omit<T,'key'>&{key?:string}:never;
+type StoredReview<C extends AdminCommand=AdminCommand>=C extends AdminCommand?{command:C;input:StoredReviewInput<Operations[C]['request']>;title:string;description:string;changes:AdminReviewChange[]}:never;
 type Pending={command:AdminCommand;input:Operations[AdminCommand]['request'];review:StoredReview};
 type Storage=CommandStorage&Required<Pick<CommandStorage,'removeItem'>>;
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
@@ -40,7 +41,12 @@ const describeError = (error:unknown,fallback:string) => {const value=record(err
 const isCommand=(value:unknown):value is AdminCommand=>value==='configureAdmin'||value==='administerCards';
 
 /** A replaceable operator workflow. Namespace identifies the authenticated operator. */
-export function createAdminController({client,storage,namespace,localization=createLocalization()}:{client:Client;storage:Storage;namespace:string;localization?:Localization}):AdminController {
+export function createAdminController({client,storage,namespace,localization=createLocalization()}:{
+  client:Client;
+  /** Omitted storage permits construction; persistence reports unavailable storage. */
+  storage?:Storage;
+  namespace:string;localization?:Localization;
+}):AdminController {
   const t=(key:LocalizationKey,values?:Record<string,string|number>)=>localization.text(key,values);
   const errors=(error:unknown)=>describeError(error,t('admin.serverUnavailable'));
   if (!client || !namespace) throw new Error(t('admin.clientRequired'));
@@ -60,7 +66,7 @@ export function createAdminController({client,storage,namespace,localization=cre
       const reviewInput=validateWireRequest(saved.command,{...saved.review.input,key:input.key});
       if(canonical(reviewInput)!==canonical(input)) throw storageError();
       if(!saved.review.changes.every(change=>record(change)&&typeof change.label==='string'&&typeof change.before==='string'&&typeof change.after==='string')) throw storageError();
-      return {command:saved.command,input,review:{command:saved.command,input:reviewInput,title:saved.review.title,description:saved.review.description,changes:saved.review.changes as AdminReviewChange[]}};
+      return {command:saved.command,input,review:{command:saved.command,input:reviewInput,title:saved.review.title,description:saved.review.description,changes:saved.review.changes as AdminReviewChange[]} as StoredReview};
     } catch { throw storageError(); }
   }
   try { pending = readPending(); } catch {}
@@ -72,12 +78,12 @@ export function createAdminController({client,storage,namespace,localization=cre
       try {
         const value = JSON.stringify(pending);
         if (new TextEncoder().encode(value).byteLength > 1024*1024) throw storageError();
-        storage.setItem(storageKey,value);
-        if (storage.getItem(storageKey) !== value) throw storageError();
+        storage!.setItem(storageKey,value);
+        if (storage!.getItem(storageKey) !== value) throw storageError();
       } catch { throw storageError(); }
     } else {
       // A failed cleanup keeps the original identity available for safe replay.
-      try { if (readPending()?.input.key === clearKey) storage.removeItem(storageKey); } catch {}
+      try { if (readPending()?.input.key === clearKey) storage!.removeItem(storageKey); } catch {}
     }
   };
   async function load({keepReview = true}:{keepReview?:boolean} = {}) {
@@ -89,7 +95,7 @@ export function createAdminController({client,storage,namespace,localization=cre
       if(durable&&!pending){
         const recovered=await durable.recoverable();if(disposed||current!==generation)return;
         const intent=recovered.items.find(row=>isCommand(row.command)&&!(durable.pending(row.command)?._confirmed&&durable.pending(row.command)?.key===row.input.key));
-        if(intent&&isCommand(intent.command)){const review:StoredReview={command:intent.command,input:validateWireRequest(intent.command,copy(intent.input)),title:intent.command==='administerCards'?t('admin.recoverCardChange'):t('admin.recoverSettingsChange'),description:t('admin.recoverDescription'),changes:[{label:t('admin.savedCommand'),before:t('admin.unconfirmed'),after:intent.command==='administerCards'?t('admin.recoveryCardCommand',{action:intent.input.action==='give'?t('admin.giveAction'):t('admin.removeAction'),quantity:typeof intent.input.quantity==='number'?localization.number(intent.input.quantity):''}):t('admin.settingsUpdate')}]};pending={command:intent.command,input:validateWireRequest(intent.command,copy(intent.input)),review};persist();publish({pending:true,review,message:t('admin.recoverOriginal')});if(disposed||current!==generation)return;}
+        if(intent&&isCommand(intent.command)){const review:StoredReview={command:intent.command,input:validateWireRequest(intent.command,copy(intent.input)),title:intent.command==='administerCards'?t('admin.recoverCardChange'):t('admin.recoverSettingsChange'),description:t('admin.recoverDescription'),changes:[{label:t('admin.savedCommand'),before:t('admin.unconfirmed'),after:intent.command==='administerCards'?t('admin.recoveryCardCommand',{action:intent.input.action==='give'?t('admin.giveAction'):t('admin.removeAction'),quantity:typeof intent.input.quantity==='number'?localization.number(intent.input.quantity):''}):t('admin.settingsUpdate')}]} as StoredReview;pending={command:intent.command,input:validateWireRequest(intent.command,copy(intent.input)),review};persist();publish({pending:true,review,message:t('admin.recoverOriginal')});if(disposed||current!==generation)return;}
       }
       publish({phase:'ready',overview});
     }
@@ -121,7 +127,7 @@ export function createAdminController({client,storage,namespace,localization=cre
     if (!isCommand(command)) throw new Error(t('admin.unsupportedCommand'));
     if (!state.overview) throw new Error(t('admin.loadBeforeReview'));
     if (!Array.isArray(changes) || !changes.length) throw new Error(t('admin.changeBeforeReview'));
-    publish({review:{command,input:copy({...input,expectedRevision:state.overview.revision}),title,changes:copy(changes),description},error:null,message:''}); return true;
+    publish({review:{command,input:copy({...input,expectedRevision:state.overview.revision}),title,changes:copy(changes),description} as StoredReview,error:null,message:''}); return true;
   }
   function cancel() { if (active || pending || disposed) return false; publish({review:null,error:null,message:t('admin.draftDiscarded')}); return true; }
   function confirm():Promise<Schemas['AdminMutation']|null> {

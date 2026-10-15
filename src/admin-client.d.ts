@@ -64,18 +64,22 @@ export interface AdminController {
     dispose(): void;
 }
 type AdminCommand = 'configureAdmin' | 'administerCards';
-type StoredReview = {
-    command: AdminCommand;
-    input: Operations[AdminCommand]['request'] | Omit<Operations['configureAdmin']['request'], 'key'> | Omit<Operations['administerCards']['request'], 'key'>;
+type StoredReviewInput<T> = T extends object ? Omit<T, 'key'> & {
+    key?: string;
+} : never;
+type StoredReview<C extends AdminCommand = AdminCommand> = C extends AdminCommand ? {
+    command: C;
+    input: StoredReviewInput<Operations[C]['request']>;
     title: string;
     description: string;
     changes: AdminReviewChange[];
-};
+} : never;
 type Storage = CommandStorage & Required<Pick<CommandStorage, 'removeItem'>>;
 /** A replaceable operator workflow. Namespace identifies the authenticated operator. */
 export declare function createAdminController({ client, storage, namespace, localization }: {
     client: Client;
-    storage: Storage;
+    /** Omitted storage permits construction; persistence reports unavailable storage. */
+    storage?: Storage;
     namespace: string;
     localization?: Localization;
 }): AdminController;

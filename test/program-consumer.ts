@@ -161,3 +161,85 @@ albumBootstrap.dispose();
 // @ts-expect-error Opener bootstrap cleanup is handled by pagehide, not an exported method.
 openerBootstrap.dispose();
 void [documentBootstrapHasNoExports,albumBootstrapHasNoExports,openerBootstrapHasNoExports];
+
+import {composeExtensions, resolveConfiguration, type ExtensionModule} from '@digital-card/framework/presentation/extensions';
+const effectModule = {
+  id: 'host.effect', version: '1.0.0', apiVersion: '0.1.0', trust: 'host-installed' as const,
+  provides: ['effect'], fallback: 'poster', create: (root: HTMLElement) => root,
+  estimate: (width: number) => width * 4,
+  validate(configuration: Record<string, unknown>) { console.log(configuration); },
+};
+const composition = composeExtensions([effectModule], {select: {effect: 'host.effect'}});
+const selectedEffect = composition.get('effect');
+if (selectedEffect) {
+  const node: HTMLElement = selectedEffect.create(root);
+  const bytes: number = selectedEffect.estimate(64);
+  void [node, bytes];
+}
+const absentEffect: typeof effectModule | undefined = composition.get('absent');
+const extensionOrder: string[] = composition.explainComposition().order;
+const configured = resolveConfiguration({
+  density: {type: 'number', default: 0.5, min: 0, max: 1, scopes: ['host']},
+  enabled: {type: 'boolean', default: true, scopes: ['host']},
+}, [{scope: 'host', values: {density: 0.7}}], {ceilings: {density: 0.8}});
+const density: number = configured.density;
+const enabled: boolean = configured.enabled;
+// @ts-expect-error Module code must be explicitly host-installed.
+const untrustedExtension: ExtensionModule = {...effectModule, trust: 'package'};
+// @ts-expect-error Missing slots can return undefined.
+const definiteEffect: typeof effectModule = composition.get('absent');
+// @ts-expect-error Configuration overrides follow the field's declared type.
+resolveConfiguration({enabled: {type:'boolean', default:true, scopes:['host']}}, [{scope:'host', values:{enabled:1}}]);
+// @ts-expect-error Configuration ceilings are numeric.
+resolveConfiguration({enabled: {type:'boolean', default:true, scopes:['host']}}, [], {ceilings:{enabled:'yes'}});
+void [absentEffect, extensionOrder, density, enabled, untrustedExtension, definiteEffect];
+
+import {walletSessions, tokenIdentity, resolveExternalOwnership, externalOwnershipState, ethersOwnershipProvider, marketplaceMetadata, type OwnershipProvider} from '@digital-card/framework/presentation/identity';
+const sessions = walletSessions({domain:'cards.example', uri:'https://cards.example', chainIds:[1], nonces:new Map()});
+const challengeVersion: '1' = sessions.challenge('session').version;
+void sessions.verify('session', {message:'signed message', signature:'signature'}).then(proof => {
+  const chain: number = proof.chainId;
+  void chain;
+});
+const binding = {chainId:1, standard:'erc721' as const, contract:'0x0000000000000000000000000000000000000001', tokenId:'1'};
+const tokenId: string = tokenIdentity(binding).id;
+const ownershipProvider: OwnershipProvider = {
+  getNetwork: async () => ({chainId:1n}), getBlockNumber: async () => 100,
+  getBlock: async () => ({hash:'block'}), readToken: async () => ({owner:'account'}),
+};
+void resolveExternalOwnership(binding, {provider:ownershipProvider, account:'account'}).then(ownership => {
+  const authority: 'external' = ownership.authority;
+  if (ownership.state === 'confirmed') {
+    const confirmations: number = ownership.confirmations;
+    const account: string = ownership.account;
+    void [confirmations, account];
+  } else {
+    const zero: '0' = ownership.quantity;
+    // @ts-expect-error Reorg snapshots have no confirmed account.
+    ownership.account;
+    void zero;
+  }
+  const stale = externalOwnershipState(ownership, {clock:() => Date.now()});
+  const state: 'confirmed' | 'reorg' | 'stale' = stale.state;
+  const transferAllowed: false = stale.localTransferAllowed;
+  void [authority, state, transferAllowed];
+});
+const preservedOwnership = externalOwnershipState({checkedAt:0, state:'confirmed' as const, custom:42, localTransferAllowed:true});
+const preservedCustom: number = preservedOwnership.custom;
+const forcedTransferPolicy: false = preservedOwnership.localTransferAllowed;
+const ethersBridge: OwnershipProvider = ethersOwnershipProvider({
+  provider:null, getNetwork:async () => {throw new Error('network');},
+  getBlockNumber:async () => 100, getBlock:async () => null,
+  call:async () => '0x',
+});
+const metadata = marketplaceMetadata({title:'Card',description:'A card',posterURL:'https://cards.example/poster.png',viewerURL:'https://cards.example/view',attributes:[{trait_type:'Rarity',value:'Rare'}]});
+const rarity: string | undefined = metadata.attributes[0]?.value;
+// @ts-expect-error Token IDs preserve decimal precision as strings.
+tokenIdentity({...binding, tokenId:1});
+// @ts-expect-error Only the implemented token standards are supported.
+tokenIdentity({...binding, standard:'erc20'});
+// @ts-expect-error Wallet proofs require a string signature.
+sessions.verify('session', {message:'message',signature:123});
+// @ts-expect-error The ethers adapter requires block access.
+ethersOwnershipProvider({provider:null,getNetwork:async () => ({chainId:1n})});
+void [challengeVersion,tokenId,preservedCustom,forcedTransferPolicy,ethersBridge,rarity];

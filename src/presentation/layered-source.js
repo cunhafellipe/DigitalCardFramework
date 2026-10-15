@@ -181,6 +181,13 @@ export async function parseLayeredSource(
             message:
               "Imported the stored raster appearance; source text/vector/smart-object editing is not retained.",
           });
+        if (layer.realMask && !layer.realMask.disabled)
+          issue(
+            report,
+            name,
+            "REAL_MASK",
+            "Additional source mask coverage is not applied; bake this mask in the source application for an exact layered appearance.",
+          );
         if (layer.children) {
           if (
             (layer.opacity ?? 1) !== 1 ||

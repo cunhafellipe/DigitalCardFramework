@@ -9,6 +9,22 @@ const bitmap = (w, h, color) => ({
     Array.from({ length: w * h }, () => color).flat(),
   ),
 });
+export function psdFixture(children, { width = 6, height = 6 } = {}) {
+  return new Uint8Array(writePsd({ width, height, imageData: bitmap(width, height, [0, 0, 0, 0]), children }, { generateThumbnail: false }));
+}
+export function maskedPsdFixture(mask = {}, realMask) {
+  return psdFixture([{ name: "Soft raster", left: 2, top: 3, imageData: bitmap(2, 1, [80, 120, 160, 128]),
+    mask: { left: 3, top: 3, defaultColor: 0, imageData: bitmap(1, 1, [128, 128, 128, 255]), ...mask },
+    ...(realMask ? { realMask } : {}) }]);
+}
+export function oraAlphaFixture() {
+  const png = pngRGBA(2, 1, Uint8Array.from([80, 120, 160, 128, 20, 40, 60, 0]));
+  const modes = ["svg:src-over", "svg:screen", "svg:multiply", "svg:plus", "svg:overlay"];
+  return { png, bytes: writeZip(new Map([["mimetype", utf8("image/openraster")], ["stack.xml", utf8(
+    '<image w="6" h="6"><stack><stack name="Approximate group" opacity="0.5">' +
+    modes.map((mode, i) => `<layer name="Mode ${i}" src="data/soft.png" composite-op="${mode}"/>`).join("") +
+    '</stack></stack></image>')], ["data/soft.png", png]])) };
+}
 export function sourceFixtures() {
   const red = bitmap(2, 2, [255, 0, 0, 255]),
     blue = bitmap(2, 2, [0, 0, 255, 255]),
